@@ -36,6 +36,8 @@ from .details import (
     get_run_detail,
     list_runs,
 )
+from .eval_detectors import DetectorError, get_detector, list_detectors, run_detector
+from .evals_measure import EvalMeasureError, get_measure_results, get_measure_run, list_measure_runs
 from .issues import IssueError, create_issue, list_issues
 from .doctor import DEFAULT_SMOKE_EVIDENCE_DIR, run_doctor
 from .evidence import build_evidence_bundle
@@ -539,6 +541,74 @@ def make_handler(
                     except IssueError as exc:
                         self._send_json({"error": str(exc)}, status=HTTPStatus.NOT_FOUND)
                     return
+                # ---- eval (Python detector) measurement plane ----
+                if path == "/api/evals":
+                    try:
+                        self._send_json(
+                            {
+                                "detectors": list_detectors(
+                                    db_path=resolved_db_path,
+                                    profile_id=_query_param(self.path, "profile_id") or None,
+                                )
+                            }
+                        )
+                    except DetectorError as exc:
+                        self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                    return
+                if path == "/api/evals/detail":
+                    detector_id = _query_param(self.path, "id")
+                    if not detector_id:
+                        self._send_json(
+                            {"error": "detector_id_required"},
+                            status=HTTPStatus.BAD_REQUEST,
+                        )
+                        return
+                    try:
+                        self._send_json(
+                            {"detector": get_detector(db_path=resolved_db_path, detector_id=detector_id)}
+                        )
+                    except DetectorError as exc:
+                        self._send_json({"error": str(exc)}, status=HTTPStatus.NOT_FOUND)
+                    return
+                if path == "/api/eval-runs":
+                    try:
+                        self._send_json(
+                            {
+                                "eval_runs": list_measure_runs(
+                                    db_path=resolved_db_path,
+                                    kind="python",
+                                    eval_definition_id=_query_param(self.path, "eval_definition_id") or None,
+                                    profile_id=_query_param(self.path, "profile_id") or None,
+                                )
+                            }
+                        )
+                    except EvalMeasureError as exc:
+                        self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                    return
+                if path == "/api/eval-runs/detail":
+                    eval_run_id = _query_param(self.path, "id")
+                    if not eval_run_id:
+                        self._send_json(
+                            {"error": "eval_run_id_required"},
+                            status=HTTPStatus.BAD_REQUEST,
+                        )
+                        return
+                    try:
+                        self._send_json(
+                            {
+                                "eval_run": get_measure_run(
+                                    db_path=resolved_db_path,
+                                    eval_run_id=eval_run_id,
+                                ),
+                                "results": get_measure_results(
+                                    db_path=resolved_db_path,
+                                    eval_run_id=eval_run_id,
+                                ),
+                            }
+                        )
+                    except EvalMeasureError as exc:
+                        self._send_json({"error": str(exc)}, status=HTTPStatus.NOT_FOUND)
+                    return
                 if path == "/api/skills":
                     profile_id = _query_param(self.path, "profile_id")
                     self._send_json(
@@ -985,6 +1055,48 @@ def make_handler(
                         self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
                         return
                     self._send_json({"issue": issue})
+                    return
+                # ---- eval (Python detector) measurement plane ----
+                if path == "/api/run-eval":
+                    payload = self._read_json()
+                    detector_id = payload.get("detector_id")
+                    if not isinstance(detector_id, str) or not detector_id:
+                        self._send_json(
+                            {"error": "detector_id_required"},
+                            status=HTTPStatus.BAD_REQUEST,
+                        )
+                        return
+                    corpus = payload.get("corpus")
+                    if not isinstance(corpus, dict):
+                        self._send_json(
+                            {"error": "corpus_object_required"},
+                            status=HTTPStatus.BAD_REQUEST,
+                        )
+                        return
+                    persist = bool(payload.get("persist", False))
+                    timeout_seconds = payload.get("timeout_seconds", 120)
+                    try:
+                        report = run_detector(
+                            db_path=resolved_db_path,
+                            detector_id=detector_id,
+                            corpus=corpus,
+                            persist=persist,
+                            profile_id=_optional_str(payload.get("profile_id")),
+                            timeout_seconds=timeout_seconds if isinstance(timeout_seconds, int) else 120,
+                        )
+                    except DetectorError as exc:
+                        self._send_json(
+                            {"error": "eval_failed", "detail": str(exc)},
+                            status=HTTPStatus.CONFLICT,
+                        )
+                        return
+                    except EvalMeasureError as exc:
+                        self._send_json(
+                            {"error": "eval_failed", "detail": str(exc)},
+                            status=HTTPStatus.BAD_REQUEST,
+                        )
+                        return
+                    self._send_json(report.to_json())
                     return
                 if path == "/api/policy":
                     payload = self._read_json()

@@ -7049,5 +7049,108 @@ def _write_fake_ace_native_command(path: Path) -> Path:
     return path
 
 
+# --- measurement plane: `eval` (Python detector) golden contracts ----------
+import re as _re
+
+EVALS_M_GOLDEN = ROOT / "docs/fixtures/cli-json/evals.contract.golden.json"
+EVAL_DETAIL_M_GOLDEN = ROOT / "docs/fixtures/cli-json/eval-detail.contract.golden.json"
+RUN_EVAL_M_GOLDEN = ROOT / "docs/fixtures/cli-json/run-eval.contract.golden.json"
+EVAL_RUNS_GOLDEN = ROOT / "docs/fixtures/cli-json/eval-runs.contract.golden.json"
+EVAL_RUN_DETAIL_GOLDEN = ROOT / "docs/fixtures/cli-json/eval-run-detail.contract.golden.json"
+
+_M_VOLATILE_TS = {"created_at", "updated_at", "started_at", "ended_at"}
+_M_ID_RE = _re.compile(r"^(evalrun|evalres)_[0-9a-f]{12}$")
+
+
+def _scrub_measure(obj):
+    """Project out volatile timestamps (by key) and run/result ids (by value)."""
+    if isinstance(obj, dict):
+        return {
+            k: ("<ts>" if k in _M_VOLATILE_TS else _scrub_measure(v)) for k, v in obj.items()
+        }
+    if isinstance(obj, list):
+        return [_scrub_measure(x) for x in obj]
+    if isinstance(obj, str) and _M_ID_RE.match(obj):
+        return "<id>"
+    return obj
+
+
+def _seed_measure_db(db_path: Path) -> None:
+    from kyoko import storage
+
+    storage.initialize_database(db_path)
+    con = storage.connect(db_path)
+    con.execute(
+        "INSERT INTO profiles VALUES ('p1','p1','/tmp','active','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')"
+    )
+    con.execute(
+        "INSERT INTO sources (id,profile_id,kind,display_name,status,adapter_version,config_json,capabilities_json) "
+        "VALUES ('s1','p1','t','s','active','1','{}','{}')"
+    )
+    for i in range(2):
+        rid = f"run_{i}"
+        con.execute(
+            "INSERT INTO runs (id,profile_id,source_id,status,started_at,metadata_json) VALUES (?,?,?,?,?,?)",
+            (rid, "p1", "s1", "succeeded", f"2026-01-0{i+1}T00:00:00Z", "{}"),
+        )
+        con.execute(
+            "INSERT INTO spans (id,run_id,source_id,kind,name,status,started_at,usage_json,attributes_json) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
+            (f"{rid}_llm", rid, "s1", "llm", "gen", "ok", f"2026-01-0{i+1}T00:00:01Z", "{}", "{}"),
+        )
+        con.execute(
+            "INSERT INTO spans (id,run_id,source_id,kind,name,status,started_at,usage_json,attributes_json) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
+            (f"{rid}_tool", rid, "s1", "tool", "fetch", "failed" if i == 1 else "ok",
+             f"2026-01-0{i+1}T00:00:02Z", "{}", "{}"),
+        )
+    con.commit()
+    con.close()
+
+
+class MeasurementEvalContractTests(unittest.TestCase):
+    def test_evals_list_matches_golden(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            db = Path(tmpdir) / "kyoko.db"
+            _seed_measure_db(db)
+            code, payload = _run_json(["evals", "--db", str(db), "--json"])
+            self.assertEqual(code, 0)
+            self.assertEqual(_scrub_measure(payload), _load_json(EVALS_M_GOLDEN))
+
+    def test_eval_detail_matches_golden(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            db = Path(tmpdir) / "kyoko.db"
+            _seed_measure_db(db)
+            code, payload = _run_json(["eval-detail", "failed_span", "--db", str(db), "--json"])
+            self.assertEqual(code, 0)
+            self.assertEqual(_scrub_measure(payload), _load_json(EVAL_DETAIL_M_GOLDEN))
+
+    def test_run_eval_matches_golden(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            db = Path(tmpdir) / "kyoko.db"
+            _seed_measure_db(db)
+            code, payload = _run_json(
+                ["run-eval", "failed_span", "--db", str(db), "--corpus", '{"unit":"event"}', "--json"]
+            )
+            self.assertEqual(code, 0)
+            self.assertEqual(_scrub_measure(payload), _load_json(RUN_EVAL_M_GOLDEN))
+
+    def test_eval_runs_and_detail_match_golden(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            db = Path(tmpdir) / "kyoko.db"
+            _seed_measure_db(db)
+            _, run_payload = _run_json(
+                ["run-eval", "failed_span", "--db", str(db), "--corpus", '{"unit":"event"}',
+                 "--persist", "--json"]
+            )
+            run_id = run_payload["eval_run_id"]
+            code, payload = _run_json(["eval-runs", "--db", str(db), "--json"])
+            self.assertEqual(code, 0)
+            self.assertEqual(_scrub_measure(payload), _load_json(EVAL_RUNS_GOLDEN))
+            code, payload = _run_json(["eval-run-detail", run_id, "--db", str(db), "--json"])
+            self.assertEqual(code, 0)
+            self.assertEqual(_scrub_measure(payload), _load_json(EVAL_RUN_DETAIL_GOLDEN))
+
+
 if __name__ == "__main__":
     unittest.main()

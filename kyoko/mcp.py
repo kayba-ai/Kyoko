@@ -47,6 +47,8 @@ from .checks import (
     run_check,
     run_judge_command,
 )
+from .eval_detectors import list_detectors, run_detector
+from .evals_measure import get_measure_results, get_measure_run, list_measure_runs
 from .annotations import create_annotation, list_annotations
 from .harness import list_harness_target_locks, list_patch_transactions
 from .inspection import (
@@ -1725,6 +1727,65 @@ def _build_tools(server: KyokoMcpServer) -> dict[str, McpTool]:
             input_schema=_object_schema({}),
             handler=lambda _args: {"harness_target_locks": list_harness_target_locks(server.db_path)},
         ),
+        # ---- eval (Python detector) measurement plane — evidence only ----
+        McpTool(
+            name="kyoko_list_evals",
+            title="Kyoko List Evals",
+            description=(
+                "List registered and bundled Python detector definitions. "
+                "Detectors are deterministic evidence-only tools that score a trace "
+                "corpus; they never write a check_run, mutate a skill, or edit harness files."
+            ),
+            input_schema=_object_schema({"profile_id": {"type": "string"}}),
+            handler=lambda args: {
+                "detectors": list_detectors(
+                    db_path=server.db_path,
+                    profile_id=_optional_string(args, "profile_id"),
+                )
+            },
+        ),
+        McpTool(
+            name="kyoko_eval_run_detail",
+            title="Kyoko Eval Run Detail",
+            description=(
+                "Return one eval measurement run plus its per-event results. "
+                "Evidence only — no gate or apply path."
+            ),
+            input_schema=_object_schema(
+                {"eval_run_id": {"type": "string"}},
+                required=["eval_run_id"],
+            ),
+            handler=lambda args: _eval_run_detail(server, args),
+        ),
+        McpTool(
+            name="kyoko_run_eval",
+            title="Run Kyoko Eval",
+            description=(
+                "Run a Python detector over a corpus of run traces and return "
+                "numerator/denominator aggregate plus per-event hit flags. "
+                "Evidence only — the result never writes a check_run, mutates a skill, "
+                "or edits a harness file. Set persist=true to record the run in the database."
+            ),
+            input_schema=_object_schema(
+                {
+                    "detector_id": {"type": "string"},
+                    "corpus": {
+                        "type": "object",
+                        "description": (
+                            "Corpus selector: unit (event|run|llm_span), "
+                            "source_id, run_ids, since, until, span_filter, limit."
+                        ),
+                    },
+                    "persist": {"type": "boolean"},
+                    "profile_id": {"type": "string"},
+                    "timeout_seconds": {"type": "integer", "minimum": 1},
+                },
+                required=["detector_id", "corpus"],
+            ),
+            handler=lambda args: _run_eval(server, args),
+            read_only=False,
+            idempotent=False,
+        ),
     ]
     return {tool.name: tool for tool in tools}
 
@@ -1972,6 +2033,29 @@ def _judge_command_payload(report: object) -> dict[str, Any]:
             "promoted_trust_level": check_run.promoted_trust_level,
         },
     }
+
+
+def _eval_run_detail(server: KyokoMcpServer, args: dict[str, Any]) -> dict[str, Any]:
+    eval_run_id = _required_string(args, "eval_run_id")
+    return {
+        "eval_run": get_measure_run(db_path=server.db_path, eval_run_id=eval_run_id),
+        "results": get_measure_results(db_path=server.db_path, eval_run_id=eval_run_id),
+    }
+
+
+def _run_eval(server: KyokoMcpServer, args: dict[str, Any]) -> dict[str, Any]:
+    corpus = args.get("corpus")
+    if not isinstance(corpus, dict):
+        raise McpError("corpus_object_required")
+    report = run_detector(
+        db_path=server.db_path,
+        detector_id=_required_string(args, "detector_id"),
+        corpus=corpus,
+        persist=bool(args.get("persist", False)),
+        profile_id=_optional_string(args, "profile_id"),
+        timeout_seconds=_optional_positive_int(args, "timeout_seconds", 120),
+    )
+    return report.to_json()
 
 
 def _object_schema(

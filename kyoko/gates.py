@@ -274,6 +274,7 @@ def validate_gate_artifacts(
     messages.append("semantic: invalid proposal fails for expected hallucinated span")
     messages.append(_validate_replay_fixture(source_fixture, replay_fixture, paths.replay_fixture))
     messages.extend(_validate_bundled_asset_mirrors(paths))
+    messages.extend(_validate_directory_mirrors(root.resolve()))
     return ValidationReport(messages=tuple(messages))
 
 
@@ -334,6 +335,43 @@ def _validate_bundled_asset_mirrors(paths: GateArtifactPaths) -> tuple[str, ...]
                 f"{bundled_path}: bundled asset does not mirror {docs_path}"
             )
         messages.append(message)
+    return tuple(messages)
+
+
+# Bundled asset directories whose docs/ authoring copy must byte-mirror the
+# shipped kyoko/assets/ copy. `detectors` = bundled `eval` detectors;
+# `llm_evals` = the ported judge templates. A dir is checked only when present.
+_MIRROR_DIRS = ("detectors", "llm_evals")
+
+
+def _validate_directory_mirrors(root: Path) -> tuple[str, ...]:
+    messages: list[str] = []
+    for name in _MIRROR_DIRS:
+        docs_dir = root / "docs" / name
+        bundled_dir = root / "kyoko" / "assets" / name
+        if not docs_dir.is_dir() and not bundled_dir.is_dir():
+            continue
+        if docs_dir.is_dir() != bundled_dir.is_dir():
+            raise ValidationError(
+                f"bundled asset dir mirror missing: {docs_dir} vs {bundled_dir}"
+            )
+        docs_files = {
+            p.name for p in docs_dir.glob("*") if p.is_file() and p.name != "__init__.py"
+        }
+        bundled_files = {
+            p.name for p in bundled_dir.glob("*") if p.is_file() and p.name != "__init__.py"
+        }
+        if docs_files != bundled_files:
+            raise ValidationError(
+                f"bundled asset dir mismatch in {name}: "
+                f"docs={sorted(docs_files)} bundled={sorted(bundled_files)}"
+            )
+        for fname in sorted(docs_files):
+            if (docs_dir / fname).read_bytes() != (bundled_dir / fname).read_bytes():
+                raise ValidationError(
+                    f"{bundled_dir / fname}: bundled asset does not mirror {docs_dir / fname}"
+                )
+        messages.append(f"bundled: runtime {name} mirror docs {name} ({len(docs_files)} files)")
     return tuple(messages)
 
 

@@ -1078,6 +1078,19 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(improve.call_args.kwargs["timeout_seconds"], 20)
         self.assertTrue(str(improve.call_args.kwargs["schema_path"]).endswith("learning-proposal.schema.json"))
 
+    def test_doctor_eval_smoke_runs_bundled_detector(self) -> None:
+        report = run_doctor(eval_smoke=True)
+        checks = {check.id: check for check in report.checks}
+        self.assertIn("eval_smoke", checks)
+        self.assertEqual(checks["eval_smoke"].status, "pass")
+        agg = checks["eval_smoke"].detail["aggregate"]
+        self.assertEqual(agg["numerator"], 1)
+        self.assertEqual(agg["denominator"], 2)
+
+    def test_doctor_eval_smoke_absent_by_default(self) -> None:
+        report = run_doctor()
+        self.assertNotIn("eval_smoke", {check.id for check in report.checks})
+
     def test_doctor_improve_smoke_retains_requested_output_dir(self) -> None:
         def fake_improve(*, db_path: Path, output_dir: Path, **kwargs):
             return fake_improve_smoke_report(output_dir, db_path=db_path)

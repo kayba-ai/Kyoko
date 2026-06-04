@@ -65,6 +65,20 @@ from .details import (
     list_runs,
 )
 from .issues import IssueError, create_issue, list_issues
+from .eval_detectors import (
+    DetectorError,
+    get_detector,
+    list_detectors,
+    parse_corpus,
+    register_detector,
+    run_detector,
+)
+from .evals_measure import (
+    EvalMeasureError,
+    get_measure_results,
+    get_measure_run,
+    list_measure_runs,
+)
 from .demo import DemoError, run_demo_setup
 from .doctor import DEFAULT_SMOKE_EVIDENCE_DIR, DoctorError, doctor_report_text, run_doctor
 from .evidence import write_evidence_bundle
@@ -358,6 +372,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--opentelemetry-python-executable",
         type=Path,
         help="Python executable that has opentelemetry-sdk installed.",
+    )
+    doctor.add_argument(
+        "--eval-smoke",
+        action="store_true",
+        help=(
+            "Run the bundled failed_span `eval` detector over a seeded corpus "
+            "(deterministic; no live model)."
+        ),
     )
     doctor.add_argument(
         "--ace-native-smoke",
@@ -975,6 +997,63 @@ def build_parser() -> argparse.ArgumentParser:
         help="Backlink to a proposal that addresses this issue (repeatable).",
     )
     issue_create.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+
+    # --- measurement plane: `eval` (deterministic Python detectors) ---------
+    evals_cmd = subcommands.add_parser(
+        "evals",
+        help="List registered + bundled `eval` detectors (evidence-only measurements).",
+    )
+    _add_db_argument(evals_cmd)
+    evals_cmd.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+
+    eval_detail = subcommands.add_parser(
+        "eval-detail",
+        help="Show one detector's contract and problem statement.",
+    )
+    _add_db_argument(eval_detail)
+    eval_detail.add_argument("detector_id", help="Detector id to inspect.")
+    eval_detail.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+
+    eval_register = subcommands.add_parser(
+        "eval-register",
+        help="Register a user detector .py (stored in the blob store; evidence only).",
+    )
+    _add_db_argument(eval_register)
+    eval_register.add_argument("path", type=Path, help="Path to a detector .py defining detect().")
+    eval_register.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+
+    run_eval = subcommands.add_parser(
+        "run-eval",
+        help="Run a detector over a corpus of run traces (evidence only).",
+    )
+    _add_db_argument(run_eval)
+    run_eval.add_argument("detector_id", help="Detector id to run.")
+    run_eval.add_argument(
+        "--corpus",
+        help="Corpus selector as a JSON file path or inline JSON "
+        '(e.g. \'{"unit":"event","limit":100}\'). Defaults to all runs.',
+    )
+    run_eval.add_argument(
+        "--persist",
+        action="store_true",
+        help="Record the run + per-event results (default: ephemeral).",
+    )
+    run_eval.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+
+    eval_runs = subcommands.add_parser(
+        "eval-runs",
+        help="List persisted detector measurement runs (history).",
+    )
+    _add_db_argument(eval_runs)
+    eval_runs.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+
+    eval_run_detail = subcommands.add_parser(
+        "eval-run-detail",
+        help="Show one measurement run with its per-event results and aggregate.",
+    )
+    _add_db_argument(eval_run_detail)
+    eval_run_detail.add_argument("eval_run_id", help="Measurement run id to inspect.")
+    eval_run_detail.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
 
     import_hermes = subcommands.add_parser(
         "import-hermes-kanban",
@@ -3730,6 +3809,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 improve_smoke=args.improve_smoke,
                 opentelemetry_smoke=args.opentelemetry_smoke,
                 opentelemetry_python_executable=args.opentelemetry_python_executable,
+                eval_smoke=args.eval_smoke,
                 ace_native_smoke=args.ace_native_smoke,
                 dashboard_smoke=args.dashboard_smoke,
                 dashboard_smoke_screenshot=args.dashboard_smoke_screenshot,
@@ -4336,6 +4416,105 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(json.dumps({"issue": issue}, sort_keys=True))
         else:
             print(f"{issue['id']}  {issue['status']}  {issue['title']}")
+        return 0
+
+    if args.command == "evals":
+        try:
+            detectors = list_detectors(db_path=args.db)
+        except (DetectorError, EvalMeasureError, StorageError) as exc:
+            print(f"evals failed: {exc}", file=sys.stderr)
+            return 1
+        if args.json:
+            print(json.dumps({"detectors": detectors}, sort_keys=True))
+        else:
+            for det in detectors:
+                print(f"{det['id']}  [{det['source']}/{det['direction']}]  {det['name']}")
+            if not detectors:
+                print("(no detectors)")
+        return 0
+
+    if args.command == "eval-detail":
+        try:
+            detector = get_detector(db_path=args.db, detector_id=args.detector_id)
+        except (DetectorError, EvalMeasureError, StorageError) as exc:
+            print(f"eval-detail failed: {exc}", file=sys.stderr)
+            return 1
+        if args.json:
+            print(json.dumps({"detector": detector}, sort_keys=True))
+        else:
+            print(f"{detector['id']}  {detector['name']}")
+            print(f"direction={detector['direction']} unit={detector['unit_type']} "
+                  f"source={detector['source']}")
+            if detector.get("problem_statement"):
+                print(detector["problem_statement"])
+        return 0
+
+    if args.command == "eval-register":
+        try:
+            detector = register_detector(db_path=args.db, path=args.path, source="user")
+        except (DetectorError, EvalMeasureError, StorageError) as exc:
+            print(f"eval-register failed: {exc}", file=sys.stderr)
+            return 1
+        if args.json:
+            print(json.dumps({"detector": detector}, sort_keys=True))
+        else:
+            print(f"registered {detector['id']}  {detector['name']}")
+        return 0
+
+    if args.command == "run-eval":
+        try:
+            corpus = parse_corpus(args.corpus)
+            report = run_detector(
+                db_path=args.db,
+                detector_id=args.detector_id,
+                corpus=corpus,
+                persist=args.persist,
+            )
+        except (DetectorError, EvalMeasureError, StorageError) as exc:
+            print(f"run-eval failed: {exc}", file=sys.stderr)
+            return 1
+        payload = report.to_json()
+        if args.json:
+            print(json.dumps(payload, sort_keys=True))
+        else:
+            agg = payload["aggregate"]
+            print(f"{payload['detector_id']}: value={agg['value']:.3f} "
+                  f"({agg.get('numerator')}/{agg.get('denominator')})  "
+                  f"units={payload['corpus_resolution']['total_matched']} "
+                  f"persisted={payload['persisted']}")
+        return 0
+
+    if args.command == "eval-runs":
+        try:
+            runs = list_measure_runs(db_path=args.db, kind="python")
+        except (EvalMeasureError, StorageError) as exc:
+            print(f"eval-runs failed: {exc}", file=sys.stderr)
+            return 1
+        if args.json:
+            print(json.dumps({"eval_runs": runs}, sort_keys=True))
+        else:
+            for run in runs:
+                agg = run.get("aggregate") or {}
+                print(f"{run['id']}  {run['eval_definition_id']}  {run['status']}  "
+                      f"value={agg.get('value')}")
+            if not runs:
+                print("(no eval runs)")
+        return 0
+
+    if args.command == "eval-run-detail":
+        try:
+            run = get_measure_run(db_path=args.db, eval_run_id=args.eval_run_id)
+            results = get_measure_results(db_path=args.db, eval_run_id=args.eval_run_id)
+        except (EvalMeasureError, StorageError) as exc:
+            print(f"eval-run-detail failed: {exc}", file=sys.stderr)
+            return 1
+        if args.json:
+            print(json.dumps({"eval_run": run, "results": results}, sort_keys=True))
+        else:
+            agg = run.get("aggregate") or {}
+            print(f"{run['id']}  {run['eval_definition_id']}  {run['status']}")
+            print(f"value={agg.get('value')} scored={run['unit_scored']} "
+                  f"skipped={run['unit_skipped']} total={run['unit_total']}")
         return 0
 
     if args.command == "import-hermes-kanban":

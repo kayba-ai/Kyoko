@@ -4,6 +4,7 @@ include pyproject.toml
 include setup.cfg
 include setup.py
 recursive-include kyoko/assets *.json
+recursive-include kyoko/assets *.py
 recursive-include kyoko/assets/web *
 recursive-include docs *.md *.json *.sql
 recursive-include examples *.mjs *.py

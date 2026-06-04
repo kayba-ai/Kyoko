@@ -191,6 +191,7 @@ def run_doctor(
     improve_smoke: bool = False,
     opentelemetry_smoke: bool = False,
     opentelemetry_python_executable: Optional[Path] = None,
+    eval_smoke: bool = False,
     ace_native_smoke: bool = False,
     dashboard_smoke: bool = False,
     dashboard_smoke_screenshot: bool = False,
@@ -263,6 +264,10 @@ def run_doctor(
                 output_dir=_smoke_output_dir(smoke_output_dir, "opentelemetry-smoke"),
                 python_executable=opentelemetry_python_executable,
             )
+        )
+    if eval_smoke:
+        checks.append(
+            _check_eval_smoke(output_dir=_smoke_output_dir(smoke_output_dir, "eval-smoke"))
         )
     if ace_native_smoke:
         checks.append(
@@ -1600,6 +1605,82 @@ def _check_improve_smoke(*, output_dir: Optional[Path] = None) -> DoctorCheck:
                 temporary=True,
             )
     return _run_improve_smoke_check(root=output_dir, temporary=False)
+
+
+def _check_eval_smoke(*, output_dir: Optional[Path] = None) -> DoctorCheck:
+    if output_dir is None:
+        with TemporaryDirectory() as tmpdir:
+            return _run_eval_smoke_check(root=Path(tmpdir) / "eval-smoke", temporary=True)
+    return _run_eval_smoke_check(root=output_dir, temporary=False)
+
+
+def _run_eval_smoke_check(*, root: Path, temporary: bool) -> DoctorCheck:
+    """Deterministic `eval` detector smoke: no model, no provider.
+
+    Seeds a throwaway run with one ok and one failed span, runs the bundled
+    ``failed_span`` detector out-of-process, and asserts the known prevalence
+    (numerator 1, denominator 2).
+    """
+    from .eval_detectors import DetectorError, run_detector
+    from .evals_measure import EvalMeasureError
+    from .storage import connect
+
+    root.mkdir(parents=True, exist_ok=True)
+    db_path = root / "doctor-eval.db"
+    try:
+        initialize_database(db_path)
+        with connect(db_path) as con:
+            con.execute(
+                "INSERT INTO profiles VALUES ('p1','p1','/tmp','active',"
+                "'2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')"
+            )
+            con.execute(
+                "INSERT INTO sources (id,profile_id,kind,display_name,status,adapter_version,"
+                "config_json,capabilities_json) VALUES ('s1','p1','t','s','active','1','{}','{}')"
+            )
+            con.execute(
+                "INSERT INTO runs (id,profile_id,source_id,status,started_at,metadata_json) "
+                "VALUES ('run_0','p1','s1','succeeded','2026-01-01T00:00:00Z','{}')"
+            )
+            con.execute(
+                "INSERT INTO spans (id,run_id,source_id,kind,name,status,started_at,usage_json,"
+                "attributes_json) VALUES ('sp_ok','run_0','s1','tool','a','ok',"
+                "'2026-01-01T00:00:01Z','{}','{}')"
+            )
+            con.execute(
+                "INSERT INTO spans (id,run_id,source_id,kind,name,status,started_at,usage_json,"
+                "attributes_json) VALUES ('sp_bad','run_0','s1','tool','b','failed',"
+                "'2026-01-01T00:00:02Z','{}','{}')"
+            )
+            con.commit()
+        report = run_detector(
+            db_path=db_path, detector_id="failed_span", corpus={"unit": "event"}
+        )
+    except (DetectorError, EvalMeasureError, StorageError, OSError) as exc:
+        return DoctorCheck(
+            id="eval_smoke",
+            status="fail",
+            message=f"eval smoke failed: {exc}",
+            detail={"temporary": temporary},
+        )
+    agg = report.aggregate
+    ok = agg.get("numerator") == 1 and agg.get("denominator") == 2
+    return DoctorCheck(
+        id="eval_smoke",
+        status="pass" if ok else "fail",
+        message=(
+            "eval detector smoke ran failed_span over a seeded corpus (1/2 spans failed)"
+            if ok
+            else f"eval smoke produced unexpected aggregate: {agg}"
+        ),
+        detail={
+            "detector_id": "failed_span",
+            "aggregate": agg,
+            "events": report.events,
+            "temporary": temporary,
+            "db_path": str(db_path),
+        },
+    )
 
 
 def _check_opentelemetry_smoke(
