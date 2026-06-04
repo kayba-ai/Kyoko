@@ -1,19 +1,14 @@
 import json
 import io
-import re
-import shutil
 import socket
 import struct
-import subprocess
 import time
 from contextlib import redirect_stderr
-from html.parser import HTMLParser
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 import sys
 from tempfile import TemporaryDirectory
 from threading import Thread
-from typing import Optional
 from unittest.mock import patch
 import unittest
 from urllib.error import HTTPError
@@ -48,38 +43,6 @@ REPLAY_COMMAND = ROOT / "tests/fixtures/replay_command.py"
 JUDGE_COMMAND = ROOT / "tests/fixtures/judge_command.py"
 OPERATOR_COMMAND = ROOT / "tests/fixtures/operator_command.py"
 SCHEMA = ROOT / "docs/schemas/learning-proposal.schema.json"
-
-
-class _DashboardHtmlParser(HTMLParser):
-    def __init__(self) -> None:
-        super().__init__()
-        self.id_counts: dict[str, int] = {}
-        self.ids: set[str] = set()
-        self.scripts: list[str] = []
-        self._in_inline_script = False
-        self._current: list[str] = []
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, Optional[str]]]) -> None:
-        attr_map = {name.lower(): value for name, value in attrs}
-        element_id = attr_map.get("id")
-        if element_id:
-            self.id_counts[element_id] = self.id_counts.get(element_id, 0) + 1
-            self.ids.add(element_id)
-        if tag.lower() != "script" or "src" in attr_map:
-            return
-        self._in_inline_script = True
-        self._current = []
-
-    def handle_data(self, data: str) -> None:
-        if self._in_inline_script:
-            self._current.append(data)
-
-    def handle_endtag(self, tag: str) -> None:
-        if tag.lower() != "script" or not self._in_inline_script:
-            return
-        self.scripts.append("".join(self._current))
-        self._in_inline_script = False
-        self._current = []
 
 
 def _context_rule_proposal() -> dict:
@@ -173,48 +136,11 @@ class WebTests(unittest.TestCase):
         self.assertNotIn("BrokenPipeError", stderr.getvalue())
         self.assertNotIn("ConnectionResetError", stderr.getvalue())
 
-    def test_dashboard_inline_javascript_parses(self) -> None:
-        node = shutil.which("node")
-        if node is None:
-            self.skipTest("node is not installed")
-        with TemporaryDirectory() as tmpdir:
-            db_path = Path(tmpdir) / "kyoko.db"
-            script_path = Path(tmpdir) / "dashboard-inline.js"
-            with RunningServer(db_path) as server:
-                html = _dashboard_html()
-
-            parser = _DashboardHtmlParser()
-            parser.feed(html)
-            self.assertGreater(len(parser.scripts), 0)
-            script_path.write_text("\n;\n".join(parser.scripts), encoding="utf-8")
-            result = subprocess.run(
-                [node, "--check", str(script_path)],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                timeout=10,
-                check=False,
-            )
-            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-
-    def test_dashboard_static_element_references_exist(self) -> None:
-        with TemporaryDirectory() as tmpdir:
-            db_path = Path(tmpdir) / "kyoko.db"
-            with RunningServer(db_path) as server:
-                html = _dashboard_html()
-
-            parser = _DashboardHtmlParser()
-            parser.feed(html)
-            scripts = "\n".join(parser.scripts)
-            referenced_ids = set(
-                re.findall(r'document\.querySelector(?:All)?\("#([^"]+)"\)', scripts)
-            )
-            self.assertGreater(len(referenced_ids), 0)
-            self.assertEqual(sorted(referenced_ids - parser.ids), [])
-            duplicate_ids = sorted(
-                element_id for element_id, count in parser.id_counts.items() if count > 1
-            )
-            self.assertEqual(duplicate_ids, [])
+    def test_dashboard_stub_when_bundle_absent(self) -> None:
+        page = _dashboard_html()
+        self.assertIn("<title>Kyoko</title>", page)
+        self.assertIn("npm run build", page)
+        self.assertIn("loopback-only", page)
 
     def test_dashboard_and_api_return_runtime_data(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -228,7 +154,6 @@ class WebTests(unittest.TestCase):
             )
 
             with RunningServer(db_path) as server:
-                html = _dashboard_html()
                 status = server.get_json("/api/status")
                 dashboard_metrics = server.get_json("/api/dashboard-metrics")
                 source_discovery = server.get_json(
@@ -253,125 +178,6 @@ class WebTests(unittest.TestCase):
                 autonomy_events = server.get_json("/api/autonomy-events")
                 evidence = server.get_json("/api/evidence-summary")
 
-            self.assertIn("<title>Kyoko</title>", html)
-            self.assertIn("Runs", html)
-            self.assertIn("Learning Proposals", html)
-            self.assertNotIn("Active Profile", html)
-            self.assertNotIn("profile-select", html)
-            self.assertIn("dashboard-actor-identity-id", html)
-            self.assertIn("dashboard-actor-identities", html)
-            self.assertIn("renderDashboardActorIdentityOptions", html)
-            self.assertIn("activeProfileAgentIdentities", html)
-            self.assertIn("kyoko_actor_agent_identity_id", html)
-            self.assertIn("dashboard-lock-reason", html)
-            self.assertIn("kyoko_lock_reason", html)
-            self.assertIn("actor_agent_identity_id", html)
-            self.assertIn("withDashboardLockMetadata", html)
-            self.assertIn("Evals And Replay", html)
-            self.assertIn("/api/eval-capabilities", html)
-            self.assertIn("Eval Capabilities", html)
-            self.assertIn("appendEvalCapabilities", html)
-            self.assertIn("Gateable evals", html)
-            self.assertIn("Assertion presets", html)
-            self.assertIn("/api/judge-command", html)
-            self.assertIn("judge-command-input", html)
-            self.assertIn("judge-output-dir", html)
-            self.assertIn("runJudgeCommand", html)
-            self.assertIn("/api/eval-specs/lock", html)
-            self.assertIn("/api/eval-specs/approve", html)
-            self.assertIn("Approve L3", html)
-            self.assertIn("approveEvalSpec", html)
-            self.assertIn("Autonomy Policy", html)
-            self.assertIn("Harness Root", html)
-            self.assertIn("harness-workspace-root", html)
-            self.assertIn("kyoko_harness_workspace_root", html)
-            self.assertIn("withHarnessWorkspaceRoot", html)
-            self.assertIn("harness_workspace_root", html)
-            self.assertIn("Replay Adapter", html)
-            self.assertIn("replay-adapter-select", html)
-            self.assertIn("kyoko_replay_adapter_id", html)
-            self.assertIn("renderReplayAdapterSelector", html)
-            self.assertIn("withSelectedReplayAdapter", html)
-            self.assertIn("selectedReplayAdapterId", html)
-            self.assertIn("Operator Adapter", html)
-            self.assertIn("operator-adapter-select", html)
-            self.assertIn("kyoko_operator_adapter_id", html)
-            self.assertIn("renderOperatorAdapterSelector", html)
-            self.assertIn("withSelectedOperatorAdapter", html)
-            self.assertIn("selectedOperatorAdapterId", html)
-            self.assertIn("request.operator_adapter_id = operatorAdapterId", html)
-            self.assertIn("selectedProfilePayload(withSelectedReplayAdapter(withSelectedOperatorAdapter({", html)
-            self.assertIn("latestSourceDiscoveryReport", html)
-            self.assertIn("latestSourceImportReport", html)
-            self.assertIn("latestSourceImproveReport", html)
-            self.assertIn("state.latestSourceImportReport = { candidateId, payload }", html)
-            self.assertIn("state.latestSourceImproveReport = { candidateId, payload }", html)
-            self.assertIn("renderDiscoveredImportReport(importDetail, state.latestSourceImportReport.payload || {})", html)
-            self.assertIn("renderSourceDiscoveryReport(detail, state.latestSourceDiscoveryReport)", html)
-            self.assertIn("Autonomy History", html)
-            self.assertIn("latestProposalImproveReport", html)
-            self.assertIn("renderImproveReport(detail, state.latestProposalImproveReport)", html)
-            self.assertIn("improveOperatorLabel", html)
-            self.assertIn("improveReplayAdapterLabel", html)
-            self.assertIn("Replay adapters", html)
-            self.assertIn("Patch tx", html)
-            self.assertIn("autonomy-events", html)
-            self.assertIn("autonomy-kind-filter", html)
-            self.assertIn("autonomy-entity-type-filter", html)
-            self.assertIn("autonomy-entity-id-filter", html)
-            self.assertIn("autonomyEventsPath", html)
-            self.assertIn("renderAutonomyEvents", html)
-            self.assertIn("/api/autonomy-events?", html)
-            self.assertNotIn("Human Lock History", html)
-            self.assertNotIn("/api/human-lock-events", html)
-            self.assertNotIn("/api/human-locks/bulk", html)
-            self.assertIn("Storage", html)
-            self.assertNotIn("/api/profiles", html)
-            self.assertNotIn("<h2>Profiles</h2>", html)
-            self.assertNotIn("profile-count", html)
-            self.assertNotIn('const profilesEl = document.querySelector("#profiles");', html)
-            self.assertNotIn("renderProfiles(state.profiles)", html)
-            self.assertNotIn("function runProfileNextForProfile", html)
-            self.assertNotIn("selectProfileFromPanel", html)
-            self.assertIn("/api/dashboard-metrics", html)
-            self.assertIn("/api/source-discovery", html)
-            self.assertIn("Local Source Discovery", html)
-            self.assertIn("improveDiscoveredSource", html)
-            self.assertIn("/api/storage-report", html)
-            self.assertIn("/api/prune-retention", html)
-            self.assertIn("/api/wal-checkpoint", html)
-            self.assertIn("/api/load-smoke", html)
-            self.assertIn("Checkpoint WAL", html)
-            self.assertIn("Load smoke", html)
-            self.assertIn("Relational Retention", html)
-            self.assertIn("Dry-run data prune", html)
-            self.assertIn("/api/harness-target-locks", html)
-            self.assertIn("/api/harness-targets/lock", html)
-            self.assertIn("Context Delivery Rules", html)
-            self.assertIn("/api/context-rules", html)
-            self.assertIn("Run autonomy", html)
-            self.assertIn("Run next", html)
-            self.assertNotIn("All-Profile Steps", html)
-            self.assertNotIn("profile-next-max-steps", html)
-            self.assertNotIn("clampedProfileNextMaxSteps", html)
-            self.assertNotIn("all_profiles", html)
-            self.assertNotIn("profile-next-all", html)
-            self.assertIn('const payload = await postJson("/api/profile-next", request);', html)
-            self.assertIn("/api/profile-next", html)
-            self.assertIn("policy-action-detail", html)
-            self.assertIn("renderPolicyActionReport", html)
-            self.assertNotIn("renderProfileActionReports", html)
-            self.assertNotIn("profileActionResultLabel", html)
-            self.assertNotIn("profile-action-results", html)
-            self.assertNotIn('["Max steps", `${payload.summary?.max_steps || 1}`]', html)
-            self.assertIn('renderPolicyActionReport(policyActionDetailEl, "Run autonomy", payload)', html)
-            self.assertNotIn('renderPolicyActionReport(policyActionDetailEl, "Run all next", payload)', html)
-            self.assertIn("Details", html)
-            self.assertIn("section_label", html)
-            self.assertIn("Fix type", html)
-            self.assertIn(".badge.context", html)
-            self.assertIn(".badge.harness", html)
-            self.assertIn("/api/improve", html)
             self.assertTrue(status["initialized"])
             self.assertEqual(len(source_discovery["candidates"]), 2)
             self.assertTrue(
@@ -479,7 +285,6 @@ class WebTests(unittest.TestCase):
             db_path = Path(tmpdir) / "kyoko.db"
 
             with RunningServer(db_path) as server:
-                html = _dashboard_html()
                 report = server.post_json(
                     "/api/load-smoke",
                     {
@@ -492,7 +297,6 @@ class WebTests(unittest.TestCase):
                 )
                 status = server.get_json("/api/status")
 
-            self.assertIn("/api/load-smoke", html)
             self.assertTrue(report["passed"])
             self.assertEqual(report["status"]["counts"]["runs"], 4)
             self.assertEqual(report["status"]["counts"]["spans"], 8)
@@ -567,14 +371,12 @@ class WebTests(unittest.TestCase):
             db_path = Path(tmpdir) / "kyoko.db"
 
             with RunningServer(db_path) as server:
-                html = _dashboard_html()
                 demo = server.post_json("/api/demo", {})
                 status = server.get_json("/api/status")
                 proposals = server.get_json("/api/proposals")
                 skills = server.get_json("/api/skills")
                 evals = server.get_json("/api/evals")
 
-            self.assertIn("Run demo", html)
             self.assertEqual(demo["profile_id"], "profile_news_research_001")
             self.assertEqual(demo["eval_status"], "passed")
             self.assertEqual(demo["promoted_trust_level"], "L2_regression")
@@ -796,7 +598,6 @@ class WebTests(unittest.TestCase):
             _write_openclaw_sessions(home)
 
             with RunningServer(db_path) as server:
-                html = _dashboard_html()
                 discovery = server.get_json(f"/api/source-discovery?home={quote(str(home))}")
                 imported = server.post_json(
                     "/api/import-discovered-source",
@@ -808,7 +609,6 @@ class WebTests(unittest.TestCase):
                 )
                 status = server.get_json("/api/status")
 
-            self.assertIn("/api/import-discovered-source", html)
             self.assertEqual(discovery["candidates"][0]["id"], "openclaw_main")
             self.assertEqual(imported["candidate"]["id"], "openclaw_main")
             self.assertEqual(imported["import"]["profile_id"], "profile_web_discovered_openclaw")
@@ -822,7 +622,6 @@ class WebTests(unittest.TestCase):
             normalized_path = Path(tmpdir) / "otlp-normalized.json"
 
             with RunningServer(db_path) as server:
-                html = _dashboard_html()
                 api_ingest = server.post_json(
                     "/api/ingest-otlp",
                     {
@@ -839,8 +638,6 @@ class WebTests(unittest.TestCase):
                 )
                 status = server.get_json("/api/status")
 
-            self.assertIn("/api/ingest-otlp", html)
-            self.assertIn("/v1/traces", html)
             self.assertEqual(api_ingest["profile_id"], "profile_web_otlp")
             self.assertEqual(api_ingest["ingested_counts"]["runs"], 1)
             self.assertEqual(len(api_ingest["span_ids"]), 2)
@@ -862,7 +659,6 @@ class WebTests(unittest.TestCase):
             )
 
             with RunningServer(db_path) as server:
-                html = _dashboard_html()
                 apply_report = server.post_json(
                     "/api/apply",
                     {"proposal_id": "proposal_context_timeout_001"},
@@ -881,7 +677,6 @@ class WebTests(unittest.TestCase):
                 revisions = server.get_json("/api/skill-revisions?skill_id=skill_proposal_context_timeout_001_1")
                 context = server.get_json("/api/context")
 
-            self.assertIn("/api/skills/lock", html)
             self.assertEqual(apply_report["state"], "applied")
             self.assertTrue(lock_report["human_locked"])
             self.assertEqual(lock_report["reason"], "manual owner review")
@@ -1195,7 +990,6 @@ class WebTests(unittest.TestCase):
             )
 
             with RunningServer(db_path) as server:
-                html = _dashboard_html()
                 prepare = server.post_json(
                     "/api/harness/prepare",
                     {"proposal_id": "proposal_harness_timeout_eval_001"},
@@ -1204,8 +998,6 @@ class WebTests(unittest.TestCase):
                 harness_patches = server.get_json("/api/harness-patches")
                 status = server.get_json("/api/status")
 
-            self.assertIn("Harness Patches", html)
-            self.assertIn("Harness Target Locks", html)
             self.assertEqual(prepare["state"], "pending")
             self.assertEqual(
                 prepare["patch_transaction_ids"],
@@ -1804,7 +1596,6 @@ class WebTests(unittest.TestCase):
             )
 
             with RunningServer(db_path) as server:
-                html = _dashboard_html()
                 adapters = server.get_json("/api/replay-adapters")
                 start = server.post_json(
                     "/api/replay-servers/start",
@@ -1831,8 +1622,6 @@ class WebTests(unittest.TestCase):
                         {"adapter_id": "web_managed_http_replay"},
                     )
 
-            self.assertIn("/api/replay-servers/start", html)
-            self.assertIn("/api/replay-servers/logs", html)
             self.assertEqual(adapters["replay_adapters"][0]["kind"], "managed_http_server")
             self.assertTrue(start["started"])
             self.assertTrue(start["running"])
@@ -1891,7 +1680,6 @@ class WebTests(unittest.TestCase):
             ingest_source_fixture(db_path, FIXTURE)
 
             with RunningServer(db_path) as server:
-                html = _dashboard_html()
                 presets = server.get_json("/api/operator-presets")
                 with patch("kyoko.operator_presets.shutil.which", return_value="/usr/local/bin/codex"):
                     bootstrap = server.post_json(
@@ -1915,13 +1703,6 @@ class WebTests(unittest.TestCase):
                 smoke = server.post_json("/api/operator-smoke", {"operator": "mock"})
                 status = server.get_json("/api/status")
 
-            self.assertIn("/api/operator-adapters/bootstrap", html)
-            self.assertIn("/api/operator-smoke", html)
-            self.assertIn("/api/operator-runs", html)
-            self.assertIn("Operator Runs", html)
-            self.assertIn("Prepare mock", html)
-            self.assertIn("Prepare all presets", html)
-            self.assertIn("Live operator", html)
             self.assertEqual(
                 {preset["adapter_id"] for preset in presets["operator_presets"]},
                 {"codex", "claude", "hermes", "openclaw"},
@@ -1972,7 +1753,6 @@ class WebTests(unittest.TestCase):
             }
 
             with RunningServer(db_path) as server:
-                html = _dashboard_html()
                 with patch(
                     "kyoko.web.run_mcp_install_smoke_matrix",
                     return_value=FakeMcpInstallSmokeReport(payload),
@@ -1986,8 +1766,6 @@ class WebTests(unittest.TestCase):
                         },
                     )
 
-            self.assertIn("/api/mcp-install-smoke", html)
-            self.assertIn("Smoke MCP clients", html)
             self.assertTrue(result["passed"])
             self.assertEqual(result["summary"]["skipped"], 1)
             self.assertEqual(smoke.call_args.kwargs["output_dir"], output_dir)
@@ -2045,7 +1823,6 @@ class WebTests(unittest.TestCase):
             output_dir = Path(tmpdir) / "doctor-smoke"
 
             with RunningServer(db_path) as server:
-                html = _dashboard_html()
                 with patch("kyoko.web.run_doctor", return_value=FakeDoctorReport()) as doctor:
                     payload = server.post_json(
                         "/api/doctor",
@@ -2064,13 +1841,6 @@ class WebTests(unittest.TestCase):
                         },
                     )
 
-            self.assertIn("/api/doctor", html)
-            self.assertIn("First-Run Doctor", html)
-            self.assertIn("Run safe doctor", html)
-            self.assertIn("native ACE", html)
-            self.assertIn("Dashboard browser smoke", html)
-            self.assertIn("Local v0", html)
-            self.assertIn("External evidence follow-ups", html)
             self.assertTrue(payload["ok"])
             self.assertEqual(payload["summary"]["warnings"], 1)
             self.assertTrue(payload["readiness"]["local_v0_ready"])
@@ -2125,7 +1895,6 @@ def replay(request):
             replay_port = _free_port()
 
             with RunningServer(db_path) as server:
-                html = _dashboard_html()
                 frameworks = server.get_json("/api/integration-frameworks")
                 source = server.post_json(
                     "/api/source-adapter-template",
@@ -2182,12 +1951,6 @@ def replay(request):
                     },
                 )
 
-            self.assertIn("/api/source-adapter-template", html)
-            self.assertIn("/api/replay-server-template", html)
-            self.assertIn("/api/integration-smoke/source", html)
-            self.assertIn("/api/integration-smoke/replay-server", html)
-            self.assertIn("/api/import-hermes-kanban", html)
-            self.assertIn("/api/import-openclaw-sessions", html)
             self.assertIn(
                 "openai-agents-python",
                 {framework["id"] for framework in frameworks["source_frameworks"]},

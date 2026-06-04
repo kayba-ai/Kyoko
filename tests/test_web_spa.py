@@ -124,7 +124,7 @@ class SpaServingTests(unittest.TestCase):
                         server.get("/api/does-not-exist")
                     self.assertEqual(ctx.exception.code, 404)
 
-    def test_falls_back_to_inline_dashboard_when_bundle_absent(self) -> None:
+    def test_falls_back_to_build_hint_when_bundle_absent(self) -> None:
         with TemporaryDirectory() as tmp:
             tmpdir = Path(tmp)
             missing = tmpdir / "no-bundle-here"
@@ -134,9 +134,10 @@ class SpaServingTests(unittest.TestCase):
                     status, headers, body = server.get("/")
                     self.assertEqual(status, 200)
                     self.assertIn("text/html", headers["Content-Type"])
-                    # The inline dashboard ships an embedded script; the SPA shell does not.
+                    # With no built bundle, `/` serves a small build-hint stub (the
+                    # inline dashboard was removed once the React SPA shipped).
                     self.assertIn(b"Kyoko", body)
-                    self.assertIn(b"<script", body)
+                    self.assertIn(b"npm run build", body)
 
 
 if __name__ == "__main__":
