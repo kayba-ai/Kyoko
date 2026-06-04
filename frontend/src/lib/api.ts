@@ -16,6 +16,7 @@ import type {
   RunAnalysisBody,
   RunAnalysisResult,
   UpdateScheduleBody,
+  EvalDefinition,
   EvalDetailBundle,
   EvalRunDetailBundle,
   EvalRunsBundle,
@@ -210,6 +211,9 @@ export const api = {
     getJson<Comparison>("/api/eval-compare", { baseline, compare }),
 
   llmEvals: () => getJson<LlmEvalsBundle>("/api/llm-evals").then((d) => d.llm_evals ?? []),
+  // Activate/deactivate a judge. Evidence-only config — gates nothing.
+  setLlmEvalActive: (id: string, active: boolean) =>
+    postJson<{ llm_eval: EvalDefinition }>("/api/llm-evals/status", { id, active }).then((d) => d.llm_eval),
   llmEvalDetail: (id: string) =>
     getJson<LlmEvalDetailBundle>("/api/llm-evals/detail", { id }).then((d) => d.llm_eval),
   llmEvalRuns: () => getJson<LlmEvalRunsBundle>("/api/llm-eval-runs").then((d) => d.eval_runs ?? []),

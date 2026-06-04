@@ -38,6 +38,10 @@ export function JudgesPage() {
             </>
           )}
           showVars
+          onToggleActive={async (d, active) => {
+            await api.setLlmEvalActive(d.id, active);
+            defs.reload();
+          }}
         />
       </div>
     </div>

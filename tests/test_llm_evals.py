@@ -9,7 +9,14 @@ from tempfile import TemporaryDirectory
 from kyoko import storage
 from kyoko.annotations import create_annotation
 from kyoko.cli import main
-from kyoko.llm_evals import LlmEvalError, get_llm_eval, list_llm_evals, run_llm_eval
+from kyoko.evals_measure import EvalMeasureError
+from kyoko.llm_evals import (
+    LlmEvalError,
+    get_llm_eval,
+    list_llm_evals,
+    run_llm_eval,
+    set_llm_eval_status,
+)
 from kyoko.metric_bindings import resolve_bindings
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -264,6 +271,43 @@ class CliTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertEqual(payload["eval_run"]["id"], run_id)
             self.assertEqual(len(payload["results"]), 1)
+
+
+class SetStatusTests(unittest.TestCase):
+    def test_status_persists_across_reseed(self) -> None:
+        # The crux: bundled templates re-seed on every list/get; archiving a
+        # judge must survive that, and must not touch any other judge.
+        with TemporaryDirectory() as tmp:
+            db = Path(tmp) / "k.db"
+            _seed(db)
+            out = set_llm_eval_status(db_path=db, llm_eval_id="conciseness", status="archived")
+            self.assertEqual(out["status"], "archived")
+            by_id = {e["id"]: e["status"] for e in list_llm_evals(db_path=db)}  # re-seeds
+            self.assertEqual(by_id["conciseness"], "archived")
+            self.assertTrue(all(s == "active" for i, s in by_id.items() if i != "conciseness"))
+            # Reactivation works too.
+            set_llm_eval_status(db_path=db, llm_eval_id="conciseness", status="active")
+            self.assertEqual(get_llm_eval(db_path=db, llm_eval_id="conciseness")["status"], "active")
+
+    def test_invalid_status_and_missing_id_rejected(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db = Path(tmp) / "k.db"
+            _seed(db)
+            with self.assertRaises(EvalMeasureError):
+                set_llm_eval_status(db_path=db, llm_eval_id="conciseness", status="bogus")
+            with self.assertRaises(EvalMeasureError):
+                set_llm_eval_status(db_path=db, llm_eval_id="does_not_exist", status="active")
+
+    def test_cli_set_status(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db = Path(tmp) / "k.db"
+            _seed(db)
+            code, payload = _run_json(
+                ["llm-eval-set-status", "toxicity", "archived", "--db", str(db), "--json"]
+            )
+            self.assertEqual(code, 0)
+            self.assertEqual(payload["llm_eval"]["status"], "archived")
+            self.assertEqual(get_llm_eval(db_path=db, llm_eval_id="toxicity")["status"], "archived")
 
 
 if __name__ == "__main__":

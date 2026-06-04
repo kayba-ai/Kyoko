@@ -33,6 +33,7 @@ from .evals_measure import (
     list_eval_definitions,
     record_measure_result,
     resolve_corpus,
+    set_eval_definition_status,
     upsert_eval_definition,
 )
 from .live import LiveBus
@@ -104,6 +105,19 @@ def get_llm_eval(*, db_path: Path, llm_eval_id: str, profile_id: Optional[str] =
     if definition["kind"] != "llm":
         raise LlmEvalError(f"not_an_llm_eval:{llm_eval_id}")
     return definition
+
+
+def set_llm_eval_status(
+    *, db_path: Path, llm_eval_id: str, status: str, profile_id: Optional[str] = None
+) -> dict[str, Any]:
+    """Activate ("active") or deactivate ("archived") a judge template. Evidence
+    only — a judge's status gates nothing in the autonomy plane; it just controls
+    whether the user considers this measurement in play."""
+    # Validates kind == "llm" and seeds bundled rows so the id resolves.
+    get_llm_eval(db_path=db_path, llm_eval_id=llm_eval_id, profile_id=profile_id)
+    return set_eval_definition_status(
+        db_path=db_path, definition_id=llm_eval_id, status=status, profile_id=profile_id
+    )
 
 
 # --------------------------------------------------------------------------

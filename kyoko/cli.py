@@ -80,7 +80,13 @@ from .evals_measure import (
     get_measure_run,
     list_measure_runs,
 )
-from .llm_evals import LlmEvalError, get_llm_eval, list_llm_evals, run_llm_eval
+from .llm_evals import (
+    LlmEvalError,
+    get_llm_eval,
+    list_llm_evals,
+    run_llm_eval,
+    set_llm_eval_status,
+)
 from .demo import DemoError, run_demo_setup
 from .doctor import DEFAULT_SMOKE_EVIDENCE_DIR, DoctorError, doctor_report_text, run_doctor
 from .evidence import write_evidence_bundle
@@ -1190,6 +1196,19 @@ def build_parser() -> argparse.ArgumentParser:
     _add_db_argument(llm_eval_run_detail)
     llm_eval_run_detail.add_argument("eval_run_id", help="Measurement run id to inspect.")
     llm_eval_run_detail.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+
+    llm_eval_set_status = subcommands.add_parser(
+        "llm-eval-set-status",
+        help="Activate or archive a judge template (evidence-only; gates nothing).",
+    )
+    _add_db_argument(llm_eval_set_status)
+    llm_eval_set_status.add_argument("llm_eval_id", help="Template id to update.")
+    llm_eval_set_status.add_argument(
+        "status",
+        choices=("active", "archived"),
+        help="New status: 'active' to use the judge, 'archived' to set it aside.",
+    )
+    llm_eval_set_status.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
 
     import_hermes = subcommands.add_parser(
         "import-hermes-kanban",
@@ -4906,6 +4925,22 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(f"{run['id']}  {run['eval_definition_id']}  {run['status']}")
             print(f"value={agg.get('value')} scored={run['unit_scored']} "
                   f"skipped={run['unit_skipped']} total={run['unit_total']}")
+        return 0
+
+    if args.command == "llm-eval-set-status":
+        try:
+            llm_eval = set_llm_eval_status(
+                db_path=args.db,
+                llm_eval_id=args.llm_eval_id,
+                status=args.status,
+            )
+        except (LlmEvalError, EvalMeasureError, StorageError) as exc:
+            print(f"llm-eval-set-status failed: {exc}", file=sys.stderr)
+            return 1
+        if args.json:
+            print(json.dumps({"llm_eval": llm_eval}, sort_keys=True))
+        else:
+            print(f"{llm_eval['id']}: status set to {llm_eval['status']}")
         return 0
 
     if args.command == "import-hermes-kanban":

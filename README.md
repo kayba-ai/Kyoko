@@ -1023,6 +1023,9 @@ python3 -m kyoko run-llm-eval hallucination --db /tmp/kyoko.db --corpus '{"unit"
 python3 -m kyoko llm-eval-runs --db /tmp/kyoko.db --json
 python3 -m kyoko llm-eval-run-detail <eval_run_id> --db /tmp/kyoko.db --json
 python3 -m kyoko llm-eval-compare <baseline_run_id> <compare_run_id> --db /tmp/kyoko.db --json
+# activate / archive a judge (evidence-only config; gates nothing)
+python3 -m kyoko llm-eval-set-status hallucination archived --db /tmp/kyoko.db --json
+python3 -m kyoko llm-eval-set-status hallucination active --db /tmp/kyoko.db --json
 ```
 
 A corpus selector chooses units: `{"unit": "event"|"llm_span"|"run", "source_id":

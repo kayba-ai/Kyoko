@@ -39,7 +39,13 @@ from .details import (
 )
 from .eval_detectors import DetectorError, get_detector, list_detectors, run_detector
 from .evals_measure import EvalMeasureError, compare_eval_runs, get_measure_results, get_measure_run, list_measure_runs
-from .llm_evals import LlmEvalError, get_llm_eval, list_llm_evals, run_llm_eval
+from .llm_evals import (
+    LlmEvalError,
+    get_llm_eval,
+    list_llm_evals,
+    run_llm_eval,
+    set_llm_eval_status,
+)
 from .issues import IssueError, create_issue, list_issues, set_issue_comment, update_issue_status
 from .doctor import DEFAULT_SMOKE_EVIDENCE_DIR, run_doctor
 from .evidence import build_evidence_bundle
@@ -1382,6 +1388,39 @@ def make_handler(
                         )
                         return
                     self._send_json(report.to_json())
+                    return
+                if path == "/api/llm-evals/status":
+                    payload = self._read_json()
+                    llm_eval_id = payload.get("id")
+                    if not isinstance(llm_eval_id, str) or not llm_eval_id:
+                        self._send_json({"error": "id_required"}, status=HTTPStatus.BAD_REQUEST)
+                        return
+                    # Accept either an explicit status string or a boolean `active`.
+                    status_raw = payload.get("status")
+                    if isinstance(status_raw, str):
+                        new_status = status_raw
+                    elif isinstance(payload.get("active"), bool):
+                        new_status = "active" if payload["active"] else "archived"
+                    else:
+                        self._send_json(
+                            {"error": "status_or_active_required"},
+                            status=HTTPStatus.BAD_REQUEST,
+                        )
+                        return
+                    try:
+                        llm_eval = set_llm_eval_status(
+                            db_path=resolved_db_path,
+                            llm_eval_id=llm_eval_id,
+                            status=new_status,
+                            profile_id=_optional_str(payload.get("profile_id")),
+                        )
+                    except (LlmEvalError, EvalMeasureError) as exc:
+                        self._send_json(
+                            {"error": "status_update_failed", "detail": str(exc)},
+                            status=HTTPStatus.BAD_REQUEST,
+                        )
+                        return
+                    self._send_json({"llm_eval": llm_eval})
                     return
                 if path == "/api/policy":
                     payload = self._read_json()

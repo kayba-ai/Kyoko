@@ -9,6 +9,7 @@ import { ArrowDown, ArrowUp, BarChart2, ChevronRight, Minus } from "lucide-react
 import type { EvalDefinition, MeasureRun } from "@/lib/types";
 import { Badge, statusTone, type BadgeProps } from "@/components/ui/badge";
 import { Card, CardBody } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
 import { Spinner, ErrorNote, Empty } from "@/components/ui/misc";
 import { ago, humanize } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -277,6 +278,7 @@ export function MeasureTable({
   typeBadges,
   showVars = false,
   noRunsHint = "Run the measurement to produce data.",
+  onToggleActive,
 }: {
   defs: EvalDefinition[];
   runs: MeasureRun[];
@@ -290,8 +292,22 @@ export function MeasureTable({
   typeBadges: (def: EvalDefinition) => ReactNode;
   showVars?: boolean;
   noRunsHint?: string;
+  /** When provided, each row gets an active/inactive toggle (status: active ↔
+   *  archived). Evidence-only config — toggling gates nothing. */
+  onToggleActive?: (def: EvalDefinition, active: boolean) => Promise<unknown> | void;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [pendingToggle, setPendingToggle] = useState<string | null>(null);
+
+  async function handleToggle(def: EvalDefinition, active: boolean) {
+    if (!onToggleActive) return;
+    setPendingToggle(def.id);
+    try {
+      await onToggleActive(def, active);
+    } finally {
+      setPendingToggle(null);
+    }
+  }
 
   if (loading || runsLoading) {
     return (
@@ -344,6 +360,7 @@ export function MeasureTable({
                 <th className={TH}>Trend</th>
                 <th className={cn(TH, "text-right")}>Runs</th>
                 <th className={cn(TH, "text-right")}>Last run</th>
+                {onToggleActive && <th className={cn(TH, "text-center")}>Active</th>}
                 <th className="w-8" />
               </tr>
             </thead>
@@ -360,6 +377,7 @@ export function MeasureTable({
                       className={cn(
                         "cursor-pointer border-b border-border/60 transition-colors hover:bg-muted/50",
                         isOpen && "bg-muted/50",
+                        onToggleActive && def.status !== "active" && "opacity-55",
                       )}
                     >
                       <td className="px-4 py-3">
@@ -387,13 +405,25 @@ export function MeasureTable({
                       <td className="px-4 py-3 text-right text-xs text-muted-foreground">
                         {stats.lastRun ? ago(stats.lastRun.created_at) : "—"}
                       </td>
+                      {onToggleActive && (
+                        <td
+                          className="px-4 py-3 text-center"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Switch
+                            checked={def.status === "active"}
+                            disabled={pendingToggle === def.id}
+                            onCheckedChange={(next) => handleToggle(def, next)}
+                          />
+                        </td>
+                      )}
                       <td className="px-2 text-muted-foreground">
                         <ChevronRight className={cn("h-4 w-4 transition-transform", isOpen && "rotate-90")} />
                       </td>
                     </tr>
                     {isOpen && (
                       <tr>
-                        <td colSpan={9} className="border-b border-border/60 p-0">
+                        <td colSpan={onToggleActive ? 10 : 9} className="border-b border-border/60 p-0">
                           <ExpandedDetail def={def} runs={defRuns} showVars={showVars} noRunsHint={noRunsHint} />
                         </td>
                       </tr>

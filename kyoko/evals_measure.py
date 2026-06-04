@@ -273,8 +273,12 @@ def upsert_eval_definition(
               detector_ref=excluded.detector_ref, prompt=excluded.prompt,
               vars_json=excluded.vars_json, bindings_json=excluded.bindings_json,
               output_json=excluded.output_json, severity_bands_json=excluded.severity_bands_json,
-              status=excluded.status, updated_at=excluded.updated_at
+              updated_at=excluded.updated_at
             """,
+            # NOTE: `status` is intentionally NOT updated on conflict. Bundled
+            # templates are re-seeded on every list/get; clobbering status here
+            # would silently re-activate a judge the user archived. Status is
+            # changed only through set_eval_definition_status.
             (
                 did,
                 resolved_profile_id,
@@ -299,6 +303,31 @@ def upsert_eval_definition(
             ),
         )
     return get_eval_definition(db_path=db_path, definition_id=did)
+
+
+def set_eval_definition_status(
+    *,
+    db_path: Path,
+    definition_id: str,
+    status: str,
+    profile_id: Optional[str] = None,
+) -> dict[str, Any]:
+    """Activate or archive a measurement definition. Evidence-only configuration:
+    it never changes agent behavior or touches the autonomy gate."""
+    if status not in DEFINITION_STATUSES:
+        raise EvalMeasureError(f"invalid_status:{status}")
+    initialize_database(db_path)
+    now = utc_now()
+    with connect(db_path) as connection:
+        resolved_profile_id = _resolve_profile_id(connection, profile_id)
+        cursor = connection.execute(
+            "UPDATE eval_definitions SET status = ?, updated_at = ? "
+            "WHERE id = ? AND profile_id = ?",
+            (status, now, definition_id, resolved_profile_id),
+        )
+        if cursor.rowcount == 0:
+            raise EvalMeasureError(f"definition_not_found:{definition_id}")
+    return get_eval_definition(db_path=db_path, definition_id=definition_id)
 
 
 def _definition_row_to_dict(row: Any) -> dict[str, Any]:
