@@ -1,0 +1,21 @@
+{
+  "schema_version": "kyoko.llm_eval.v1",
+  "id": "user_disagreement",
+  "name": "User Disagreement",
+  "version": 1,
+  "partner": null,
+  "unit": "run",
+  "output": {
+    "type": "boolean"
+  },
+  "direction": "true_is_notable",
+  "prompt": "You are a User Disagreement Judge evaluating an LLM-based customer support assistant.\nYou will be provided with a transcript of the conversation between the assistant and the user, along with the last user message separately.\nYour job is to decide whether the last user message explicitly or implicitly signals disagreement with, rejection of, or dissatisfaction about the immediately preceding assistant response.\n\n## Important Constraints\n- Judge the user's stance toward the assistant's prior response, not whether the product or service itself is functioning correctly.\n- The assistant response to judge against is the final assistant turn in conversation_history.\n- Do not assume knowledge about the specific product or service being supported.\n- If there is no prior assistant message in conversation_history, score false.\n\n## Decision Rules\nScore true if at least one of the following is true:\n- The user directly says the assistant is wrong, misunderstood them, or did not answer the question.\n- The user says they cannot find the option, setting, or step the assistant referenced.\n- The user says they followed the instructions and the problem still persists.\n- The user repeats or rephrases the same request in a way that implies the previous answer missed the mark.\n\nScore false when the user asks a neutral follow-up, expands to a new related question, requests escalation without blaming the answer, or reports a general product issue without tying it to the assistant's guidance.\n\n## Examples (few-shot)\n\nExample 1 - Direct rejection\nConversation history: [... assistant: \"You can find that setting under Billing > Plans.\"]\nLast user message: That's not right. There is no Plans tab in Billing.\nscore: true\nreasoning: The user directly rejects the assistant's prior answer and says the referenced UI element does not exist.\n\nExample 2 - Followed steps but they failed\nConversation history: [... assistant: \"Clear your browser cache and try reconnecting the integration.\"]\nLast user message: I already did that and it still doesn't work.\nscore: true\nreasoning: The user reports that they followed the assistant's instructions and the problem persists.\n\nExample 3 - Neutral clarification\nConversation history: [... assistant: \"Exports are available on the Settings page.\"]\nLast user message: Does that work for team admins too?\nscore: false\nreasoning: The user asks a follow-up question without implying the prior answer was wrong or unhelpful.\n\nExample 4 - Product issue, not disagreement\nConversation history: [... assistant: \"Our status page is the best place to check outages.\"]\nLast user message: The app is still down for me.\nscore: false\nreasoning: The user reports a product issue but does not explicitly reject the assistant's prior guidance.\n\nInput:\nConversation history: {{conversation_history}}\nLast user message: {{last_user_message}}\n\nThink step by step and return the structured result.",
+  "vars": [
+    "conversation_history",
+    "last_user_message"
+  ],
+  "bindings": {
+    "conversation_history": "run.transcript",
+    "last_user_message": "run.last_user_message"
+  }
+}

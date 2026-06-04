@@ -1091,6 +1091,18 @@ class DoctorTests(unittest.TestCase):
         report = run_doctor()
         self.assertNotIn("eval_smoke", {check.id for check in report.checks})
 
+    def test_doctor_llm_eval_smoke_runs_mock_judge(self) -> None:
+        report = run_doctor(llm_eval_smoke=True)
+        checks = {check.id: check for check in report.checks}
+        self.assertIn("llm_eval_smoke", checks)
+        self.assertEqual(checks["llm_eval_smoke"].status, "pass")
+        self.assertFalse(checks["llm_eval_smoke"].detail["external_model_invoked"])
+        self.assertEqual(checks["llm_eval_smoke"].detail["aggregate"]["value"], 0.5)
+
+    def test_doctor_llm_eval_smoke_absent_by_default(self) -> None:
+        report = run_doctor()
+        self.assertNotIn("llm_eval_smoke", {check.id for check in report.checks})
+
     def test_doctor_improve_smoke_retains_requested_output_dir(self) -> None:
         def fake_improve(*, db_path: Path, output_dir: Path, **kwargs):
             return fake_improve_smoke_report(output_dir, db_path=db_path)

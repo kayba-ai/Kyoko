@@ -1,0 +1,21 @@
+{
+  "schema_version": "kyoko.llm_eval.v1",
+  "id": "user_distress",
+  "name": "User Distress",
+  "version": 1,
+  "partner": null,
+  "unit": "run",
+  "output": {
+    "type": "boolean"
+  },
+  "direction": "true_is_notable",
+  "prompt": "You are a User Distress Judge evaluating an LLM-based customer support assistant.\nYou will be provided with a transcript of the conversation between the assistant and the user, along with the last user message separately.\nYour job is to decide whether the last user message contains profanity, explicit language, strong expletives, or clear intense frustration beyond mild annoyance.\n\n## Important Constraints\n- Judge the last user message only, not the assistant's responses.\n- Do not assume knowledge about the specific product or service being supported.\n- Score true for explicit profanity, strong expletives, or strong frustration that clearly goes beyond mild annoyance.\n- Mild expressions such as \"this is annoying\", \"ugh\", or \"seriously?\" do not count.\n- If there is no prior assistant message in conversation_history, still judge based solely on last_user_message.\n\n## Decision Rules\nScore true if the last user message includes at least one of the following:\n- Explicit profanity or strong expletives.\n- Profanity directed at the assistant, product, or situation.\n- Strong frustration without profanity that clearly goes beyond mild annoyance.\n\nScore false when the message only shows mild irritation, asks a blunt question, or requests escalation without profanity or intense frustration.\n\n## Examples (few-shot)\n\nExample 1 - Explicit profanity directed at the assistant\nLast user message: What the fuck, I've followed every step you gave me and it still doesn't work.\nscore: true\nreasoning: The user uses explicit profanity (\"what the fuck\") while expressing strong frustration with the failed guidance.\n\nExample 2 - Profanity directed at the product\nLast user message: This fucking feature has been broken for weeks, why is nobody fixing it?\nscore: true\nreasoning: The message includes explicit profanity (\"fucking\") and clear frustration about the product.\n\nExample 3 - Strong frustration without profanity\nLast user message: This is absolutely useless. I've been trying to sort this out for an hour and nothing works.\nscore: true\nreasoning: The user expresses intense frustration (\"absolutely useless\") that clearly goes beyond mild annoyance.\n\nExample 4 - Mild frustration only\nLast user message: Ugh, seriously? I already tried that three times.\nscore: false\nreasoning: The message shows mild frustration but does not include profanity or sufficiently strong distress.\n\nExample 5 - Neutral escalation request\nLast user message: OK that still didn't work. Can I speak to someone?\nscore: false\nreasoning: The user is frustrated but does not use profanity or strong expletive-level language.\n\nInput:\nConversation history: {{conversation_history}}\nLast user message: {{last_user_message}}\n\nThink step by step and return the structured result.",
+  "vars": [
+    "conversation_history",
+    "last_user_message"
+  ],
+  "bindings": {
+    "conversation_history": "run.transcript",
+    "last_user_message": "run.last_user_message"
+  }
+}

@@ -7152,5 +7152,88 @@ class MeasurementEvalContractTests(unittest.TestCase):
             self.assertEqual(_scrub_measure(payload), _load_json(EVAL_RUN_DETAIL_GOLDEN))
 
 
+# --- measurement plane: `llm_eval` (judge templates) golden contracts ------
+import shlex as _shlex
+import sys as _sys
+
+LLM_EVALS_GOLDEN = ROOT / "docs/fixtures/cli-json/llm-evals.contract.golden.json"
+LLM_EVAL_DETAIL_GOLDEN = ROOT / "docs/fixtures/cli-json/llm-eval-detail.contract.golden.json"
+RUN_LLM_EVAL_GOLDEN = ROOT / "docs/fixtures/cli-json/run-llm-eval.contract.golden.json"
+LLM_EVAL_RUNS_GOLDEN = ROOT / "docs/fixtures/cli-json/llm-eval-runs.contract.golden.json"
+LLM_EVAL_RUN_DETAIL_GOLDEN = ROOT / "docs/fixtures/cli-json/llm-eval-run-detail.contract.golden.json"
+_LLM_JUDGE = _shlex.join([_sys.executable, str(ROOT / "tests/fixtures/llm_eval_judge.py")])
+
+
+def _seed_llm_db(db_path: Path) -> None:
+    from kyoko import storage
+
+    storage.initialize_database(db_path)
+    con = storage.connect(db_path)
+    con.execute(
+        "INSERT INTO profiles VALUES ('p1','p1','/tmp','active','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')"
+    )
+    con.execute(
+        "INSERT INTO sources (id,profile_id,kind,display_name,status,adapter_version,config_json,capabilities_json) "
+        "VALUES ('s1','p1','t','s','active','1','{}','{}')"
+    )
+    con.execute(
+        "INSERT INTO runs (id,profile_id,source_id,status,started_at,metadata_json) "
+        "VALUES ('run_0','p1','s1','succeeded','2026-01-01T00:00:00Z','{}')"
+    )
+    con.execute(
+        "INSERT INTO spans (id,run_id,source_id,kind,name,status,started_at,usage_json,attributes_json) "
+        "VALUES ('run_0_llm','run_0','s1','llm','gen','ok','2026-01-01T00:00:01Z','{}',?)",
+        (json.dumps({"gen_ai.prompt.0.role": "user", "gen_ai.prompt.0.content": "What is the capital?",
+                     "gen_ai.completion.0.content": "The capital is Paris."}),),
+    )
+    con.commit()
+    con.close()
+
+
+class MeasurementLlmEvalContractTests(unittest.TestCase):
+    def test_llm_evals_list_matches_golden(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            db = Path(tmpdir) / "kyoko.db"
+            _seed_llm_db(db)
+            code, payload = _run_json(["llm-evals", "--db", str(db), "--json"])
+            self.assertEqual(code, 0)
+            self.assertEqual(_scrub_measure(payload), _load_json(LLM_EVALS_GOLDEN))
+
+    def test_llm_eval_detail_matches_golden(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            db = Path(tmpdir) / "kyoko.db"
+            _seed_llm_db(db)
+            code, payload = _run_json(["llm-eval-detail", "hallucination", "--db", str(db), "--json"])
+            self.assertEqual(code, 0)
+            self.assertEqual(_scrub_measure(payload), _load_json(LLM_EVAL_DETAIL_GOLDEN))
+
+    def test_run_llm_eval_matches_golden(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            db = Path(tmpdir) / "kyoko.db"
+            _seed_llm_db(db)
+            code, payload = _run_json([
+                "run-llm-eval", "hallucination", "--db", str(db), "--corpus", '{"unit":"llm_span"}',
+                "--command", _LLM_JUDGE, "--json",
+            ])
+            self.assertEqual(code, 0)
+            self.assertEqual(_scrub_measure(payload), _load_json(RUN_LLM_EVAL_GOLDEN))
+
+    def test_llm_eval_runs_and_detail_match_golden(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            db = Path(tmpdir) / "kyoko.db"
+            _seed_llm_db(db)
+            _, run_payload = _run_json([
+                "run-llm-eval", "hallucination", "--db", str(db), "--corpus", '{"unit":"llm_span"}',
+                "--command", _LLM_JUDGE, "--persist", "--json",
+            ])
+            run_id = run_payload["eval_run_id"]
+            code, payload = _run_json(["llm-eval-runs", "--db", str(db), "--json"])
+            self.assertEqual(code, 0)
+            self.assertEqual(_scrub_measure(payload), _load_json(LLM_EVAL_RUNS_GOLDEN))
+            code, payload = _run_json(["llm-eval-run-detail", run_id, "--db", str(db), "--json"])
+            self.assertEqual(code, 0)
+            self.assertEqual(_scrub_measure(payload), _load_json(LLM_EVAL_RUN_DETAIL_GOLDEN))
+
+
 if __name__ == "__main__":
     unittest.main()

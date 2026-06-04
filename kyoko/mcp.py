@@ -49,6 +49,7 @@ from .checks import (
 )
 from .eval_detectors import list_detectors, run_detector
 from .evals_measure import get_measure_results, get_measure_run, list_measure_runs
+from .llm_evals import list_llm_evals, run_llm_eval
 from .annotations import create_annotation, list_annotations
 from .harness import list_harness_target_locks, list_patch_transactions
 from .inspection import (
@@ -1786,6 +1787,73 @@ def _build_tools(server: KyokoMcpServer) -> dict[str, McpTool]:
             read_only=False,
             idempotent=False,
         ),
+        # ---- llm_eval (LLM-as-judge) measurement plane — evidence only ----
+        McpTool(
+            name="kyoko_list_llm_evals",
+            title="Kyoko List LLM Evals",
+            description=(
+                "List registered and bundled LLM-as-judge eval definitions. "
+                "LLM evals are evidence-only tools that score a trace corpus using a "
+                "model judge command; they never write a check_run, mutate a skill, or "
+                "edit harness files."
+            ),
+            input_schema=_object_schema({"profile_id": {"type": "string"}}),
+            handler=lambda args: {
+                "llm_evals": list_llm_evals(
+                    db_path=server.db_path,
+                    profile_id=_optional_string(args, "profile_id"),
+                )
+            },
+        ),
+        McpTool(
+            name="kyoko_llm_eval_run_detail",
+            title="Kyoko LLM Eval Run Detail",
+            description=(
+                "Return one LLM eval measurement run plus its per-event results. "
+                "Evidence only — no gate or apply path."
+            ),
+            input_schema=_object_schema(
+                {"eval_run_id": {"type": "string"}},
+                required=["eval_run_id"],
+            ),
+            handler=lambda args: _llm_eval_run_detail(server, args),
+        ),
+        McpTool(
+            name="kyoko_run_llm_eval",
+            title="Run Kyoko LLM Eval",
+            description=(
+                "Run an LLM-as-judge eval over a corpus of run traces and return "
+                "aggregate score plus per-event results. Supply a BYO judge command "
+                "or the eval definition's default will be used. "
+                "Evidence only — the result never writes a check_run, mutates a skill, "
+                "or edits a harness file. Set persist=true to record the run in the database."
+            ),
+            input_schema=_object_schema(
+                {
+                    "llm_eval_id": {"type": "string"},
+                    "corpus": {
+                        "type": "object",
+                        "description": (
+                            "Corpus selector: unit (llm_span|run), "
+                            "source_id, run_ids, since, until, span_filter, limit."
+                        ),
+                    },
+                    "command": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "BYO judge command argv. Uses the eval definition default if absent.",
+                    },
+                    "persist": {"type": "boolean"},
+                    "prepare_only": {"type": "boolean"},
+                    "profile_id": {"type": "string"},
+                    "timeout_seconds": {"type": "integer", "minimum": 1},
+                },
+                required=["llm_eval_id", "corpus"],
+            ),
+            handler=lambda args: _run_llm_eval(server, args),
+            read_only=False,
+            idempotent=False,
+        ),
     ]
     return {tool.name: tool for tool in tools}
 
@@ -2052,6 +2120,34 @@ def _run_eval(server: KyokoMcpServer, args: dict[str, Any]) -> dict[str, Any]:
         detector_id=_required_string(args, "detector_id"),
         corpus=corpus,
         persist=bool(args.get("persist", False)),
+        profile_id=_optional_string(args, "profile_id"),
+        timeout_seconds=_optional_positive_int(args, "timeout_seconds", 120),
+    )
+    return report.to_json()
+
+
+def _llm_eval_run_detail(server: KyokoMcpServer, args: dict[str, Any]) -> dict[str, Any]:
+    eval_run_id = _required_string(args, "eval_run_id")
+    return {
+        "eval_run": get_measure_run(db_path=server.db_path, eval_run_id=eval_run_id),
+        "results": get_measure_results(db_path=server.db_path, eval_run_id=eval_run_id),
+    }
+
+
+def _run_llm_eval(server: KyokoMcpServer, args: dict[str, Any]) -> dict[str, Any]:
+    corpus = args.get("corpus")
+    if not isinstance(corpus, dict):
+        raise McpError("corpus_object_required")
+    command_raw = args.get("command")
+    command: Optional[list[str]] = list(command_raw) if isinstance(command_raw, list) else None
+    report = run_llm_eval(
+        db_path=server.db_path,
+        llm_eval_id=_required_string(args, "llm_eval_id"),
+        corpus=corpus,
+        command=command,
+        persist=bool(args.get("persist", False)),
+        prepare_only=bool(args.get("prepare_only", False)),
+        output_dir=None,
         profile_id=_optional_string(args, "profile_id"),
         timeout_seconds=_optional_positive_int(args, "timeout_seconds", 120),
     )

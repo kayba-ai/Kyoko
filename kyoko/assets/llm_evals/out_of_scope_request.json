@@ -1,0 +1,21 @@
+{
+  "schema_version": "kyoko.llm_eval.v1",
+  "id": "out_of_scope_request",
+  "name": "Out-of-Scope Request",
+  "version": 1,
+  "partner": null,
+  "unit": "run",
+  "output": {
+    "type": "boolean"
+  },
+  "direction": "true_is_notable",
+  "prompt": "You are an Out-of-Scope Request Judge evaluating an LLM-based customer support assistant.\nYou will be provided with the agent's system prompt and the last user message.\nYour job is to decide whether the last user message contains a request that falls outside the defined scope of the assistant, as established by the system prompt.\n\n## Important Constraints\n- The agent's scope is defined exclusively by the system prompt. Do not use any other source to infer scope.\n- Judge the last user message against the system prompt, not whether a hypothetical assistant would handle it well.\n- If the system prompt is empty or too vague to determine scope confidently, score false.\n- Do not penalize ambiguous edge cases that could reasonably fall within a broad reading of the scope.\n- A request being difficult, unusual, or niche does not make it out of scope on its own.\n\n## Decision Rules\nScore true only if BOTH are true:\n1. The last user message asks for something with no plausible connection to the agent's defined scope.\n2. The mismatch is clear and unambiguous, not merely adjacent or debatable.\n\nScore false in all other cases, including adjacent requests, unusual but in-domain requests, vague system prompts, or product-related questions about limitations and gaps.\n\n## Examples (few-shot)\n\nExample 1 - Clearly unrelated request\nSystem prompt: You are a customer support assistant for an e-commerce platform. Help users with orders, returns, shipping, and account management.\nLast user message: Can you recommend a good diet plan to help me lose weight before summer?\nscore: true\nreasoning: The system prompt scopes the agent to e-commerce support, while dietary advice has no plausible connection to that scope.\n\nExample 2 - Clearly unrelated technical request\nSystem prompt: You are a support assistant for a project management SaaS product. Help users with product features, billing, and account settings.\nLast user message: Can you help me write a Python script to scrape competitor pricing data from the web?\nscore: true\nreasoning: The request is for custom coding work that is clearly outside the agent's product-support scope.\n\nExample 3 - Hard but in-scope question\nSystem prompt: You are a support assistant for a financial planning app. Help users understand their spending reports, budgets, and account settings.\nLast user message: Why does my budget report show different numbers than last month even though I spent the same amount?\nscore: false\nreasoning: The user is asking about their budget report, which is directly within the scope defined in the system prompt.\n\nExample 4 - Adjacent topic with ambiguous scope\nSystem prompt: You are a support assistant for an HR platform. Help employees with payslips, leave requests, and benefits.\nLast user message: Can you tell me what the company's remote work policy is?\nscore: false\nreasoning: Company policy is adjacent to HR support and could reasonably fall within a broad reading of the scope, so it is not clearly out of scope.\n\nExample 5 - Empty system prompt\nSystem prompt: (empty)\nLast user message: Can you book me a flight to Tokyo?\nscore: false\nreasoning: The system prompt is empty, so the agent's scope cannot be determined confidently.\n\nExample 6 - Product limitation question\nSystem prompt: You are a support assistant for a music streaming service. Help users with subscriptions, playlists, playback issues, and account settings.\nLast user message: Is there a way to download songs for offline listening?\nscore: false\nreasoning: The user is asking about a product feature, which remains within the assistant's support scope.\n\nInput:\nSystem prompt: {{system_prompt}}\nLast user message: {{last_user_message}}\n\nThink step by step and return the structured result.",
+  "vars": [
+    "last_user_message",
+    "system_prompt"
+  ],
+  "bindings": {
+    "last_user_message": "run.last_user_message",
+    "system_prompt": "run.system_prompt"
+  }
+}

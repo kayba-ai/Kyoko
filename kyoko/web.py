@@ -38,6 +38,7 @@ from .details import (
 )
 from .eval_detectors import DetectorError, get_detector, list_detectors, run_detector
 from .evals_measure import EvalMeasureError, get_measure_results, get_measure_run, list_measure_runs
+from .llm_evals import LlmEvalError, get_llm_eval, list_llm_evals, run_llm_eval
 from .issues import IssueError, create_issue, list_issues
 from .doctor import DEFAULT_SMOKE_EVIDENCE_DIR, run_doctor
 from .evidence import build_evidence_bundle
@@ -609,6 +610,74 @@ def make_handler(
                     except EvalMeasureError as exc:
                         self._send_json({"error": str(exc)}, status=HTTPStatus.NOT_FOUND)
                     return
+                # ---- llm_eval (LLM-as-judge) measurement plane ----
+                if path == "/api/llm-evals":
+                    try:
+                        self._send_json(
+                            {
+                                "llm_evals": list_llm_evals(
+                                    db_path=resolved_db_path,
+                                    profile_id=_query_param(self.path, "profile_id") or None,
+                                )
+                            }
+                        )
+                    except LlmEvalError as exc:
+                        self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                    return
+                if path == "/api/llm-evals/detail":
+                    llm_eval_id = _query_param(self.path, "id")
+                    if not llm_eval_id:
+                        self._send_json(
+                            {"error": "llm_eval_id_required"},
+                            status=HTTPStatus.BAD_REQUEST,
+                        )
+                        return
+                    try:
+                        self._send_json(
+                            {"llm_eval": get_llm_eval(db_path=resolved_db_path, llm_eval_id=llm_eval_id)}
+                        )
+                    except LlmEvalError as exc:
+                        self._send_json({"error": str(exc)}, status=HTTPStatus.NOT_FOUND)
+                    return
+                if path == "/api/llm-eval-runs":
+                    try:
+                        self._send_json(
+                            {
+                                "eval_runs": list_measure_runs(
+                                    db_path=resolved_db_path,
+                                    kind="llm",
+                                    eval_definition_id=_query_param(self.path, "eval_definition_id") or None,
+                                    profile_id=_query_param(self.path, "profile_id") or None,
+                                )
+                            }
+                        )
+                    except EvalMeasureError as exc:
+                        self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                    return
+                if path == "/api/llm-eval-runs/detail":
+                    eval_run_id = _query_param(self.path, "id")
+                    if not eval_run_id:
+                        self._send_json(
+                            {"error": "eval_run_id_required"},
+                            status=HTTPStatus.BAD_REQUEST,
+                        )
+                        return
+                    try:
+                        self._send_json(
+                            {
+                                "eval_run": get_measure_run(
+                                    db_path=resolved_db_path,
+                                    eval_run_id=eval_run_id,
+                                ),
+                                "results": get_measure_results(
+                                    db_path=resolved_db_path,
+                                    eval_run_id=eval_run_id,
+                                ),
+                            }
+                        )
+                    except EvalMeasureError as exc:
+                        self._send_json({"error": str(exc)}, status=HTTPStatus.NOT_FOUND)
+                    return
                 if path == "/api/skills":
                     profile_id = _query_param(self.path, "profile_id")
                     self._send_json(
@@ -1085,6 +1154,53 @@ def make_handler(
                             timeout_seconds=timeout_seconds if isinstance(timeout_seconds, int) else 120,
                         )
                     except DetectorError as exc:
+                        self._send_json(
+                            {"error": "eval_failed", "detail": str(exc)},
+                            status=HTTPStatus.CONFLICT,
+                        )
+                        return
+                    except EvalMeasureError as exc:
+                        self._send_json(
+                            {"error": "eval_failed", "detail": str(exc)},
+                            status=HTTPStatus.BAD_REQUEST,
+                        )
+                        return
+                    self._send_json(report.to_json())
+                    return
+                # ---- llm_eval (LLM-as-judge) measurement plane ----
+                if path == "/api/run-llm-eval":
+                    payload = self._read_json()
+                    llm_eval_id = payload.get("llm_eval_id")
+                    if not isinstance(llm_eval_id, str) or not llm_eval_id:
+                        self._send_json(
+                            {"error": "llm_eval_id_required"},
+                            status=HTTPStatus.BAD_REQUEST,
+                        )
+                        return
+                    corpus = payload.get("corpus")
+                    if not isinstance(corpus, dict):
+                        self._send_json(
+                            {"error": "corpus_object_required"},
+                            status=HTTPStatus.BAD_REQUEST,
+                        )
+                        return
+                    command = payload.get("command")
+                    persist = bool(payload.get("persist", False))
+                    prepare_only = bool(payload.get("prepare_only", False))
+                    timeout_seconds = payload.get("timeout_seconds", 120)
+                    try:
+                        report = run_llm_eval(
+                            db_path=resolved_db_path,
+                            llm_eval_id=llm_eval_id,
+                            corpus=corpus,
+                            command=list(command) if isinstance(command, list) else None,
+                            persist=persist,
+                            prepare_only=prepare_only,
+                            output_dir=None,
+                            profile_id=_optional_str(payload.get("profile_id")),
+                            timeout_seconds=timeout_seconds if isinstance(timeout_seconds, int) else 120,
+                        )
+                    except LlmEvalError as exc:
                         self._send_json(
                             {"error": "eval_failed", "detail": str(exc)},
                             status=HTTPStatus.CONFLICT,

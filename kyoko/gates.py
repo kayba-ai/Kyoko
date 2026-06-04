@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -275,6 +276,7 @@ def validate_gate_artifacts(
     messages.append(_validate_replay_fixture(source_fixture, replay_fixture, paths.replay_fixture))
     messages.extend(_validate_bundled_asset_mirrors(paths))
     messages.extend(_validate_directory_mirrors(root.resolve()))
+    messages.extend(_validate_llm_eval_assets(root.resolve()))
     return ValidationReport(messages=tuple(messages))
 
 
@@ -372,6 +374,53 @@ def _validate_directory_mirrors(root: Path) -> tuple[str, ...]:
                     f"{bundled_dir / fname}: bundled asset does not mirror {docs_dir / fname}"
                 )
         messages.append(f"bundled: runtime {name} mirror docs {name} ({len(docs_files)} files)")
+    return tuple(messages)
+
+
+_LLM_EVAL_UNITS = {"event", "llm_span", "run"}
+_LLM_EVAL_OUTPUTS = {"numeric", "boolean"}
+_LLM_EVAL_DIRECTIONS = {
+    "lower_is_better",
+    "higher_is_better",
+    "true_is_notable",
+    "false_is_notable",
+}
+
+
+def _validate_llm_eval_assets(root: Path) -> tuple[str, ...]:
+    """Validate the bundled `llm_eval` templates (schema kyoko.llm_eval.v1).
+
+    Checks: every ``{{var}}`` in the prompt is declared in ``vars`` and bound in
+    ``bindings``, and unit/output/direction are recognized values. The
+    docs<->assets byte mirror is enforced separately by _validate_directory_mirrors.
+    """
+    assets_dir = root / "kyoko" / "assets" / "llm_evals"
+    if not assets_dir.is_dir():
+        return ()
+    messages: list[str] = []
+    for path in sorted(assets_dir.glob("*.json")):
+        asset = load_json(path)
+        if asset.get("schema_version") != "kyoko.llm_eval.v1":
+            raise ValidationError(f"{path}: bad schema_version (want kyoko.llm_eval.v1)")
+        prompt = str(asset.get("prompt", ""))
+        prompt_vars = set(re.findall(r"{{\s*([a-zA-Z0-9_]+)\s*}}", prompt))
+        declared = set(asset.get("vars") or [])
+        if prompt_vars != declared:
+            raise ValidationError(
+                f"{path}: declared vars {sorted(declared)} != prompt vars {sorted(prompt_vars)}"
+            )
+        bindings = asset.get("bindings") or {}
+        unbound = [v for v in declared if v not in bindings]
+        if unbound:
+            raise ValidationError(f"{path}: vars without bindings: {unbound}")
+        if asset.get("unit") not in _LLM_EVAL_UNITS:
+            raise ValidationError(f"{path}: invalid unit {asset.get('unit')!r}")
+        output = asset.get("output") or {}
+        if output.get("type") not in _LLM_EVAL_OUTPUTS:
+            raise ValidationError(f"{path}: invalid output type {output.get('type')!r}")
+        if asset.get("direction") not in _LLM_EVAL_DIRECTIONS:
+            raise ValidationError(f"{path}: invalid direction {asset.get('direction')!r}")
+        messages.append(f"llm_eval asset valid: {asset['id']}")
     return tuple(messages)
 
 

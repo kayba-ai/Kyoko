@@ -79,6 +79,7 @@ from .evals_measure import (
     get_measure_run,
     list_measure_runs,
 )
+from .llm_evals import LlmEvalError, get_llm_eval, list_llm_evals, run_llm_eval
 from .demo import DemoError, run_demo_setup
 from .doctor import DEFAULT_SMOKE_EVIDENCE_DIR, DoctorError, doctor_report_text, run_doctor
 from .evidence import write_evidence_bundle
@@ -379,6 +380,14 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Run the bundled failed_span `eval` detector over a seeded corpus "
             "(deterministic; no live model)."
+        ),
+    )
+    doctor.add_argument(
+        "--llm-eval-smoke",
+        action="store_true",
+        help=(
+            "Run the bundled hallucination `llm_eval` template through a mock judge "
+            "command (deterministic; no live model)."
         ),
     )
     doctor.add_argument(
@@ -1054,6 +1063,65 @@ def build_parser() -> argparse.ArgumentParser:
     _add_db_argument(eval_run_detail)
     eval_run_detail.add_argument("eval_run_id", help="Measurement run id to inspect.")
     eval_run_detail.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+
+    # --- measurement plane: `llm_eval` (LLM-as-judge templates) ------------
+    llm_evals_cmd = subcommands.add_parser(
+        "llm-evals",
+        help="List the bundled `llm_eval` judge templates (evidence-only measurements).",
+    )
+    _add_db_argument(llm_evals_cmd)
+    llm_evals_cmd.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+
+    llm_eval_detail = subcommands.add_parser(
+        "llm-eval-detail",
+        help="Show one judge template (prompt, vars, bindings, output).",
+    )
+    _add_db_argument(llm_eval_detail)
+    llm_eval_detail.add_argument("llm_eval_id", help="Template id to inspect.")
+    llm_eval_detail.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+
+    run_llm_eval_cmd = subcommands.add_parser(
+        "run-llm-eval",
+        help="Run a judge template over a corpus via an external --command (model outside core).",
+    )
+    _add_db_argument(run_llm_eval_cmd)
+    run_llm_eval_cmd.add_argument("llm_eval_id", help="Template id to run.")
+    run_llm_eval_cmd.add_argument(
+        "--corpus",
+        help="Corpus selector as a JSON file path or inline JSON. Defaults to the template unit.",
+    )
+    run_llm_eval_cmd.add_argument(
+        "--command",
+        dest="judge_command",
+        help="Judge command (BYO model CLI); required unless --prepare-only.",
+    )
+    run_llm_eval_cmd.add_argument(
+        "--prepare-only",
+        action="store_true",
+        help="Write per-unit redacted requests + a handoff and stop (no model call).",
+    )
+    run_llm_eval_cmd.add_argument(
+        "--output-dir", type=Path, help="Directory for --prepare-only request artifacts."
+    )
+    run_llm_eval_cmd.add_argument(
+        "--persist", action="store_true", help="Record the run + per-unit results."
+    )
+    run_llm_eval_cmd.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+
+    llm_eval_runs = subcommands.add_parser(
+        "llm-eval-runs",
+        help="List persisted judge measurement runs (history).",
+    )
+    _add_db_argument(llm_eval_runs)
+    llm_eval_runs.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+
+    llm_eval_run_detail = subcommands.add_parser(
+        "llm-eval-run-detail",
+        help="Show one judge measurement run with per-unit scores and aggregate.",
+    )
+    _add_db_argument(llm_eval_run_detail)
+    llm_eval_run_detail.add_argument("eval_run_id", help="Measurement run id to inspect.")
+    llm_eval_run_detail.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
 
     import_hermes = subcommands.add_parser(
         "import-hermes-kanban",
@@ -3810,6 +3878,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 opentelemetry_smoke=args.opentelemetry_smoke,
                 opentelemetry_python_executable=args.opentelemetry_python_executable,
                 eval_smoke=args.eval_smoke,
+                llm_eval_smoke=args.llm_eval_smoke,
                 ace_native_smoke=args.ace_native_smoke,
                 dashboard_smoke=args.dashboard_smoke,
                 dashboard_smoke_screenshot=args.dashboard_smoke_screenshot,
@@ -4507,6 +4576,99 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             results = get_measure_results(db_path=args.db, eval_run_id=args.eval_run_id)
         except (EvalMeasureError, StorageError) as exc:
             print(f"eval-run-detail failed: {exc}", file=sys.stderr)
+            return 1
+        if args.json:
+            print(json.dumps({"eval_run": run, "results": results}, sort_keys=True))
+        else:
+            agg = run.get("aggregate") or {}
+            print(f"{run['id']}  {run['eval_definition_id']}  {run['status']}")
+            print(f"value={agg.get('value')} scored={run['unit_scored']} "
+                  f"skipped={run['unit_skipped']} total={run['unit_total']}")
+        return 0
+
+    if args.command == "llm-evals":
+        try:
+            templates = list_llm_evals(db_path=args.db)
+        except (LlmEvalError, EvalMeasureError, StorageError) as exc:
+            print(f"llm-evals failed: {exc}", file=sys.stderr)
+            return 1
+        if args.json:
+            print(json.dumps({"llm_evals": templates}, sort_keys=True))
+        else:
+            for t in templates:
+                partner = f" partner={t['partner']}" if t.get("partner") else ""
+                print(f"{t['id']}  [{t['unit_type']}/{t['output_type']}/{t['direction']}]{partner}  {t['name']}")
+            if not templates:
+                print("(no llm_evals)")
+        return 0
+
+    if args.command == "llm-eval-detail":
+        try:
+            template = get_llm_eval(db_path=args.db, llm_eval_id=args.llm_eval_id)
+        except (LlmEvalError, EvalMeasureError, StorageError) as exc:
+            print(f"llm-eval-detail failed: {exc}", file=sys.stderr)
+            return 1
+        if args.json:
+            print(json.dumps({"llm_eval": template}, sort_keys=True))
+        else:
+            print(f"{template['id']}  {template['name']}")
+            print(f"unit={template['unit_type']} output={template['output_type']} "
+                  f"direction={template['direction']} partner={template.get('partner') or '-'}")
+            print(f"vars={template.get('vars')}")
+        return 0
+
+    if args.command == "run-llm-eval":
+        try:
+            corpus = parse_corpus(args.corpus)
+            command = shlex.split(args.judge_command) if args.judge_command else None
+            report = run_llm_eval(
+                db_path=args.db,
+                llm_eval_id=args.llm_eval_id,
+                corpus=corpus,
+                command=command,
+                persist=args.persist,
+                prepare_only=args.prepare_only,
+                output_dir=args.output_dir,
+            )
+        except (LlmEvalError, DetectorError, EvalMeasureError, StorageError) as exc:
+            print(f"run-llm-eval failed: {exc}", file=sys.stderr)
+            return 1
+        payload = report.to_json()
+        if args.json:
+            print(json.dumps(payload, sort_keys=True))
+        else:
+            if payload["prepared_only"]:
+                prepared = sum(1 for r in payload["results"] if r["status"] == "prepared")
+                print(f"{payload['llm_eval_id']}: prepared {prepared} requests")
+            else:
+                agg = payload["aggregate"] or {}
+                print(f"{payload['llm_eval_id']}: value={agg.get('value')} "
+                      f"units={payload['corpus_resolution']['total_matched']} "
+                      f"persisted={payload['persisted']}")
+        return 0
+
+    if args.command == "llm-eval-runs":
+        try:
+            runs = list_measure_runs(db_path=args.db, kind="llm")
+        except (EvalMeasureError, StorageError) as exc:
+            print(f"llm-eval-runs failed: {exc}", file=sys.stderr)
+            return 1
+        if args.json:
+            print(json.dumps({"eval_runs": runs}, sort_keys=True))
+        else:
+            for run in runs:
+                agg = run.get("aggregate") or {}
+                print(f"{run['id']}  {run['eval_definition_id']}  {run['status']}  value={agg.get('value')}")
+            if not runs:
+                print("(no llm_eval runs)")
+        return 0
+
+    if args.command == "llm-eval-run-detail":
+        try:
+            run = get_measure_run(db_path=args.db, eval_run_id=args.eval_run_id)
+            results = get_measure_results(db_path=args.db, eval_run_id=args.eval_run_id)
+        except (EvalMeasureError, StorageError) as exc:
+            print(f"llm-eval-run-detail failed: {exc}", file=sys.stderr)
             return 1
         if args.json:
             print(json.dumps({"eval_run": run, "results": results}, sort_keys=True))

@@ -192,6 +192,7 @@ def run_doctor(
     opentelemetry_smoke: bool = False,
     opentelemetry_python_executable: Optional[Path] = None,
     eval_smoke: bool = False,
+    llm_eval_smoke: bool = False,
     ace_native_smoke: bool = False,
     dashboard_smoke: bool = False,
     dashboard_smoke_screenshot: bool = False,
@@ -268,6 +269,10 @@ def run_doctor(
     if eval_smoke:
         checks.append(
             _check_eval_smoke(output_dir=_smoke_output_dir(smoke_output_dir, "eval-smoke"))
+        )
+    if llm_eval_smoke:
+        checks.append(
+            _check_llm_eval_smoke(output_dir=_smoke_output_dir(smoke_output_dir, "llm-eval-smoke"))
         )
     if ace_native_smoke:
         checks.append(
@@ -1677,6 +1682,102 @@ def _run_eval_smoke_check(*, root: Path, temporary: bool) -> DoctorCheck:
             "detector_id": "failed_span",
             "aggregate": agg,
             "events": report.events,
+            "temporary": temporary,
+            "db_path": str(db_path),
+        },
+    )
+
+
+def _check_llm_eval_smoke(*, output_dir: Optional[Path] = None) -> DoctorCheck:
+    if output_dir is None:
+        with TemporaryDirectory() as tmpdir:
+            return _run_llm_eval_smoke_check(root=Path(tmpdir) / "llm-eval-smoke", temporary=True)
+    return _run_llm_eval_smoke_check(root=output_dir, temporary=False)
+
+
+_MOCK_JUDGE_SOURCE = (
+    "import sys, json\n"
+    "req = json.loads(sys.stdin.read())\n"
+    "score = 0.5 if req['output']['type'] == 'numeric' else True\n"
+    "print('BEGIN_KYOKO_LLM_EVAL_RESULT_JSON')\n"
+    "print(json.dumps({'score': score, 'reasoning': 'deterministic mock judge'}))\n"
+    "print('END_KYOKO_LLM_EVAL_RESULT_JSON')\n"
+)
+
+
+def _run_llm_eval_smoke_check(*, root: Path, temporary: bool) -> DoctorCheck:
+    """Deterministic `llm_eval` smoke: a mock judge command, no live provider.
+
+    Seeds one LLM span, runs the bundled ``hallucination`` template through a
+    generated mock judge that returns a fixed score (0.5), and asserts the mean.
+    """
+    import json as _json
+    import sys as _sys
+
+    from .llm_evals import LlmEvalError, run_llm_eval
+    from .evals_measure import EvalMeasureError
+    from .storage import connect
+
+    root.mkdir(parents=True, exist_ok=True)
+    db_path = root / "doctor-llm-eval.db"
+    judge_path = root / "mock_judge.py"
+    try:
+        judge_path.write_text(_MOCK_JUDGE_SOURCE, encoding="utf-8")
+        initialize_database(db_path)
+        attrs = _json.dumps(
+            {
+                "gen_ai.prompt.0.role": "user",
+                "gen_ai.prompt.0.content": "What is the capital of France?",
+                "gen_ai.completion.0.content": "The capital of France is Paris.",
+            }
+        )
+        with connect(db_path) as con:
+            con.execute(
+                "INSERT INTO profiles VALUES ('p1','p1','/tmp','active',"
+                "'2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')"
+            )
+            con.execute(
+                "INSERT INTO sources (id,profile_id,kind,display_name,status,adapter_version,"
+                "config_json,capabilities_json) VALUES ('s1','p1','t','s','active','1','{}','{}')"
+            )
+            con.execute(
+                "INSERT INTO runs (id,profile_id,source_id,status,started_at,metadata_json) "
+                "VALUES ('run_0','p1','s1','succeeded','2026-01-01T00:00:00Z','{}')"
+            )
+            con.execute(
+                "INSERT INTO spans (id,run_id,source_id,kind,name,status,started_at,usage_json,"
+                "attributes_json) VALUES ('run_0_llm','run_0','s1','llm','gen','ok',"
+                "'2026-01-01T00:00:01Z','{}',?)",
+                (attrs,),
+            )
+            con.commit()
+        report = run_llm_eval(
+            db_path=db_path,
+            llm_eval_id="hallucination",
+            corpus={"unit": "llm_span"},
+            command=[_sys.executable, str(judge_path)],
+        )
+    except (LlmEvalError, EvalMeasureError, StorageError, OSError) as exc:
+        return DoctorCheck(
+            id="llm_eval_smoke",
+            status="fail",
+            message=f"llm_eval smoke failed: {exc}",
+            detail={"temporary": temporary},
+        )
+    agg = report.aggregate or {}
+    ok = agg.get("scored") == 1 and abs(float(agg.get("value", 0)) - 0.5) < 1e-9
+    return DoctorCheck(
+        id="llm_eval_smoke",
+        status="pass" if ok else "fail",
+        message=(
+            "llm_eval smoke ran the hallucination template through a mock judge (score 0.5)"
+            if ok
+            else f"llm_eval smoke produced unexpected aggregate: {agg}"
+        ),
+        detail={
+            "llm_eval_id": "hallucination",
+            "aggregate": agg,
+            "external_model_invoked": False,
             "temporary": temporary,
             "db_path": str(db_path),
         },
