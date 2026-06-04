@@ -8,7 +8,11 @@ from kyoko.issues import (
     IssueError,
     create_issue,
     get_issue,
+    link_proposal_to_issue,
     list_issues,
+    set_issue_diagnosis,
+    set_issue_evaluator,
+    set_issue_rank,
     update_issue_status,
 )
 from kyoko.mcp import (
@@ -192,6 +196,96 @@ class IssueModelTests(unittest.TestCase):
             self.assertNotIn("input_payload", serialized)
             self.assertNotIn("output_payload", serialized)
             self.assertIn("input_ref", resolved)
+
+
+class IssueLifecycleTests(unittest.TestCase):
+    """The v29 issue-centric spine: provenance, prioritize → diagnose → propose →
+    guarded, and the forward-link/guard mutators that Phase 2–4 drive."""
+
+    def test_create_records_source_root_cause_and_rank(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "kyoko.db"
+            _seed(db_path)
+            issue = create_issue(
+                db_path=db_path,
+                title="Fetch step times out",
+                source="eval",
+                root_cause="retry budget exhausted before fetch returns",
+                rank=3,
+            )
+            self.assertEqual(issue["source"], "eval")
+            self.assertEqual(issue["rank"], 3)
+            self.assertEqual(issue["evaluator_id"], None)
+            fetched = get_issue(db_path=db_path, issue_id=issue["id"])
+            self.assertEqual(fetched["root_cause"], "retry budget exhausted before fetch returns")
+            self.assertEqual(fetched["source"], "eval")
+
+    def test_create_rejects_unknown_source(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "kyoko.db"
+            _seed(db_path)
+            with self.assertRaises(IssueError):
+                create_issue(db_path=db_path, title="x", source="telemetry")
+
+    def test_prioritize_diagnose_propose_guard_advances_status(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "kyoko.db"
+            _seed(db_path)
+            issue = create_issue(db_path=db_path, title="Loop fails")
+            self.assertEqual(issue["status"], "open")
+
+            ranked = set_issue_rank(db_path=db_path, issue_id=issue["id"], rank=1)
+            self.assertEqual(ranked["status"], "prioritized")
+            self.assertEqual(ranked["rank"], 1)
+
+            diagnosed = set_issue_diagnosis(
+                db_path=db_path,
+                issue_id=issue["id"],
+                root_cause="missing tool result handling",
+                section="context",
+            )
+            self.assertEqual(diagnosed["status"], "diagnosed")
+            self.assertEqual(diagnosed["section"], "context")
+            self.assertEqual(diagnosed["root_cause"], "missing tool result handling")
+
+            linked = link_proposal_to_issue(
+                db_path=db_path, issue_id=issue["id"], proposal_id="proposal_abc"
+            )
+            self.assertEqual(linked["status"], "proposed")
+            self.assertEqual(linked["proposal_ids"], ["proposal_abc"])
+            self.assertNotIn("proposal_ids_json", linked)
+
+            guarded = set_issue_evaluator(
+                db_path=db_path, issue_id=issue["id"], evaluator_id="guard_xyz"
+            )
+            self.assertEqual(guarded["status"], "guarded")
+            self.assertEqual(guarded["evaluator_id"], "guard_xyz")
+
+    def test_link_proposal_is_idempotent(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "kyoko.db"
+            _seed(db_path)
+            issue = create_issue(db_path=db_path, title="dup link")
+            link_proposal_to_issue(db_path=db_path, issue_id=issue["id"], proposal_id="p1")
+            twice = link_proposal_to_issue(
+                db_path=db_path, issue_id=issue["id"], proposal_id="p1"
+            )
+            self.assertEqual(twice["proposal_ids"], ["p1"])
+
+    def test_diagnosis_requires_root_cause(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "kyoko.db"
+            _seed(db_path)
+            issue = create_issue(db_path=db_path, title="needs cause")
+            with self.assertRaises(IssueError):
+                set_issue_diagnosis(db_path=db_path, issue_id=issue["id"], root_cause="  ")
+
+    def test_mutators_reject_missing_issue(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "kyoko.db"
+            _seed(db_path)
+            with self.assertRaises(IssueError):
+                set_issue_evaluator(db_path=db_path, issue_id="issue_missing", evaluator_id="g")
 
 
 class IssueMcpSafetyTests(unittest.TestCase):

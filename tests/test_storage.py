@@ -32,8 +32,8 @@ class StorageTests(unittest.TestCase):
             status = get_database_status(db_path)
 
             self.assertTrue(status.initialized)
-            self.assertEqual(status.schema_version, 28)
-            self.assertEqual(status.migration_versions, tuple(range(1, 29)))
+            self.assertEqual(status.schema_version, 29)
+            self.assertEqual(status.migration_versions, tuple(range(1, 30)))
             self.assertEqual(status.counts["profiles"], 0)
             self.assertEqual(status.counts["runs"], 0)
             self.assertEqual(status.counts["check_specs"], 0)
@@ -138,8 +138,8 @@ class StorageTests(unittest.TestCase):
 
             self.assertEqual(decoded["db_path"], str(db_path))
             self.assertTrue(decoded["initialized"])
-            self.assertEqual(decoded["schema_version"], 28)
-            self.assertEqual(decoded["migration_versions"], list(range(1, 29)))
+            self.assertEqual(decoded["schema_version"], 29)
+            self.assertEqual(decoded["migration_versions"], list(range(1, 30)))
             self.assertEqual(decoded["counts"]["spans"], 2)
 
     def test_initialize_database_rejects_future_schema(self) -> None:
@@ -149,7 +149,7 @@ class StorageTests(unittest.TestCase):
                 connection.execute("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY)")
                 connection.execute("INSERT INTO schema_migrations(version) VALUES (999)")
 
-            with self.assertRaisesRegex(StorageError, "database_schema_too_new:999:supported:28"):
+            with self.assertRaisesRegex(StorageError, "database_schema_too_new:999:supported:29"):
                 initialize_database(db_path)
 
     def test_initialize_database_migrates_legacy_schema_fixture(self) -> None:
@@ -162,8 +162,8 @@ class StorageTests(unittest.TestCase):
             status = get_database_status(db_path)
 
             self.assertTrue(status.initialized)
-            self.assertEqual(status.schema_version, 28)
-            self.assertEqual(status.migration_versions, tuple(range(1, 29)))
+            self.assertEqual(status.schema_version, 29)
+            self.assertEqual(status.migration_versions, tuple(range(1, 30)))
             self.assertEqual(status.counts["profiles"], 1)
             self.assertEqual(status.counts["skills"], 1)
             self.assertEqual(status.counts["context_delivery_rules"], 1)
@@ -196,7 +196,7 @@ class StorageTests(unittest.TestCase):
                     ("context_rule_legacy_migration_001",),
                 ).fetchone()
 
-            self.assertEqual(user_version, 28)
+            self.assertEqual(user_version, 29)
             self.assertIn("human_lock_reason", skills_columns)
             self.assertIn("human_lock_reason", rules_columns)
             self.assertNotIn("retention_policies", existing_tables)

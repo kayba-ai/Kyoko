@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 
-SCHEMA_VERSION = 28
+SCHEMA_VERSION = 29
 
 
 class StorageError(Exception):
@@ -647,6 +647,12 @@ CREATE TABLE IF NOT EXISTS issues (
   affected_span_ids_json TEXT,
   proposal_ids_json TEXT,
   review_comment TEXT,
+  -- v29: issue becomes the central lifecycle entity. `status` carries the state
+  -- machine open|prioritized|diagnosed|proposed|applied|resolved|guarded|dismissed.
+  rank INTEGER,                          -- prioritization order (lower = more urgent)
+  root_cause TEXT,                       -- diagnosis narrative (job step 04)
+  source TEXT,                           -- analysis | eval | llm_eval | manual
+  evaluator_id TEXT,                     -- the guard eval_definitions.id once resolved
   created_at TEXT NOT NULL,
   updated_at TEXT,
   FOREIGN KEY (profile_id) REFERENCES profiles(id)
@@ -655,6 +661,7 @@ CREATE TABLE IF NOT EXISTS issues (
 CREATE INDEX IF NOT EXISTS idx_issues_profile_id ON issues(profile_id);
 CREATE INDEX IF NOT EXISTS idx_issues_status ON issues(status);
 CREATE INDEX IF NOT EXISTS idx_issues_section ON issues(section);
+CREATE INDEX IF NOT EXISTS idx_issues_evaluator_id ON issues(evaluator_id);
 
 -- v26: measurement plane (evidence only). `eval` = deterministic Python
 -- detector over a trace corpus; `llm_eval` = LLM-as-judge template. Neither
@@ -679,9 +686,11 @@ CREATE TABLE IF NOT EXISTS eval_definitions (
   output_json TEXT,                     -- llm only: {type, range}
   severity_bands_json TEXT,
   status TEXT NOT NULL,                 -- active | archived
+  issue_id TEXT,                        -- v29: the Issue this evaluator guards (NULL for library evals)
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
-  FOREIGN KEY (profile_id) REFERENCES profiles(id)
+  FOREIGN KEY (profile_id) REFERENCES profiles(id),
+  FOREIGN KEY (issue_id) REFERENCES issues(id)
 );
 
 CREATE TABLE IF NOT EXISTS eval_measure_runs (
@@ -725,6 +734,7 @@ CREATE TABLE IF NOT EXISTS eval_measure_results (
 );
 
 CREATE INDEX IF NOT EXISTS idx_eval_definitions_profile_id ON eval_definitions(profile_id);
+CREATE INDEX IF NOT EXISTS idx_eval_definitions_issue_id ON eval_definitions(issue_id);
 CREATE INDEX IF NOT EXISTS idx_eval_measure_runs_profile_id ON eval_measure_runs(profile_id);
 CREATE INDEX IF NOT EXISTS idx_eval_measure_runs_definition_id ON eval_measure_runs(eval_definition_id);
 CREATE INDEX IF NOT EXISTS eval_measure_results_run ON eval_measure_results(eval_run_id);
@@ -1055,6 +1065,18 @@ def initialize_database(db_path: Path) -> None:
             "human_lock_reason",
             "human_lock_reason TEXT",
         )
+        # v29: Issue becomes the central lifecycle entity. Additive columns back the
+        # open->prioritized->diagnosed->proposed->applied->resolved->guarded state machine
+        # (the states live in the existing `status` column), plus ranking, a root-cause
+        # narrative, provenance (`source`), and the guard evaluator each resolved issue
+        # owns. Evaluators link back to the issue they guard. All nullable: ADD COLUMN
+        # cannot add NOT-NULL-without-default or an FK to an existing table, so the FK
+        # constraints in SCHEMA_SQL bind only on fresh DBs.
+        _ensure_column(connection, "issues", "rank", "rank INTEGER")
+        _ensure_column(connection, "issues", "root_cause", "root_cause TEXT")
+        _ensure_column(connection, "issues", "source", "source TEXT")
+        _ensure_column(connection, "issues", "evaluator_id", "evaluator_id TEXT")
+        _ensure_column(connection, "eval_definitions", "issue_id", "issue_id TEXT")
         # v21 (SCOPE simplification): redaction collapses to a single global
         # "redact on export" default; the per-profile policy table and the audit
         # ledger are removed. Drop them for DBs created before v21.
