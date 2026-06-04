@@ -4,7 +4,7 @@ import { api } from "@/lib/api";
 import type { McpLogEntry } from "@/lib/types";
 import { useApi } from "@/hooks/useApi";
 import { useLiveConnection, useLiveEvent } from "@/hooks/useLiveBus";
-import { ago, fmtDuration, tryParseJson } from "@/lib/format";
+import { ago, fmtDuration, humanize, tryParseJson } from "@/lib/format";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Spinner, ErrorNote, Empty } from "@/components/ui/misc";
@@ -23,7 +23,7 @@ function Preview({ label, text }: { label: string; text: string | null }) {
   const parsed = tryParseJson(text);
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="text-label font-semibold uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="text-xs font-medium text-muted-foreground">{label}</div>
       <div className="rounded-lg border border-border bg-muted/60 p-3">
         {parsed !== null && typeof parsed === "object" ? (
           <JsonView data={parsed} />
@@ -56,7 +56,7 @@ function LogRow({ entry }: { entry: McpLogEntry }) {
             !hasBody && "opacity-0",
           )}
         />
-        <Badge tone={directionTone(entry)}>{entry.direction}</Badge>
+        <Badge tone={directionTone(entry)}>{humanize(entry.direction)}</Badge>
         <span className="truncate font-mono text-xs text-foreground">{entry.method ?? "—"}</span>
         {entry.tool_name && <Badge tone="tool">{entry.tool_name}</Badge>}
         {entry.is_error && entry.error_code !== null && <Badge tone="danger">err {entry.error_code}</Badge>}

@@ -11,9 +11,12 @@ import {
   Scale,
   Sparkles,
   Settings as SettingsIcon,
+  Moon,
+  Sun,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTheme } from "@/hooks/useTheme";
 import { StatusBar } from "./StatusBar";
 
 interface NavItem {
@@ -61,26 +64,36 @@ function NavRow({ to, label, icon: Icon }: NavItem) {
       to={to}
       className={({ isActive }) =>
         cn(
-          "group relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors",
+          "group relative flex items-center gap-2.5 rounded-lg border-l-[3px] px-2.5 py-2 text-sm font-medium transition-colors",
           isActive
-            ? "bg-accent text-foreground shadow-xs"
-            : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+            ? "border-primary bg-accent text-foreground shadow-sm"
+            : "border-transparent text-muted-foreground hover:bg-accent hover:text-foreground",
         )
       }
     >
       {({ isActive }) => (
         <>
-          <span
-            className={cn(
-              "absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-primary transition-opacity",
-              isActive ? "opacity-100" : "opacity-0",
-            )}
-          />
           <Icon className={cn("h-4 w-4 shrink-0", isActive ? "text-primary" : "text-muted-foreground")} />
           {label}
         </>
       )}
     </NavLink>
+  );
+}
+
+function ThemeToggle() {
+  const { theme, toggle } = useTheme();
+  const isDark = theme === "dark";
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      className="group flex items-center gap-2.5 rounded-lg border-l-[3px] border-transparent px-2.5 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+      aria-label={isDark ? "Switch to light theme" : "Switch to dark theme"}
+    >
+      {isDark ? <Sun className="h-4 w-4 shrink-0" /> : <Moon className="h-4 w-4 shrink-0" />}
+      {isDark ? "Light mode" : "Dark mode"}
+    </button>
   );
 }
 
@@ -94,7 +107,7 @@ export function Layout() {
           </div>
           <div className="flex flex-col leading-none">
             <span className="text-md font-bold tracking-tight">Kyoko</span>
-            <span className="mt-0.5 text-label font-medium uppercase tracking-wide text-muted-foreground">
+            <span className="mt-0.5 text-xs font-medium text-muted-foreground">
               Optimization loop
             </span>
           </div>
@@ -102,7 +115,7 @@ export function Layout() {
         <nav className="flex flex-1 flex-col gap-5 overflow-y-auto px-3 py-3">
           {SECTIONS.map((section) => (
             <div key={section.heading} className="flex flex-col gap-1">
-              <div className="px-2.5 pb-1 text-label font-semibold uppercase tracking-wider text-muted-foreground/70">
+              <div className="px-2.5 pb-1 text-xs font-medium text-muted-foreground">
                 {section.heading}
               </div>
               {section.items.map((item) => (
@@ -112,6 +125,7 @@ export function Layout() {
           ))}
           <div className="mt-auto flex flex-col gap-1 border-t border-sidebar-border pt-3">
             <NavRow to="/settings" label="Settings" icon={SettingsIcon} />
+            <ThemeToggle />
           </div>
         </nav>
         <StatusBar />

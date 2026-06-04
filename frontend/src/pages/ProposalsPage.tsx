@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { GitPullRequestArrow } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Proposal } from "@/lib/types";
-import { ago } from "@/lib/format";
+import { ago, humanize } from "@/lib/format";
 import { useApi } from "@/hooks/useApi";
 import { Badge, statusTone } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardBody } from "@/components/ui/card";
@@ -70,7 +70,7 @@ function ProposalDetail({ id }: { id: string }) {
       <div className="space-y-2.5">
         <h2 className="text-xl font-bold tracking-tight text-foreground">{title}</h2>
         <div className="flex flex-wrap items-center gap-1.5">
-          {state && <Badge tone={statusTone(state)}>{state}</Badge>}
+          {state && <Badge tone={statusTone(state)}>{humanize(state)}</Badge>}
           {sectionLabel && <Badge tone="neutral">{sectionLabel}</Badge>}
         </div>
         {sectionDescription && <p className="text-sm text-muted-foreground">{sectionDescription}</p>}
@@ -171,7 +171,7 @@ export function ProposalsPage() {
                   >
                     <div className="mb-1.5 truncate text-sm font-medium text-foreground">{p.title}</div>
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <Badge tone={statusTone(p.state)}>{p.state}</Badge>
+                      <Badge tone={statusTone(p.state)}>{humanize(p.state)}</Badge>
                       {sectionLabel && <Badge tone="neutral">{sectionLabel}</Badge>}
                       {conf && (
                         <span className="font-mono text-label tabular-nums text-muted-foreground">{conf}</span>

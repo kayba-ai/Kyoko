@@ -1,5 +1,6 @@
 import type { Score } from "@/lib/types";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
+import { humanize } from "@/lib/format";
 
 // Renders measurement-plane scores (numeric or boolean) attached to a trace or
 // span, with the judge/detector reasoning when present. Observation-only.
@@ -31,9 +32,9 @@ export function ScoreList({ scores, emptyText }: { scores: Score[]; emptyText: s
             <div className="flex items-center gap-2">
               <span className="truncate text-xs font-semibold text-foreground">{s.name || s.kind || "score"}</span>
               {s.unit_type && (
-                <span className="text-label text-muted-foreground">{s.unit_type}</span>
+                <span className="text-xs text-muted-foreground">{humanize(s.unit_type)}</span>
               )}
-              <Badge tone={v.tone} className="ml-auto font-mono normal-case">
+              <Badge tone={v.tone} className="ml-auto font-mono">
                 {v.label}
               </Badge>
             </div>

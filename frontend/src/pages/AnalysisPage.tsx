@@ -380,7 +380,7 @@ function NewScheduleForm({ onCreated }: { onCreated: () => void }) {
 
   return (
     <div className="border-t border-border/70 p-4">
-      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">
+      <div className="mb-2 text-xs font-medium text-muted-foreground">
         Add schedule
       </div>
       <div className="grid gap-3 sm:grid-cols-2">

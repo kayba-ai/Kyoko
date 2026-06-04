@@ -4,7 +4,7 @@ import { ArrowLeft, ChevronDown, ChevronRight, RotateCw, Users } from "lucide-re
 import type { RunOutline, Score } from "@/lib/types";
 import { api } from "@/lib/api";
 import { useApi } from "@/hooks/useApi";
-import { ago, durationMs, fmtCost, fmtDuration, fmtTime, fmtTokens } from "@/lib/format";
+import { ago, durationMs, fmtCost, fmtDuration, fmtTime, fmtTokens, humanize } from "@/lib/format";
 import { Badge, statusTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs } from "@/components/ui/tabs";
@@ -24,7 +24,7 @@ type HeaderPanel = "none" | "metadata" | "io";
 function HeaderStat({ label, value, tone }: { label: string; value: ReactNode; tone?: "danger" }) {
   return (
     <div className="flex flex-col">
-      <span className="text-label uppercase tracking-wide text-muted-foreground/70">{label}</span>
+      <span className="text-xs font-medium text-muted-foreground/70">{label}</span>
       <span className={cn("font-mono text-sm font-semibold", tone === "danger" ? "text-danger" : "text-foreground")}>
         {value}
       </span>
@@ -86,7 +86,7 @@ function Header({
           <ArrowLeft className="h-3.5 w-3.5" />
           Traces
         </Button>
-        <Badge tone={statusTone(run.status)}>{run.status ?? "—"}</Badge>
+        <Badge tone={statusTone(run.status)}>{run.status ? humanize(run.status) : "—"}</Badge>
         <span className="truncate font-mono text-xs text-muted-foreground">{run.id}</span>
         <Button variant="ghost" size="sm" onClick={onRefresh} className="ml-auto">
           <RotateCw className="h-3.5 w-3.5" />

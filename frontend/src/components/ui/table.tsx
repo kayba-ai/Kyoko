@@ -25,7 +25,7 @@ export function TBody({ className, ...props }: React.HTMLAttributes<HTMLTableSec
 export function TR({ className, ...props }: React.HTMLAttributes<HTMLTableRowElement>) {
   return (
     <tr
-      className={cn("border-b border-border/70 transition-colors", className)}
+      className={cn("border-b border-border transition-colors hover:bg-muted/50", className)}
       {...props}
     />
   );
@@ -35,7 +35,7 @@ export function TH({ className, ...props }: React.ThHTMLAttributes<HTMLTableCell
   return (
     <th
       className={cn(
-        "h-9 px-3 text-left align-middle text-label font-semibold uppercase tracking-wide text-muted-foreground",
+        "h-10 px-3 text-left align-middle text-xs font-medium text-muted-foreground",
         className,
       )}
       {...props}

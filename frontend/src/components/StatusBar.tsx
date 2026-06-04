@@ -17,7 +17,7 @@ export function StatusBar() {
         <span className={cn("h-2 w-2 rounded-full", dotClass)} />
         <span className="text-xs font-medium text-muted-foreground">{LABEL[status]}</span>
       </div>
-      <span className="font-mono text-label uppercase tracking-wide text-muted-foreground/60">SSE</span>
+      <span className="font-mono text-xs text-muted-foreground/60">SSE</span>
     </div>
   );
 }

@@ -1,12 +1,25 @@
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="color-scheme" content="dark" />
     <title>Kyoko</title>
-    <script type="module" crossorigin src="/assets/index-D4EO9kez.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-q9ay7kxq.css">
+    <script>
+      // Apply the stored (or system) theme before React mounts to avoid a flash
+      // of the wrong theme. Mirrors src/hooks/useTheme.ts.
+      (function () {
+        try {
+          var stored = localStorage.getItem("kyoko-theme");
+          var dark =
+            stored === "dark" ||
+            (stored !== "light" &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.classList.toggle("dark", dark);
+        } catch (e) {}
+      })();
+    </script>
+    <script type="module" crossorigin src="/assets/index-Tlcw6mDo.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-B7fwRw8L.css">
   </head>
   <body>
     <div id="root"></div>

@@ -150,9 +150,9 @@ export function OverviewPage() {
                 <CardBody className="p-0">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-border text-label uppercase tracking-wide text-muted-foreground">
-                        <th className="px-4 py-2.5 text-left font-semibold">Table</th>
-                        <th className="px-4 py-2.5 text-right font-semibold">Rows</th>
+                      <tr className="border-b border-border text-xs font-medium text-muted-foreground">
+                        <th className="px-4 py-2.5 text-left">Table</th>
+                        <th className="px-4 py-2.5 text-right">Rows</th>
                       </tr>
                     </thead>
                     <tbody>

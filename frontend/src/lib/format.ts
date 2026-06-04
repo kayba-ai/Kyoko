@@ -73,6 +73,23 @@ export function fmtCost(n: number | null | undefined): string {
   return `$${n.toFixed(2)}`;
 }
 
+const ACRONYMS: Record<string, string> = {
+  id: "ID", llm: "LLM", mcp: "MCP", sse: "SSE", json: "JSON", url: "URL",
+  ttl: "TTL", api: "API", ms: "ms", l0: "L0", l1: "L1", l2: "L2", l3: "L3",
+};
+
+/** snake_case / camelCase / enum string -> Title Case with an acronym map
+ *  (id->ID, llm->LLM, mcp->MCP, sse->SSE, json->JSON, url->URL, ...). */
+export function humanize(key: string | null | undefined): string {
+  if (!key) return "";
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .split(/[_\s]+/)
+    .filter(Boolean)
+    .map((w) => ACRONYMS[w.toLowerCase()] ?? w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
 export function tryParseJson(s: string | null | undefined): unknown {
   if (!s) return null;
   try {

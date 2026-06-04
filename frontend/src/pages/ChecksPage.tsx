@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/tabs";
 import { Spinner, ErrorNote, Empty } from "@/components/ui/misc";
 import { StructuredDetail } from "@/components/RecordView";
-import { ago } from "@/lib/format";
+import { ago, humanize } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 type Item = Record<string, unknown>;
@@ -42,7 +42,7 @@ function Row({ item, selected, onClick }: { item: Item; selected: boolean; onCli
     >
       <div className="flex w-full items-center justify-between gap-2">
         <span className="truncate font-mono text-xs text-foreground">{itemId(item)}</span>
-        {badge && <Badge tone={statusTone(badge)}>{badge}</Badge>}
+        {badge && <Badge tone={statusTone(badge)}>{humanize(badge)}</Badge>}
       </div>
       {created && <span className="text-label text-muted-foreground">{ago(created)}</span>}
     </button>
@@ -55,7 +55,7 @@ function Detail({ item }: { item: Item }) {
     <Card>
       <CardHeader className="flex items-center justify-between gap-3">
         <CardTitle className="truncate font-mono">{itemId(item)}</CardTitle>
-        {badge && <Badge tone={statusTone(badge)}>{badge}</Badge>}
+        {badge && <Badge tone={statusTone(badge)}>{humanize(badge)}</Badge>}
       </CardHeader>
       <CardBody>
         <StructuredDetail data={item} />

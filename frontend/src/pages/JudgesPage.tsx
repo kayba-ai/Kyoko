@@ -7,6 +7,7 @@ import { useApi } from "@/hooks/useApi";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/ui/page-header";
 import { MeasurePlane } from "@/components/MeasurePlane";
+import { humanize } from "@/lib/format";
 
 export function JudgesPage() {
   const defs = useApi(() => api.llmEvals(), []);
@@ -32,8 +33,8 @@ export function JudgesPage() {
           noRunsHint="Run kyoko llm-eval run to produce measurement data."
           listExtraBadges={(d) => (
             <>
-              <Badge tone="neutral">{d.unit_type}</Badge>
-              <Badge tone="neutral">{d.output_type}</Badge>
+              <Badge tone="neutral">{humanize(d.unit_type)}</Badge>
+              <Badge tone="neutral">{humanize(d.output_type)}</Badge>
             </>
           )}
           showVars

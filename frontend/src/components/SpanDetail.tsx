@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Bot, Wrench, Circle } from "lucide-react";
 import type { Score, SpanNode } from "@/lib/types";
-import { durationMs, fmtDuration, fmtTokens } from "@/lib/format";
+import { durationMs, fmtDuration, fmtTokens, humanize } from "@/lib/format";
 import { Badge, statusTone } from "@/components/ui/badge";
 import { Tabs } from "@/components/ui/tabs";
 import { Empty } from "@/components/ui/misc";
@@ -81,7 +81,7 @@ export function SpanDetail({
           <span className="truncate font-mono text-sm font-semibold text-foreground">
             {span.name || <span className="italic text-muted-foreground">unnamed span</span>}
           </span>
-          {span.status && <Badge tone={statusTone(span.status)}>{span.status}</Badge>}
+          {span.status && <Badge tone={statusTone(span.status)}>{humanize(span.status)}</Badge>}
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-label text-muted-foreground">
           {model && (

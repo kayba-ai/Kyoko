@@ -5,6 +5,7 @@ import { useLiveEvent } from "@/hooks/useLiveBus";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Empty } from "@/components/ui/misc";
+import { humanize } from "@/lib/format";
 
 const KIND_TONE: Record<LiveEventKind, NonNullable<BadgeProps["tone"]>> = {
   token: "neutral",
@@ -57,7 +58,7 @@ export function LiveTail({ runId }: { runId: string }) {
   return (
     <div className="flex h-full flex-col">
       <div className="flex shrink-0 items-center justify-between border-b border-border px-3 py-2">
-        <Badge tone="neutral" className="normal-case">{events.length} events</Badge>
+        <Badge tone="neutral">{events.length} events</Badge>
         <Button
           size="sm"
           variant={autoscroll ? "secondary" : "ghost"}
@@ -73,7 +74,7 @@ export function LiveTail({ runId }: { runId: string }) {
             key={e.id}
             className="flex animate-fade-in items-start gap-2 rounded-md px-1.5 py-1 hover:bg-muted"
           >
-            <Badge tone={KIND_TONE[e.kind] ?? "neutral"}>{e.kind}</Badge>
+            <Badge tone={KIND_TONE[e.kind] ?? "neutral"}>{humanize(e.kind)}</Badge>
             <span className="whitespace-pre-wrap break-all text-foreground">
               {e.content_preview}
               {e.content_truncated && <span className="text-warn"> …(truncated)</span>}

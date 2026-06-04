@@ -2,6 +2,7 @@ import type { SpanNode } from "@/lib/types";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Empty } from "@/components/ui/misc";
 import { JsonView } from "@/components/JsonView";
+import { humanize } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 // Chat-style render of a normalized span. For llm spans: a system bubble, the
@@ -45,7 +46,7 @@ function Bubble({
   return (
     <div className="flex flex-col gap-1.5">
       <Badge tone={roleTone(role)} className="self-start">
-        {role}
+        {humanize(role)}
       </Badge>
       <div
         className={cn(
@@ -66,15 +67,15 @@ export function ChatMessages({ node }: { node: SpanNode }) {
     return (
       <div className="space-y-4 p-3">
         <div className="flex items-center gap-2">
-          <Badge tone="tool">tool</Badge>
+          <Badge tone="tool">Tool</Badge>
           <span className="font-mono text-xs font-semibold text-foreground">
             {n.tool_name || node.name || "tool"}
           </span>
-          {n.is_error && <Badge tone="danger">error</Badge>}
+          {n.is_error && <Badge tone="danger">Error</Badge>}
         </div>
         {n.args !== undefined && n.args !== null && (
           <div className="space-y-1.5">
-            <div className="text-label font-semibold uppercase tracking-wide text-muted-foreground">Arguments</div>
+            <div className="text-xs font-medium text-muted-foreground">Arguments</div>
             <div className="surface-muted p-3">
               <JsonView data={n.args} toolbar />
             </div>
@@ -82,7 +83,7 @@ export function ChatMessages({ node }: { node: SpanNode }) {
         )}
         {n.result !== undefined && n.result !== null && (
           <div className="space-y-1.5">
-            <div className="text-label font-semibold uppercase tracking-wide text-muted-foreground">Result</div>
+            <div className="text-xs font-medium text-muted-foreground">Result</div>
             <div
               className={cn(
                 "p-3",

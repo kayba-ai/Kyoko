@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Issue, IssueStatus, Skill } from "@/lib/types";
-import { ago, fmtTime } from "@/lib/format";
+import { ago, fmtTime, humanize } from "@/lib/format";
 import { useApi } from "@/hooks/useApi";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -189,7 +189,7 @@ function Section({
 }) {
   return (
     <section className="space-y-2">
-      <div className="flex items-center gap-1.5 text-label font-semibold uppercase tracking-wide text-muted-foreground">
+      <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
         {icon}
         {label}
       </div>
@@ -207,7 +207,7 @@ function EntityChips({ items }: { items: { entity_id: string; found: boolean }[]
           className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted/60 px-2 py-1 font-mono text-xs text-foreground"
         >
           {item.entity_id}
-          {!item.found && <Badge tone="warn">missing</Badge>}
+          {!item.found && <Badge tone="warn">Missing</Badge>}
         </span>
       ))}
     </div>
@@ -217,16 +217,16 @@ function EntityChips({ items }: { items: { entity_id: string; found: boolean }[]
 function SkillDeliverable({ skill }: { skill: Skill }) {
   return (
     <div className="rounded-xl border border-primary/25 bg-primary/5 p-4">
-      <div className="mb-1.5 flex items-center gap-1.5 text-label font-semibold uppercase tracking-wide text-primary">
+      <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-primary">
         <Lightbulb className="h-3.5 w-3.5" />
         Skillbook deliverable
       </div>
       <p className="text-sm font-medium leading-relaxed text-foreground">{skill.insight}</p>
       {skill.issue && <p className="mt-1 text-xs text-muted-foreground">{skill.issue}</p>}
       <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-        <Badge tone="primary">{skill.section}</Badge>
-        {(skill.active === true || skill.active === 1) && <Badge tone="ok">active</Badge>}
-        {(skill.human_locked === true || skill.human_locked === 1) && <Badge tone="neutral">locked</Badge>}
+        <Badge tone="primary">{humanize(skill.section)}</Badge>
+        {(skill.active === true || skill.active === 1) && <Badge tone="ok">Active</Badge>}
+        {(skill.human_locked === true || skill.human_locked === 1) && <Badge tone="neutral">Locked</Badge>}
         {skill.keywords?.slice(0, 6).map((k) => (
           <Badge key={k} tone="neutral" className="font-mono normal-case tracking-normal">
             {k}
@@ -284,9 +284,9 @@ function IssueDetail({
       <div className="flex items-start justify-between gap-4">
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           <Badge tone={dec.tone}>{dec.label}</Badge>
-          {issue.severity && <Badge tone={severityTone(issue.severity)}>{issue.severity}</Badge>}
-          {issue.section && <Badge tone="neutral">{issue.section}</Badge>}
-          {issue.category && <Badge tone="neutral">{issue.category}</Badge>}
+          {issue.severity && <Badge tone={severityTone(issue.severity)}>{humanize(issue.severity)}</Badge>}
+          {issue.section && <Badge tone="neutral">{humanize(issue.section)}</Badge>}
+          {issue.category && <Badge tone="neutral">{humanize(issue.category)}</Badge>}
         </div>
         <div className="shrink-0">
           <ReviewActions issue={issue} onReviewed={onReviewed} />
@@ -351,7 +351,7 @@ function IssueDetail({
                       className="flex items-center gap-2 rounded-lg border border-border bg-muted/60 px-3 py-2"
                     >
                       {entry.proposal.state && (
-                        <Badge tone="neutral">{entry.proposal.state}</Badge>
+                        <Badge tone="neutral">{humanize(entry.proposal.state)}</Badge>
                       )}
                       <span className="truncate text-sm text-foreground">
                         {entry.proposal.title ?? entry.proposal.id}
@@ -431,8 +431,8 @@ function ReviewCard({
       <div className="mb-2 line-clamp-2 text-sm font-semibold leading-snug text-foreground">{issue.title}</div>
       <div className="flex flex-wrap items-center gap-1.5">
         <Badge tone={dec.tone}>{dec.label}</Badge>
-        {issue.severity && <Badge tone={severityTone(issue.severity)}>{issue.severity}</Badge>}
-        {issue.section && <Badge tone="neutral">{issue.section}</Badge>}
+        {issue.severity && <Badge tone={severityTone(issue.severity)}>{humanize(issue.severity)}</Badge>}
+        {issue.section && <Badge tone="neutral">{humanize(issue.section)}</Badge>}
         <span className="ml-auto text-label text-muted-foreground">{ago(issue.created_at)}</span>
       </div>
       {issue.status === "open" && (

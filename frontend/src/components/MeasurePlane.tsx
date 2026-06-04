@@ -8,7 +8,7 @@ import type { EvalDefinition, MeasureRun } from "@/lib/types";
 import { Badge, statusTone } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { Spinner, ErrorNote, Empty } from "@/components/ui/misc";
-import { ago } from "@/lib/format";
+import { ago, humanize } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 // ---- Severity coloring based on direction-oriented "problem level" ----------
@@ -67,7 +67,7 @@ function MetaField({
 }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="text-label uppercase tracking-wide text-muted-foreground">{label}</span>
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
       <span
         className={cn(
           "truncate text-sm text-foreground",
@@ -98,11 +98,11 @@ function RecentRunsCard({
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border text-left">
-              <th className="px-4 py-2 text-label uppercase tracking-wide text-muted-foreground">Run</th>
-              <th className="px-4 py-2 text-label uppercase tracking-wide text-muted-foreground">Status</th>
-              <th className="px-4 py-2 text-label uppercase tracking-wide text-muted-foreground">Score</th>
-              <th className="px-4 py-2 text-label uppercase tracking-wide text-muted-foreground">Scored / Total</th>
-              <th className="px-4 py-2 text-label uppercase tracking-wide text-muted-foreground">Created</th>
+              <th className="px-4 py-2 text-xs font-medium text-muted-foreground">Run</th>
+              <th className="px-4 py-2 text-xs font-medium text-muted-foreground">Status</th>
+              <th className="px-4 py-2 text-xs font-medium text-muted-foreground">Score</th>
+              <th className="px-4 py-2 text-xs font-medium text-muted-foreground">Scored / Total</th>
+              <th className="px-4 py-2 text-xs font-medium text-muted-foreground">Created</th>
             </tr>
           </thead>
           <tbody>
@@ -118,7 +118,7 @@ function RecentRunsCard({
                     {run.id.slice(0, 12)}…
                   </td>
                   <td className="px-4 py-2">
-                    <Badge tone={statusTone(run.status)}>{run.status}</Badge>
+                    <Badge tone={statusTone(run.status)}>{humanize(run.status)}</Badge>
                   </td>
                   <td className="px-4 py-2">
                     <Badge tone={tone} className="font-mono">{agg}</Badge>
@@ -173,11 +173,11 @@ function ListRow({
       </div>
       <div className="flex w-full items-center gap-1.5">
         {extraBadges}
-        <span className="text-label text-muted-foreground" title={directionLabel(def.direction)}>
+        <span className="text-xs text-muted-foreground" title={directionLabel(def.direction)}>
           {directionArrow(def.direction)}
         </span>
         {run && (
-          <span className="ml-auto text-label text-muted-foreground">{ago(run.created_at)}</span>
+          <span className="ml-auto text-xs text-muted-foreground">{ago(run.created_at)}</span>
         )}
       </div>
     </button>
@@ -280,8 +280,8 @@ export function MeasurePlane({
               <CardHeader>
                 <CardTitle>{detailDef.name}</CardTitle>
                 <div className="flex items-center gap-1.5">
-                  <Badge tone={statusTone(detailDef.status)}>{detailDef.status}</Badge>
-                  <Badge tone="neutral">{detailDef.output_type}</Badge>
+                  <Badge tone={statusTone(detailDef.status)}>{humanize(detailDef.status)}</Badge>
+                  <Badge tone="neutral">{humanize(detailDef.output_type)}</Badge>
                 </div>
               </CardHeader>
               <CardBody>
@@ -289,13 +289,13 @@ export function MeasurePlane({
                   <MetaField label="ID" value={detailDef.id} mono />
                   <MetaField label="Version" value={detailDef.version} mono />
                   {!showVars && <MetaField label="Source" value={detailDef.source} />}
-                  <MetaField label="Unit type" value={detailDef.unit_type} />
+                  <MetaField label="Unit type" value={humanize(detailDef.unit_type)} />
                   <MetaField label="Direction" value={directionLabel(detailDef.direction)} />
                   {detailDef.partner && <MetaField label="Partner" value={detailDef.partner} />}
                 </div>
                 {showVars && detailDef.vars && detailDef.vars.length > 0 && (
                   <div className="mt-4 flex flex-col gap-1.5">
-                    <span className="text-label uppercase tracking-wide text-muted-foreground">Vars</span>
+                    <span className="text-xs font-medium text-muted-foreground">Vars</span>
                     <div className="flex flex-wrap gap-1.5">
                       {detailDef.vars.map((v) => (
                         <Badge key={v} tone="neutral" className="font-mono">

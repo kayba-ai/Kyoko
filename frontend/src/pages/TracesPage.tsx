@@ -5,7 +5,7 @@ import type { RunSummary } from "@/lib/types";
 import { api } from "@/lib/api";
 import { useApi } from "@/hooks/useApi";
 import { useLiveEvent } from "@/hooks/useLiveBus";
-import { ago, durationMs, fmtCost, fmtDuration, fmtTime, fmtTokens } from "@/lib/format";
+import { ago, durationMs, fmtCost, fmtDuration, fmtTime, fmtTokens, humanize } from "@/lib/format";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { PageHeader } from "@/components/ui/page-header";
@@ -167,7 +167,7 @@ export function TracesPage() {
                       </div>
                     </TD>
                     <TD>
-                      <Badge tone={statusTone(r.status)}>{r.status ?? "—"}</Badge>
+                      <Badge tone={statusTone(r.status)}>{r.status ? humanize(r.status) : "—"}</Badge>
                     </TD>
                     <TD className="text-right font-mono text-xs text-muted-foreground">{fmtDuration(dur)}</TD>
                     <TD className="text-right font-mono text-xs">

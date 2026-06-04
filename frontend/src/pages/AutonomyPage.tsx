@@ -2,7 +2,7 @@ import * as React from "react";
 import { AlertTriangle, Loader2, RotateCcw, Save, ShieldCheck } from "lucide-react";
 import { api } from "@/lib/api";
 import type { AutonomyPolicy, PolicyUpdate, TimelineEvent } from "@/lib/types";
-import { ago } from "@/lib/format";
+import { ago, humanize } from "@/lib/format";
 import { useApi } from "@/hooks/useApi";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -385,7 +385,7 @@ function ActivityCard({ events }: { events: TimelineEvent[] }) {
                 key={e.id}
                 className="flex items-center gap-2.5 border-b border-border/60 px-4 py-2.5 transition-colors hover:bg-accent last:border-b-0"
               >
-                <Badge tone="neutral">{e.kind}</Badge>
+                <Badge tone="neutral">{humanize(e.kind)}</Badge>
                 {entity && <span className="font-mono text-xs text-foreground">{entity}</span>}
                 {summary && <span className="truncate text-sm text-muted-foreground">{summary}</span>}
                 <span className="ml-auto shrink-0 text-label text-muted-foreground/70">

@@ -2,27 +2,13 @@ import { useState } from "react";
 import { Badge, statusTone, type BadgeProps } from "@/components/ui/badge";
 import { Tabs } from "@/components/ui/tabs";
 import { JsonView } from "@/components/JsonView";
-import { ago, fmtTime } from "@/lib/format";
+import { ago, fmtTime, humanize } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 // A friendly, structured renderer for arbitrary JSON-ish records. Instead of a
 // raw JSON tree, it lays scalar fields out in a labeled grid, renders long text
 // as paragraphs, primitive arrays as chips, and nested objects/arrays as titled
 // inset sections. StructuredDetail wraps it with a Structured ⇄ Raw toggle.
-
-const ACRONYMS: Record<string, string> = {
-  id: "ID", llm: "LLM", mcp: "MCP", sse: "SSE", json: "JSON", url: "URL",
-  ttl: "TTL", api: "API", ms: "ms", l0: "L0", l1: "L1", l2: "L2", l3: "L3",
-};
-
-function humanize(key: string): string {
-  return key
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .split(/[_\s]+/)
-    .filter(Boolean)
-    .map((w) => ACRONYMS[w.toLowerCase()] ?? w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
-}
 
 function isComplex(v: unknown): v is object {
   return typeof v === "object" && v !== null;
@@ -72,7 +58,7 @@ function ScalarValue({ keyName, value }: { keyName: string; value: unknown }) {
   }
   const s = String(value);
   if (isTsKey(keyName)) return <span title={fmtTime(s)}>{ago(s)}</span>;
-  if (STATUS_KEYS.has(keyName)) return <Badge tone={toneForKey(keyName, s)}>{s}</Badge>;
+  if (STATUS_KEYS.has(keyName)) return <Badge tone={toneForKey(keyName, s)}>{humanize(s)}</Badge>;
   if (ID_KEY.test(keyName)) return <span className="break-all font-mono text-xs">{s}</span>;
   return <span className="break-words">{s}</span>;
 }
@@ -80,7 +66,7 @@ function ScalarValue({ keyName, value }: { keyName: string; value: unknown }) {
 function FieldCell({ keyName, value }: { keyName: string; value: unknown }) {
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
-      <span className="text-label uppercase tracking-wide text-muted-foreground">{humanize(keyName)}</span>
+      <span className="text-xs font-medium text-muted-foreground">{humanize(keyName)}</span>
       <span className="min-w-0 text-sm text-foreground">
         <ScalarValue keyName={keyName} value={value} />
       </span>
@@ -100,8 +86,8 @@ function SectionShell({
   return (
     <div className="space-y-1.5">
       <div className="flex items-center gap-2">
-        <span className="text-label uppercase tracking-wide text-muted-foreground">{title}</span>
-        {count !== undefined && <span className="text-label text-muted-foreground/60">{count}</span>}
+        <span className="text-xs font-medium text-muted-foreground">{title}</span>
+        {count !== undefined && <span className="text-xs text-muted-foreground/60">{count}</span>}
       </div>
       {children}
     </div>
@@ -124,7 +110,7 @@ function ComplexSection({ keyName, value, depth }: { keyName: string; value: unk
         <SectionShell title={title} count={value.length}>
           <div className="flex flex-wrap gap-1.5">
             {value.map((v, i) => (
-              <Badge key={i} tone="neutral" className="font-mono normal-case tracking-normal">
+              <Badge key={i} tone="neutral" className="font-mono">
                 {String(v)}
               </Badge>
             ))}
@@ -174,7 +160,7 @@ function ObjectView({ obj, depth }: { obj: Record<string, unknown>; depth: numbe
       )}
       {longs.map(([k, v]) => (
         <div key={k} className="space-y-1">
-          <span className="text-label uppercase tracking-wide text-muted-foreground">{humanize(k)}</span>
+          <span className="text-xs font-medium text-muted-foreground">{humanize(k)}</span>
           <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">{String(v)}</p>
         </div>
       ))}

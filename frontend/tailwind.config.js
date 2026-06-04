@@ -11,8 +11,8 @@ export default {
         mono: ["'JetBrains Mono'", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
       },
       fontSize: {
-        label: ["10px", "14px"],
-        xs: ["11px", "16px"],
+        label: ["12px", "16px"],
+        xs: ["12px", "16px"],
         sm: ["12px", "18px"],
         base: ["13px", "20px"],
         md: ["14px", "22px"],
@@ -58,17 +58,17 @@ export default {
         danger: "hsl(var(--danger))",
       },
       borderRadius: {
-        sm: "calc(var(--radius) - 4px)",
-        md: "calc(var(--radius) - 2px)",
-        lg: "var(--radius)",
-        xl: "calc(var(--radius) + 4px)",
-        "2xl": "calc(var(--radius) + 8px)",
+        sm: "calc(var(--radius) - 4px)", /* 2px */
+        md: "calc(var(--radius) - 2px)", /* 4px */
+        lg: "var(--radius)", /* 6px */
+        xl: "calc(var(--radius) + 4px)", /* 10px */
+        "2xl": "calc(var(--radius) + 8px)", /* 14px */
       },
       boxShadow: {
-        xs: "0 1px 2px 0 hsl(222 20% 12% / 0.05)",
-        soft: "0 1px 2px 0 hsl(222 20% 12% / 0.04), 0 1px 3px 0 hsl(222 20% 12% / 0.03)",
-        card: "0 1px 2px 0 hsl(222 20% 12% / 0.04), 0 2px 8px -2px hsl(222 20% 12% / 0.06)",
-        pop: "0 4px 16px -2px hsl(222 20% 12% / 0.12), 0 2px 6px -2px hsl(222 20% 12% / 0.08)",
+        xs: "0 1px 2px 0 hsl(223 20% 4% / 0.05)",
+        soft: "0 1px 2px 0 hsl(223 20% 4% / 0.04), 0 1px 3px 0 hsl(223 20% 4% / 0.03)",
+        card: "0 1px 2px 0 hsl(223 20% 4% / 0.04), 0 2px 8px -2px hsl(223 20% 4% / 0.06)",
+        pop: "0 4px 16px -2px hsl(223 20% 4% / 0.12), 0 2px 6px -2px hsl(223 20% 4% / 0.08)",
       },
       keyframes: {
         "pulse-dot": { "0%,100%": { opacity: "1" }, "50%": { opacity: "0.3" } },
