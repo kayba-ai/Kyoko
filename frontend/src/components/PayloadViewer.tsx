@@ -26,8 +26,9 @@ export function PayloadViewer({ spanId }: { spanId: string }) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-white/[0.06] px-3 py-2">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-3 py-2.5">
         <Tabs
+          variant="segment"
           tabs={[
             { value: "input", label: "Input" },
             { value: "output", label: "Output" },
@@ -53,7 +54,7 @@ export function PayloadViewer({ spanId }: { spanId: string }) {
           <Badge tone="neutral">{data.media_type.replace("application/", "")}</Badge>
         )}
         {data?.available && data.size_bytes !== undefined && (
-          <span className="font-mono text-label text-muted-foreground/70">{fmtBytes(data.size_bytes)}</span>
+          <Badge tone="neutral" className="font-mono normal-case">{fmtBytes(data.size_bytes)}</Badge>
         )}
       </div>
       <div className="flex-1 overflow-auto p-3">
@@ -66,11 +67,19 @@ export function PayloadViewer({ spanId }: { spanId: string }) {
         ) : !data?.available ? (
           <Empty title={`No ${target} payload`} hint="This span has no captured payload for the selected side." />
         ) : parsed !== null && typeof parsed === "object" ? (
-          <JsonView data={parsed} />
+          <div className="surface-muted p-3">
+            <JsonView data={parsed} />
+          </div>
         ) : (
-          <pre className="whitespace-pre-wrap break-all font-mono text-xs text-foreground/90">{data.content}</pre>
+          <pre className="whitespace-pre-wrap break-all rounded-lg border border-border bg-muted/60 p-3 font-mono text-xs text-foreground">
+            {data.content}
+          </pre>
         )}
-        {data?.truncated && <div className="mt-2 text-label text-warn">payload truncated</div>}
+        {data?.truncated && (
+          <div className="mt-2">
+            <Badge tone="warn">payload truncated</Badge>
+          </div>
+        )}
       </div>
     </div>
   );

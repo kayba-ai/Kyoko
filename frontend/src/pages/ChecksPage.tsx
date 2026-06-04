@@ -4,9 +4,10 @@ import { api } from "@/lib/api";
 import { useApi } from "@/hooks/useApi";
 import { Badge, statusTone } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/tabs";
 import { Spinner, ErrorNote, Empty } from "@/components/ui/misc";
-import { JsonView } from "@/components/JsonView";
+import { StructuredDetail } from "@/components/RecordView";
 import { ago } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -35,8 +36,8 @@ function Row({ item, selected, onClick }: { item: Item; selected: boolean; onCli
     <button
       onClick={onClick}
       className={cn(
-        "flex w-full flex-col items-start gap-1 border-b border-white/[0.05] px-3 py-2 text-left transition-colors",
-        selected ? "bg-white/[0.06]" : "hover:bg-white/[0.03]",
+        "flex w-full flex-col items-start gap-1 border-b border-border/60 px-3 py-2.5 text-left transition-colors last:border-b-0",
+        selected ? "bg-accent border-l-2 border-l-primary" : "hover:bg-accent",
       )}
     >
       <div className="flex w-full items-center justify-between gap-2">
@@ -48,35 +49,16 @@ function Row({ item, selected, onClick }: { item: Item; selected: boolean; onCli
   );
 }
 
-const DETAIL_FIELDS: { key: string; label: string }[] = [
-  { key: "status", label: "Status" },
-  { key: "mode", label: "Mode" },
-  { key: "result", label: "Result" },
-  { key: "check_spec_id", label: "Check spec" },
-  { key: "proposal_id", label: "Proposal" },
-  { key: "source_run_id", label: "Source run" },
-  { key: "created_at", label: "Created" },
-];
-
 function Detail({ item }: { item: Item }) {
-  const fields = DETAIL_FIELDS.filter((f) => str(item, f.key) !== undefined);
+  const badge = badgeValue(item);
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex items-center justify-between gap-3">
         <CardTitle className="truncate font-mono">{itemId(item)}</CardTitle>
+        {badge && <Badge tone={statusTone(badge)}>{badge}</Badge>}
       </CardHeader>
       <CardBody>
-        {fields.length > 0 && (
-          <div className="mb-3 grid grid-cols-2 gap-x-6 gap-y-1.5">
-            {fields.map((f) => (
-              <div key={f.key} className="flex items-baseline justify-between gap-2">
-                <span className="text-xs text-muted-foreground">{f.label}</span>
-                <span className="truncate font-mono text-xs text-foreground">{str(item, f.key)}</span>
-              </div>
-            ))}
-          </div>
-        )}
-        <JsonView data={item} />
+        <StructuredDetail data={item} />
       </CardBody>
     </Card>
   );
@@ -93,8 +75,8 @@ function MasterDetail({ items }: { items: Item[] }) {
   if (items.length === 0) return <Empty title="Nothing here yet" />;
 
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,18rem)_1fr]">
-      <div className="surface overflow-hidden self-start">
+    <div className="flex flex-1 overflow-hidden">
+      <div className="w-72 shrink-0 overflow-y-auto border-r border-border">
         {items.map((it) => {
           const id = itemId(it);
           return (
@@ -107,7 +89,7 @@ function MasterDetail({ items }: { items: Item[] }) {
           );
         })}
       </div>
-      {selected && <Detail item={selected} />}
+      <div className="flex-1 overflow-y-auto p-6">{selected && <Detail item={selected} />}</div>
     </div>
   );
 }
@@ -131,35 +113,40 @@ export function ChecksPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-12 shrink-0 items-center justify-between border-b border-white/[0.06] px-4">
-        <h1 className="text-md font-semibold">Checks &amp; replay</h1>
+      <PageHeader
+        title="Checks & replay"
+        description="Evidence that gates autonomy"
+        icon={<FlaskConical className="h-5 w-5" />}
+      >
         {!loading && !error && !allEmpty && (
-          <Tabs tabs={tabs} value={tab} onChange={(v) => setTab(v as TabKey)} />
+          <Tabs tabs={tabs} value={tab} onChange={(v) => setTab(v as TabKey)} variant="segment" />
         )}
-      </div>
-      <div className="flex-1 overflow-auto p-4">
-        {loading ? (
-          <div className="flex h-full items-center justify-center">
-            <Spinner />
-          </div>
-        ) : error ? (
-          <ErrorNote error={error} />
-        ) : allEmpty ? (
-          <Empty
-            title="No checks or replays yet"
-            hint="Generate checks from a proposal, then run replay to gather gate evidence."
-            icon={<FlaskConical className="h-6 w-6" />}
-          />
-        ) : (
-          <div className="flex flex-col gap-3">
-            <p className="text-xs text-muted-foreground/80">
+      </PageHeader>
+      {loading ? (
+        <div className="flex flex-1 items-center justify-center">
+          <Spinner />
+        </div>
+      ) : error ? (
+        <ErrorNote error={error} />
+      ) : allEmpty ? (
+        <Empty
+          title="No checks or replays yet"
+          hint="Generate checks from a proposal, then run replay to gather gate evidence."
+          icon={<FlaskConical className="h-6 w-6" />}
+        />
+      ) : (
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <div className="shrink-0 p-6 pb-0">
+            <div className="rounded-lg border border-border bg-muted/50 p-3 text-sm text-muted-foreground">
               Checks produce the evidence that gates autonomy; replay runs re-execute the agent to prove a
               regression fix.
-            </p>
+            </div>
+          </div>
+          <div className="flex flex-1 overflow-hidden pt-4">
             <MasterDetail items={active} />
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

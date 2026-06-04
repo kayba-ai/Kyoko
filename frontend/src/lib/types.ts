@@ -192,6 +192,7 @@ export interface Issue {
   affected_task_ids: string[];
   affected_span_ids: string[];
   proposal_ids: string[];
+  review_comment?: string | null;
   created_at: string;
   updated_at: string | null;
 }
@@ -206,9 +207,50 @@ export interface AutonomyPolicy {
   allow_profile_config_write: boolean;
   allow_replay_server_patch: boolean;
   dirty_worktree_policy: string;
+  required_check_level_context: string;
+  required_check_level_harness: string;
+  rollback_on_regression: boolean;
   allowed_paths: string[];
   protected_paths: string[];
+  updated_at?: string;
   [k: string]: unknown;
+}
+
+/** A skillbook entry — the deliverable that issues/proposals feed into. */
+export interface Skill {
+  id: string;
+  profile_id: string;
+  proposal_id: string | null;
+  section: string;
+  issue: string;
+  insight: string;
+  keywords: string[];
+  occurrences: unknown[];
+  helpful_count: number;
+  harmful_count: number;
+  neutral_count: number;
+  active: boolean | number;
+  human_locked: boolean | number;
+  source_run_id: string | null;
+  created_at: string;
+  updated_at: string;
+  [k: string]: unknown;
+}
+
+/** Fields the loopback dashboard may update via POST /api/policy. Paths are
+ *  intentionally not editable here (CLI/storage only). */
+export interface PolicyUpdate {
+  context_mode?: string;
+  harness_mode?: string;
+  allow_repo_patch?: boolean;
+  allow_check_write?: boolean;
+  allow_skillbook_write?: boolean;
+  allow_profile_config_write?: boolean;
+  allow_replay_server_patch?: boolean;
+  dirty_worktree_policy?: string;
+  required_check_level_context?: string;
+  required_check_level_harness?: string;
+  rollback_on_regression?: boolean;
 }
 
 export interface TimelineEvent {

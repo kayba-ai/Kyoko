@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Search } from "lucide-react";
+import { ListTree, Search } from "lucide-react";
 import { api } from "@/lib/api";
 import { useApi } from "@/hooks/useApi";
 import { useLiveEvent } from "@/hooks/useLiveBus";
 import { Input } from "@/components/ui/input";
+import { PageHeader } from "@/components/ui/page-header";
 import { Spinner, ErrorNote, Empty } from "@/components/ui/misc";
 import { RunList } from "@/components/RunList";
 import { RunDetail } from "@/components/RunDetail";
@@ -35,38 +36,49 @@ export function RunsPage() {
   }, [runs, filter]);
 
   return (
-    <div className="flex h-full">
-      <div className="flex w-80 shrink-0 flex-col border-r border-white/[0.06]">
-        <div className="flex h-12 shrink-0 items-center gap-2 border-b border-white/[0.06] px-3">
-          <Search className="h-3.5 w-3.5 text-muted-foreground" />
-          <Input
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            placeholder="Filter runs…"
-            className="h-7 border-0 bg-transparent px-0 focus-visible:ring-0"
-          />
-          <span className="shrink-0 text-label text-muted-foreground/60">{filtered.length}</span>
-        </div>
-        <div className="min-h-0 flex-1 overflow-auto">
-          {loading && !runs ? (
-            <div className="flex justify-center py-8">
-              <Spinner />
+    <div className="flex h-full flex-col">
+      <PageHeader
+        title="Runs"
+        description="Inspect agent runs — spans, payloads, timeline, and live events."
+        icon={<ListTree className="h-5 w-5" />}
+      />
+      <div className="flex flex-1 overflow-hidden">
+        <div className="flex w-80 shrink-0 flex-col border-r border-border bg-background">
+          <div className="shrink-0 border-b border-border px-3 py-3">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                placeholder="Filter runs…"
+                className="h-9 pl-8 pr-12"
+              />
+              <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-label font-medium text-muted-foreground">
+                {filtered.length}
+              </span>
             </div>
-          ) : error ? (
-            <ErrorNote error={error} />
-          ) : filtered.length === 0 ? (
-            <Empty title="No runs" hint="Ingest traces via POST /v1/traces or run `kyoko demo`." />
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {loading && !runs ? (
+              <div className="flex justify-center py-10">
+                <Spinner />
+              </div>
+            ) : error ? (
+              <ErrorNote error={error} />
+            ) : filtered.length === 0 ? (
+              <Empty title="No runs" hint="Ingest traces via POST /v1/traces or run `kyoko demo`." />
+            ) : (
+              <RunList runs={filtered} selectedId={runId ?? null} onSelect={(id) => navigate(`/runs/${id}`)} />
+            )}
+          </div>
+        </div>
+        <div className="min-w-0 flex-1 overflow-y-auto bg-background">
+          {runId ? (
+            <RunDetail runId={runId} />
           ) : (
-            <RunList runs={filtered} selectedId={runId ?? null} onSelect={(id) => navigate(`/runs/${id}`)} />
+            <Empty title="Select a run" hint="Choose a run from the list to inspect its spans, payloads, and live events." />
           )}
         </div>
-      </div>
-      <div className="min-w-0 flex-1">
-        {runId ? (
-          <RunDetail runId={runId} />
-        ) : (
-          <Empty title="Select a run" hint="Choose a run from the list to inspect its spans, payloads, and live events." />
-        )}
       </div>
     </div>
   );

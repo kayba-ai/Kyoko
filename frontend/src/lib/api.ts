@@ -23,9 +23,11 @@ import type {
   LlmEvalsBundle,
   LiveEvent,
   McpLogEntry,
+  PolicyUpdate,
   Proposal,
   RunOutline,
   RunSummary,
+  Skill,
   SpanPayload,
   TimelineEvent,
 } from "./types";
@@ -160,14 +162,22 @@ export const api = {
     severity?: IssueSeverity;
     proposal_ids?: string[];
   }) => postJson<{ issue: Issue }>("/api/issues", body).then((d) => d.issue),
+  updateIssueStatus: (id: string, status: IssueStatus) =>
+    postJson<{ issue: Issue }>("/api/issue-status", { id, status }).then((d) => d.issue),
+  updateIssueComment: (id: string, comment: string) =>
+    postJson<{ issue: Issue }>("/api/issue-comment", { id, comment }).then((d) => d.issue),
 
   policy: () => getJson<{ policy: AutonomyPolicy }>("/api/policy").then((d) => d.policy),
+  updatePolicy: (body: PolicyUpdate) =>
+    postJson<{ policy: AutonomyPolicy }>("/api/policy", body).then((d) => d.policy),
   autonomyEvents: (limit = 50) =>
     getJson<{ autonomy_events?: TimelineEvent[]; events?: TimelineEvent[] }>("/api/autonomy-events", { limit }).then(
       (d) => d.autonomy_events ?? d.events ?? [],
     ),
 
   checks: () => getJson<ChecksBundle>("/api/checks"),
+
+  skills: () => getJson<{ skills: Skill[] }>("/api/skills").then((d) => d.skills ?? []),
 
   // ---- Evaluation plane (detectors + judges) --------------------------------
   evals: () => getJson<EvalsBundle>("/api/evals").then((d) => d.detectors ?? []),

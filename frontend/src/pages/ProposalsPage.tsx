@@ -7,7 +7,8 @@ import { useApi } from "@/hooks/useApi";
 import { Badge, statusTone } from "@/components/ui/badge";
 import { Card, CardHeader, CardTitle, CardBody } from "@/components/ui/card";
 import { Spinner, Empty, ErrorNote } from "@/components/ui/misc";
-import { JsonView } from "@/components/JsonView";
+import { PageHeader } from "@/components/ui/page-header";
+import { StructuredDetail } from "@/components/RecordView";
 import { cn } from "@/lib/utils";
 
 // Learning proposals are Kyoko's gated change suggestions (context/skill/harness
@@ -19,13 +20,24 @@ function pct(v: number | null | undefined): string | null {
   return `${Math.round(v * 100)}%`;
 }
 
+function ratio(v: number | null | undefined): number | null {
+  if (v === null || v === undefined) return null;
+  return Math.max(0, Math.min(1, v));
+}
+
 function ConfidenceRow({ label, value }: { label: string; value: number | null | undefined }) {
   const p = pct(value);
-  if (p === null) return null;
+  const r = ratio(value);
+  if (p === null || r === null) return null;
   return (
-    <div className="flex items-baseline justify-between gap-3">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      <span className="font-mono text-xs text-foreground/90">{p}</span>
+    <div className="space-y-1.5">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-sm text-muted-foreground">{label}</span>
+        <span className="font-mono text-sm font-semibold tabular-nums text-foreground">{p}</span>
+      </div>
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+        <div className="h-full rounded-full bg-primary" style={{ width: `${Math.round(r * 100)}%` }} />
+      </div>
     </div>
   );
 }
@@ -54,26 +66,33 @@ function ProposalDetail({ id }: { id: string }) {
     pct(kyokoConfidence) !== null || pct(operatorConfidence) !== null || pct(confidence) !== null;
 
   return (
-    <div className="space-y-3 p-4">
-      <div className="space-y-2">
-        <h2 className="text-md font-semibold text-foreground">{title}</h2>
+    <div className="mx-auto max-w-3xl space-y-5">
+      <div className="space-y-2.5">
+        <h2 className="text-xl font-bold tracking-tight text-foreground">{title}</h2>
         <div className="flex flex-wrap items-center gap-1.5">
           {state && <Badge tone={statusTone(state)}>{state}</Badge>}
           {sectionLabel && <Badge tone="neutral">{sectionLabel}</Badge>}
         </div>
-        {sectionDescription && (
-          <p className="text-xs text-muted-foreground/80">{sectionDescription}</p>
-        )}
+        {sectionDescription && <p className="text-sm text-muted-foreground">{sectionDescription}</p>}
       </div>
 
-      {summary && <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground/85">{summary}</p>}
+      {summary && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Summary</CardTitle>
+          </CardHeader>
+          <CardBody>
+            <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{summary}</p>
+          </CardBody>
+        </Card>
+      )}
 
       {hasConfidence && (
         <Card>
           <CardHeader>
             <CardTitle>Confidence</CardTitle>
           </CardHeader>
-          <CardBody className="space-y-1.5">
+          <CardBody className="space-y-3.5">
             <ConfidenceRow label="Kyoko" value={kyokoConfidence} />
             <ConfidenceRow label="Operator" value={operatorConfidence} />
             <ConfidenceRow label="Overall" value={confidence} />
@@ -86,7 +105,7 @@ function ProposalDetail({ id }: { id: string }) {
           <CardTitle>Full proposal</CardTitle>
         </CardHeader>
         <CardBody>
-          <JsonView data={data} />
+          <StructuredDetail data={data} />
         </CardBody>
       </Card>
     </div>
@@ -105,17 +124,23 @@ export function ProposalsPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-12 shrink-0 items-center justify-between border-b border-white/[0.06] px-4">
-        <h1 className="text-md font-semibold">Proposals</h1>
-        {data && <span className="text-xs text-muted-foreground">{data.length} total</span>}
-      </div>
-      <div className="flex min-h-0 flex-1">
+      <PageHeader
+        title="Proposals"
+        description="Gated context, skill, and harness change suggestions — view only."
+        icon={<GitPullRequestArrow className="h-5 w-5" />}
+        actions={
+          data ? (
+            <span className="text-sm text-muted-foreground tabular-nums">{data.length} total</span>
+          ) : undefined
+        }
+      />
+      <div className="flex flex-1 overflow-hidden">
         {loading ? (
           <div className="flex flex-1 items-center justify-center">
             <Spinner />
           </div>
         ) : error ? (
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 overflow-y-auto">
             <ErrorNote error={error} />
           </div>
         ) : !data || data.length === 0 ? (
@@ -128,41 +153,37 @@ export function ProposalsPage() {
           </div>
         ) : (
           <>
-            <div className="w-80 shrink-0 overflow-auto border-r border-white/[0.06] p-2">
-              <div className="space-y-1.5">
-                {data.map((p) => {
-                  const sectionLabel = p.section_label ?? p.section;
-                  const conf = pct(p.confidence);
-                  const active = p.id === selected;
-                  return (
-                    <button
-                      key={p.id}
-                      onClick={() => setSelected(p.id)}
-                      className={cn(
-                        "w-full rounded-md border p-2.5 text-left transition-colors",
-                        active
-                          ? "border-primary/30 bg-white/[0.05]"
-                          : "border-white/[0.06] hover:bg-white/[0.03]",
+            <div className="w-80 shrink-0 space-y-1.5 overflow-y-auto border-r border-border p-3">
+              {data.map((p) => {
+                const sectionLabel = p.section_label ?? p.section;
+                const conf = pct(p.confidence);
+                const active = p.id === selected;
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => setSelected(p.id)}
+                    className={cn(
+                      "w-full rounded-lg border p-3 text-left transition-colors",
+                      active
+                        ? "border-primary/40 bg-accent"
+                        : "border-transparent hover:bg-accent",
+                    )}
+                  >
+                    <div className="mb-1.5 truncate text-sm font-medium text-foreground">{p.title}</div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Badge tone={statusTone(p.state)}>{p.state}</Badge>
+                      {sectionLabel && <Badge tone="neutral">{sectionLabel}</Badge>}
+                      {conf && (
+                        <span className="font-mono text-label tabular-nums text-muted-foreground">{conf}</span>
                       )}
-                    >
-                      <div className="mb-1.5 text-sm font-medium text-foreground/90">{p.title}</div>
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <Badge tone={statusTone(p.state)}>{p.state}</Badge>
-                        {sectionLabel && <Badge tone="neutral">{sectionLabel}</Badge>}
-                        {conf && <span className="font-mono text-label text-muted-foreground">{conf}</span>}
-                        <span className="ml-auto text-label text-muted-foreground/70">{ago(p.created_at)}</span>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+                      <span className="ml-auto text-xs text-muted-foreground">{ago(p.created_at)}</span>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
-            <div className="min-w-0 flex-1 overflow-auto">
-              {selected ? (
-                <ProposalDetail id={selected} />
-              ) : (
-                <Empty title="Select a proposal" />
-              )}
+            <div className="min-w-0 flex-1 overflow-y-auto p-6">
+              {selected ? <ProposalDetail id={selected} /> : <Empty title="Select a proposal" />}
             </div>
           </>
         )}

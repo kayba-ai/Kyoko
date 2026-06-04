@@ -2,38 +2,52 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Dark, Workshop-inspired theme. Near-black surfaces, muted gray text, a single
-   blue accent, with llm/tool/status hues for span typing. */
+/* Light, friendly theme. Warm cream canvas, white cards, a calm slate-blue
+   accent, soft shadows and rounded corners. llm/tool/status hues are tuned to
+   read clearly on light surfaces. */
 @layer base {
   :root {
-    --background: 0 0% 4%;
-    --foreground: 210 8% 80%;
-    --card: 0 0% 7%;
-    --card-foreground: 210 8% 82%;
-    --muted: 0 0% 12%;
-    --muted-foreground: 210 6% 52%;
-    --accent: 0 0% 100%;
-    --accent-foreground: 210 10% 88%;
-    --primary: 216 85% 68%;
-    --primary-foreground: 0 0% 100%;
-    --border: 0 0% 100%;
-    --input: 0 0% 100%;
-    --ring: 216 85% 68%;
-    --radius: 0.5rem;
+    --background: 43 24% 94%; /* warm cream canvas */
+    --foreground: 222 17% 9%; /* near-black navy ink */
 
-    --llm: 216 85% 68%;
-    --tool: 38 92% 60%;
-    --ok: 142 60% 50%;
-    --warn: 38 92% 60%;
-    --danger: 0 72% 60%;
+    --card: 0 0% 100%; /* white surfaces */
+    --card-foreground: 222 17% 9%;
+
+    --muted: 40 22% 93%; /* subtle fills / inactive chips */
+    --muted-foreground: 211 14% 42%; /* secondary text */
+
+    --secondary: 43 20% 95%; /* secondary surface */
+    --secondary-foreground: 222 17% 9%;
+
+    --accent: 40 24% 92%; /* hover surface */
+    --accent-foreground: 222 17% 9%;
+
+    --primary: 203 28% 40%; /* slate blue */
+    --primary-foreground: 0 0% 100%;
+
+    --border: 42 13% 80%; /* hairlines / dividers */
+    --input: 42 13% 78%;
+    --ring: 203 28% 45%;
+    --radius: 0.625rem;
+
+    --sidebar: 0 0% 100%;
+    --sidebar-foreground: 222 17% 9%;
+    --sidebar-border: 42 16% 89%;
+
+    /* span typing + semantic status hues (readable on light) */
+    --llm: 207 38% 46%;
+    --tool: 32 70% 42%;
+    --ok: 152 40% 36%;
+    --warn: 38 80% 40%;
+    --danger: 0 64% 50%;
   }
 
   html {
-    color-scheme: dark;
+    color-scheme: light;
   }
 
   * {
-    border-color: hsl(var(--border) / 0.08);
+    border-color: hsl(var(--border));
   }
 
   body {
@@ -41,7 +55,7 @@
     background: hsl(var(--background));
     color: hsl(var(--foreground));
     font-family: theme("fontFamily.sans");
-    font-size: 13px;
+    font-size: 14px;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -51,15 +65,18 @@
   }
 
   ::-webkit-scrollbar {
-    width: 9px;
-    height: 9px;
+    width: 10px;
+    height: 10px;
   }
   ::-webkit-scrollbar-thumb {
-    background: hsl(0 0% 100% / 0.1);
-    border-radius: 6px;
+    background: hsl(222 12% 60% / 0.28);
+    border-radius: 8px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: hsl(0 0% 100% / 0.18);
+    background: hsl(222 12% 50% / 0.4);
+    background-clip: padding-box;
   }
   ::-webkit-scrollbar-track {
     background: transparent;
@@ -67,12 +84,22 @@
 }
 
 @layer components {
+  /* The canonical card surface: white, hairline border, soft shadow. */
   .surface {
     background: hsl(var(--card));
-    border: 1px solid hsl(var(--border) / 0.08);
-    border-radius: var(--radius);
+    border: 1px solid hsl(var(--border) / 0.7);
+    border-radius: calc(var(--radius) + 2px);
+    box-shadow:
+      0 1px 2px 0 hsl(222 20% 12% / 0.04),
+      0 1px 3px 0 hsl(222 20% 12% / 0.03);
   }
   .hairline {
-    border-color: hsl(var(--border) / 0.08);
+    border-color: hsl(var(--border) / 0.7);
+  }
+  /* Subtle inset panel used for nested/secondary surfaces inside a card. */
+  .surface-muted {
+    background: hsl(var(--muted) / 0.55);
+    border: 1px solid hsl(var(--border) / 0.6);
+    border-radius: var(--radius);
   }
 }

@@ -10,16 +10,16 @@ function isCollapsible(v: unknown): v is object {
 }
 
 function Primitive({ value }: { value: unknown }) {
-  if (value === null) return <span className="text-muted-foreground/60">null</span>;
+  if (value === null) return <span className="italic text-muted-foreground">null</span>;
   switch (typeof value) {
     case "string":
-      return <span className="text-ok/90 break-all">"{value}"</span>;
+      return <span className="break-all text-ok">"{value}"</span>;
     case "number":
       return <span className="text-llm">{String(value)}</span>;
     case "boolean":
       return <span className="text-tool">{String(value)}</span>;
     default:
-      return <span>{String(value)}</span>;
+      return <span className="text-foreground">{String(value)}</span>;
   }
 }
 
@@ -36,7 +36,7 @@ function Node({ name, value, depth }: { name?: string | number; value: unknown; 
   return (
     <div className="leading-relaxed">
       <div
-        className={cn("flex items-start gap-1", collapsible && "cursor-pointer hover:bg-white/[0.03] rounded")}
+        className={cn("flex items-start gap-1 rounded", collapsible && "cursor-pointer hover:bg-muted")}
         onClick={collapsible ? () => setOpen((o) => !o) : undefined}
       >
         {collapsible ? (
@@ -45,10 +45,10 @@ function Node({ name, value, depth }: { name?: string | number; value: unknown; 
           <span className="w-3 shrink-0" />
         )}
         <span className="font-mono text-xs">
-          {name !== undefined && <span className="text-primary/80">{name}</span>}
-          {name !== undefined && <span className="text-muted-foreground/60">: </span>}
+          {name !== undefined && <span className="font-medium text-foreground">{name}</span>}
+          {name !== undefined && <span className="text-muted-foreground">: </span>}
           {collapsible ? (
-            <span className="text-muted-foreground/60">
+            <span className="text-muted-foreground">
               {isArray ? `[${entries.length}]` : `{${entries.length}}`}
             </span>
           ) : (
@@ -57,7 +57,7 @@ function Node({ name, value, depth }: { name?: string | number; value: unknown; 
         </span>
       </div>
       {collapsible && open && (
-        <div className="ml-3 border-l border-white/[0.06] pl-2">
+        <div className="ml-3 border-l border-border pl-2">
           {entries.map(([k, v]) => (
             <Node key={String(k)} name={k} value={v} depth={depth + 1} />
           ))}

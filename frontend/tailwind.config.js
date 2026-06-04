@@ -7,7 +7,7 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["Inter", "system-ui", "-apple-system", "sans-serif"],
+        sans: ["'Plus Jakarta Sans'", "Inter", "system-ui", "-apple-system", "sans-serif"],
         mono: ["'JetBrains Mono'", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
       },
       fontSize: {
@@ -16,6 +16,9 @@ export default {
         sm: ["12px", "18px"],
         base: ["13px", "20px"],
         md: ["14px", "22px"],
+        lg: ["16px", "24px"],
+        xl: ["20px", "28px"],
+        "2xl": ["24px", "32px"],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -26,6 +29,10 @@ export default {
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
+        },
+        secondary: {
+          DEFAULT: "hsl(var(--secondary))",
+          foreground: "hsl(var(--secondary-foreground))",
         },
         muted: {
           DEFAULT: "hsl(var(--muted))",
@@ -39,6 +46,11 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        sidebar: {
+          DEFAULT: "hsl(var(--sidebar))",
+          foreground: "hsl(var(--sidebar-foreground))",
+          border: "hsl(var(--sidebar-border))",
+        },
         llm: "hsl(var(--llm))",
         tool: "hsl(var(--tool))",
         ok: "hsl(var(--ok))",
@@ -46,9 +58,17 @@ export default {
         danger: "hsl(var(--danger))",
       },
       borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+        md: "calc(var(--radius) - 2px)",
+        lg: "var(--radius)",
+        xl: "calc(var(--radius) + 4px)",
+        "2xl": "calc(var(--radius) + 8px)",
+      },
+      boxShadow: {
+        xs: "0 1px 2px 0 hsl(222 20% 12% / 0.05)",
+        soft: "0 1px 2px 0 hsl(222 20% 12% / 0.04), 0 1px 3px 0 hsl(222 20% 12% / 0.03)",
+        card: "0 1px 2px 0 hsl(222 20% 12% / 0.04), 0 2px 8px -2px hsl(222 20% 12% / 0.06)",
+        pop: "0 4px 16px -2px hsl(222 20% 12% / 0.12), 0 2px 6px -2px hsl(222 20% 12% / 0.08)",
       },
       keyframes: {
         "pulse-dot": { "0%,100%": { opacity: "1" }, "50%": { opacity: "0.3" } },

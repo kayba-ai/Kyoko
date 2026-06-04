@@ -12,12 +12,12 @@ export function StatusBar() {
   const dotClass =
     status === "open" ? "bg-ok animate-pulse-dot" : status === "connecting" ? "bg-warn" : "bg-danger";
   return (
-    <div className="flex items-center justify-between border-t border-white/[0.06] px-4 py-2.5">
+    <div className="flex items-center justify-between border-t border-sidebar-border px-5 py-3">
       <div className="flex items-center gap-2">
         <span className={cn("h-2 w-2 rounded-full", dotClass)} />
-        <span className="text-xs text-muted-foreground">{LABEL[status]}</span>
+        <span className="text-xs font-medium text-muted-foreground">{LABEL[status]}</span>
       </div>
-      <span className="font-mono text-label text-muted-foreground/50">SSE</span>
+      <span className="font-mono text-label uppercase tracking-wide text-muted-foreground/60">SSE</span>
     </div>
   );
 }

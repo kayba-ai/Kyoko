@@ -13,7 +13,7 @@ export function RunList({
   onSelect: (id: string) => void;
 }) {
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col gap-1 p-2">
       {runs.map((run) => {
         const selected = run.id === selectedId;
         const dur = durationMs(run.started_at, run.ended_at);
@@ -22,19 +22,23 @@ export function RunList({
             key={run.id}
             onClick={() => onSelect(run.id)}
             className={cn(
-              "flex flex-col gap-1 border-b border-white/[0.04] px-3 py-2.5 text-left transition-colors",
-              selected ? "bg-primary/10" : "hover:bg-white/[0.03]",
+              "flex flex-col gap-1.5 rounded-lg border border-l-2 px-3 py-2.5 text-left transition-colors",
+              selected
+                ? "border-border/70 border-l-primary bg-accent"
+                : "border-transparent hover:bg-muted",
             )}
           >
             <div className="flex items-center gap-2">
               <Badge tone={statusTone(run.status)}>{run.status ?? "—"}</Badge>
-              {run.agent_name && <span className="truncate text-xs font-medium text-foreground/90">{run.agent_name}</span>}
-              <span className="ml-auto shrink-0 text-label text-muted-foreground/60">{ago(run.ended_at ?? run.started_at)}</span>
+              {run.agent_name && (
+                <span className="truncate text-sm font-semibold text-foreground">{run.agent_name}</span>
+              )}
+              <span className="ml-auto shrink-0 text-label text-muted-foreground">{ago(run.ended_at ?? run.started_at)}</span>
             </div>
             {run.summary && <div className="line-clamp-2 text-xs text-muted-foreground">{run.summary}</div>}
-            <div className="flex items-center gap-2 text-label text-muted-foreground/60">
+            <div className="flex items-center gap-2 text-label text-muted-foreground">
               <span>{run.span_count} spans</span>
-              {run.failed_span_count > 0 && <span className="text-danger">{run.failed_span_count} failed</span>}
+              {run.failed_span_count > 0 && <span className="font-medium text-danger">{run.failed_span_count} failed</span>}
               {run.handoff_count > 0 && <span>{run.handoff_count} handoffs</span>}
               <span className="ml-auto font-mono">{fmtDuration(dur)}</span>
             </div>

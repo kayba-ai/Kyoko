@@ -1,7 +1,17 @@
-import { Activity } from "lucide-react";
+import type { ReactNode } from "react";
+import {
+  Activity,
+  FlaskConical,
+  GitPullRequestArrow,
+  LayoutDashboard,
+  ListTree,
+  MessageSquare,
+  RotateCcw,
+} from "lucide-react";
 import { api } from "@/lib/api";
 import { useApi } from "@/hooks/useApi";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
 import { Spinner, ErrorNote, Empty } from "@/components/ui/misc";
 import { JsonView } from "@/components/JsonView";
 
@@ -27,22 +37,29 @@ function isNonEmptyObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v) && Object.keys(v as object).length > 0;
 }
 
-function StatTile({ label, value }: { label: string; value: string | number }) {
+function StatCard({ label, value, icon }: { label: string; value: string | number; icon: ReactNode }) {
   return (
-    <div className="surface px-3 py-2.5">
-      <div className="text-label uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className="mt-1 text-md font-semibold tabular-nums text-foreground">{value}</div>
-    </div>
+    <Card>
+      <CardBody className="flex flex-col gap-3 p-4">
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary [&>svg]:h-5 [&>svg]:w-5">
+          {icon}
+        </div>
+        <div className="min-w-0">
+          <div className="truncate text-sm text-muted-foreground">{label}</div>
+          <div className="mt-0.5 text-2xl font-bold tabular-nums text-foreground">{value}</div>
+        </div>
+      </CardBody>
+    </Card>
   );
 }
 
-const HEADLINE: { key: string; label: string }[] = [
-  { key: "runs", label: "Runs" },
-  { key: "spans", label: "Spans" },
-  { key: "check_runs", label: "Check runs" },
-  { key: "replay_runs", label: "Replay runs" },
-  { key: "learning_proposals", label: "Proposals" },
-  { key: "annotations", label: "Annotations" },
+const HEADLINE: { key: string; label: string; icon: ReactNode }[] = [
+  { key: "runs", label: "Runs", icon: <Activity /> },
+  { key: "spans", label: "Spans", icon: <ListTree /> },
+  { key: "check_runs", label: "Check runs", icon: <FlaskConical /> },
+  { key: "replay_runs", label: "Replay runs", icon: <RotateCcw /> },
+  { key: "learning_proposals", label: "Proposals", icon: <GitPullRequestArrow /> },
+  { key: "annotations", label: "Annotations", icon: <MessageSquare /> },
 ];
 
 function SubCard({ title, data }: { title: string; data: unknown }) {
@@ -77,10 +94,12 @@ export function OverviewPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-12 shrink-0 items-center justify-between border-b border-white/[0.06] px-4">
-        <h1 className="text-md font-semibold">Overview</h1>
-      </div>
-      <div className="flex-1 overflow-auto p-4">
+      <PageHeader
+        title="Overview"
+        description="Telemetry, checks, replay, and autonomy at a glance."
+        icon={<LayoutDashboard className="h-5 w-5" />}
+      />
+      <div className="flex-1 overflow-y-auto p-6">
         {loading ? (
           <div className="flex h-full items-center justify-center">
             <Spinner />
@@ -94,24 +113,29 @@ export function OverviewPage() {
             icon={<Activity className="h-6 w-6" />}
           />
         ) : (
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-6">
             {headline.length > 0 && (
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
                 {headline.map((h) => (
-                  <StatTile key={h.key} label={h.label} value={counts[h.key]} />
+                  <StatCard key={h.key} label={h.label} value={counts[h.key]} icon={h.icon} />
                 ))}
               </div>
             )}
 
             {isNonEmptyObject(cards) && (
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
                 {Object.entries(cards).map(([k, v]) => (
-                  <StatTile key={k} label={humanize(k)} value={cardValue(v)} />
+                  <StatCard
+                    key={k}
+                    label={humanize(k)}
+                    value={cardValue(v)}
+                    icon={<Activity />}
+                  />
                 ))}
               </div>
             )}
 
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
               <SubCard title="Runs" data={metrics.data?.runs} />
               <SubCard title="Checks" data={metrics.data?.checks} />
               <SubCard title="Replay" data={metrics.data?.replay} />
@@ -123,15 +147,28 @@ export function OverviewPage() {
                 <CardHeader>
                   <CardTitle>Database</CardTitle>
                 </CardHeader>
-                <CardBody>
-                  <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 sm:grid-cols-3 lg:grid-cols-4">
-                    {Object.entries(counts).map(([k, v]) => (
-                      <div key={k} className="flex items-baseline justify-between gap-2">
-                        <span className="truncate text-xs text-muted-foreground">{humanize(k)}</span>
-                        <span className="font-mono text-xs tabular-nums text-foreground">{v}</span>
-                      </div>
-                    ))}
-                  </div>
+                <CardBody className="p-0">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border text-label uppercase tracking-wide text-muted-foreground">
+                        <th className="px-4 py-2.5 text-left font-semibold">Table</th>
+                        <th className="px-4 py-2.5 text-right font-semibold">Rows</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(counts).map(([k, v]) => (
+                        <tr
+                          key={k}
+                          className="border-b border-border/60 last:border-0 hover:bg-muted/50"
+                        >
+                          <td className="px-4 py-2 text-foreground">{humanize(k)}</td>
+                          <td className="px-4 py-2 text-right font-mono tabular-nums text-foreground">
+                            {v}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </CardBody>
               </Card>
             )}

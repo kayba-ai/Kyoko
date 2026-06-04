@@ -20,9 +20,9 @@ function flatten(tree: SpanNode[], depth: number, out: FlatSpan[]) {
 }
 
 const KIND_BAR: Record<string, string> = {
-  llm: "bg-llm/70 border-llm",
-  tool: "bg-tool/70 border-tool",
-  other: "bg-white/20 border-white/30",
+  llm: "bg-llm/70 border-llm/60",
+  tool: "bg-tool/70 border-tool/60",
+  other: "bg-muted-foreground/30 border-muted-foreground/40",
 };
 
 export function FlameTimeline({
@@ -59,22 +59,25 @@ export function FlameTimeline({
         return (
           <div
             key={node.id}
-            className={cn("group flex h-5 cursor-pointer items-center rounded", selected && "bg-primary/10")}
+            className={cn(
+              "group flex h-6 cursor-pointer items-center rounded-md px-1 transition-colors",
+              selected ? "bg-accent" : "hover:bg-muted",
+            )}
             onClick={() => onSelect(node.id)}
             title={`${node.name ?? "span"} · ${fmtDuration(durationMs(node.started_at, node.ended_at))}`}
           >
             <div className="relative h-full flex-1" style={{ paddingLeft: depth * 8 }}>
-              <div className="relative h-full w-full">
+              <div className="relative h-full w-full rounded-md bg-muted/50">
                 <div
                   className={cn(
-                    "absolute top-1/2 h-2.5 -translate-y-1/2 rounded-sm border",
-                    failed ? "bg-danger/70 border-danger" : KIND_BAR[kind],
-                    selected && "ring-1 ring-primary",
+                    "absolute top-1/2 h-2.5 -translate-y-1/2 rounded-md border",
+                    failed ? "bg-danger/70 border-danger/60" : KIND_BAR[kind],
+                    selected && "ring-1 ring-primary/50",
                   )}
                   style={{ left: `${left}%`, width: `${width}%` }}
                 />
                 <span
-                  className="absolute top-1/2 -translate-y-1/2 truncate pl-1 text-label text-foreground/70"
+                  className="absolute top-1/2 -translate-y-1/2 truncate pl-1 text-label text-muted-foreground"
                   style={{ left: `${Math.min(left, 85)}%`, maxWidth: "60%" }}
                 >
                   {node.name}

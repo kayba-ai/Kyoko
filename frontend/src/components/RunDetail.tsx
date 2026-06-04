@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { Users } from "lucide-react";
+import { RotateCw, Users } from "lucide-react";
 import { api } from "@/lib/api";
 import { useApi } from "@/hooks/useApi";
 import { Badge, statusTone } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Tabs } from "@/components/ui/tabs";
 import { Spinner, ErrorNote, Empty } from "@/components/ui/misc";
 import { SpanTree } from "./SpanTree";
@@ -42,31 +43,42 @@ export function RunDetail({ runId }: { runId: string }) {
   const s = outline.summary;
 
   return (
-    <div className="flex h-full flex-col">
-      {/* Run header */}
-      <div className="shrink-0 border-b border-white/[0.06] px-4 py-3">
+    <div className="flex h-full flex-col gap-4 p-4">
+      {/* Run header band */}
+      <div className="surface shrink-0 px-4 py-3.5">
         <div className="flex items-center gap-2">
           <Badge tone={statusTone(outline.run.status)}>{outline.run.status ?? "—"}</Badge>
-          <span className="font-mono text-xs text-muted-foreground">{outline.run.id}</span>
-          <button onClick={reload} className="ml-auto text-label text-muted-foreground hover:text-foreground">
-            refresh
-          </button>
+          <span className="truncate font-mono text-xs text-muted-foreground">{outline.run.id}</span>
+          <Button variant="ghost" size="sm" onClick={reload} className="ml-auto">
+            <RotateCw className="h-3.5 w-3.5" />
+            Refresh
+          </Button>
         </div>
-        {outline.run.summary && <div className="mt-1.5 text-sm text-foreground/85">{outline.run.summary}</div>}
-        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-label text-muted-foreground/70">
-          <span>{s.spans} spans</span>
-          {s.failed_spans > 0 && <span className="text-danger">{s.failed_spans} failed</span>}
-          <span>{s.handoffs} handoffs</span>
-          <span>{s.live_events} live events</span>
-          <span>{s.annotations} annotations</span>
+        {outline.run.summary && <div className="mt-2 text-sm text-foreground">{outline.run.summary}</div>}
+        <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          <span>
+            <span className="font-semibold text-foreground">{s.spans}</span> spans
+          </span>
+          {s.failed_spans > 0 && (
+            <span className="font-medium text-danger">{s.failed_spans} failed</span>
+          )}
+          <span>
+            <span className="font-semibold text-foreground">{s.handoffs}</span> handoffs
+          </span>
+          <span>
+            <span className="font-semibold text-foreground">{s.live_events}</span> live events
+          </span>
+          <span>
+            <span className="font-semibold text-foreground">{s.annotations}</span> annotations
+          </span>
         </div>
         {outline.subagents.length > 0 && (
-          <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            <Users className="h-3.5 w-3.5 text-muted-foreground/60" />
+          <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-border/70 pt-3">
+            <Users className="h-3.5 w-3.5 text-muted-foreground" />
             {outline.subagents.map((sa) => (
               <span
                 key={sa.root_span_id}
-                className="rounded border border-white/10 bg-white/[0.03] px-1.5 py-0.5 text-label text-muted-foreground"
+                className="rounded-md border border-border bg-muted/60 px-2 py-0.5 text-label font-medium text-muted-foreground"
                 title={`trigger: ${sa.trigger}`}
               >
                 {sa.name || "subagent"}
@@ -78,10 +90,11 @@ export function RunDetail({ runId }: { runId: string }) {
       </div>
 
       {/* Split: navigator | inspector */}
-      <div className="flex min-h-0 flex-1">
-        <div className="flex min-w-0 flex-1 flex-col border-r border-white/[0.06]">
-          <div className="flex shrink-0 items-center gap-2 border-b border-white/[0.06] px-3 py-1.5">
+      <div className="surface flex min-h-0 flex-1 overflow-hidden">
+        <div className="flex min-w-0 flex-1 flex-col border-r border-border">
+          <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
             <Tabs
+              variant="segment"
               tabs={[
                 { value: "tree", label: "Span tree" },
                 { value: "timeline", label: "Timeline" },
@@ -102,8 +115,9 @@ export function RunDetail({ runId }: { runId: string }) {
         </div>
 
         <div className="flex w-[44%] min-w-0 flex-col">
-          <div className="flex shrink-0 items-center gap-2 border-b border-white/[0.06] px-3 py-1.5">
+          <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
             <Tabs
+              variant="segment"
               tabs={[
                 { value: "payload", label: "Payload" },
                 { value: "live", label: "Live" },

@@ -34,28 +34,36 @@ function Row({
     <div>
       <div
         className={cn(
-          "group flex cursor-pointer items-center gap-1 rounded py-[3px] pr-2 text-xs",
-          selected ? "bg-primary/15" : "hover:bg-white/[0.04]",
+          "group flex cursor-pointer items-center gap-1.5 rounded-md border-l-2 py-[4px] pr-2 text-xs transition-colors",
+          selected
+            ? "border-primary bg-accent"
+            : "border-transparent hover:bg-muted",
+          failed && !selected && "border-danger/40",
         )}
         style={{ paddingLeft: depth * 14 + 4 }}
         onClick={() => onSelect(node.id)}
       >
         <button
-          className={cn("flex h-4 w-4 shrink-0 items-center justify-center", !hasChildren && "invisible")}
+          className={cn(
+            "flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground",
+            !hasChildren && "invisible",
+          )}
           onClick={(e) => {
             e.stopPropagation();
             setOpen((o) => !o);
           }}
         >
-          <ChevronRight className={cn("h-3 w-3 text-muted-foreground transition-transform", open && "rotate-90")} />
+          <ChevronRight className={cn("h-3 w-3 transition-transform", open && "rotate-90")} />
         </button>
         <span className="flex h-4 w-4 shrink-0 items-center justify-center">{kindIcon(kind)}</span>
-        <span className={cn("truncate", failed ? "text-danger" : "text-foreground/90")}>
-          {node.name || <span className="text-muted-foreground italic">unnamed</span>}
+        <span className={cn("truncate font-mono", failed ? "font-medium text-danger" : "text-foreground")}>
+          {node.name || <span className="italic text-muted-foreground">unnamed</span>}
         </span>
         {failed && <AlertTriangle className="h-3 w-3 shrink-0 text-danger" />}
-        {node.model && <span className="shrink-0 truncate font-mono text-label text-muted-foreground/70">{node.model}</span>}
-        <span className="ml-auto shrink-0 font-mono text-label text-muted-foreground/60">{fmtDuration(dur)}</span>
+        {node.model && (
+          <span className="shrink-0 truncate font-mono text-label text-muted-foreground">{node.model}</span>
+        )}
+        <span className="ml-auto shrink-0 font-mono text-label text-muted-foreground">{fmtDuration(dur)}</span>
       </div>
       {hasChildren && open && (
         <div>

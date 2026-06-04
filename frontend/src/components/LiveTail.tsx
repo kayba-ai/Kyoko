@@ -3,6 +3,7 @@ import type { LiveEvent, LiveEventKind } from "@/lib/types";
 import { api } from "@/lib/api";
 import { useLiveEvent } from "@/hooks/useLiveBus";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Empty } from "@/components/ui/misc";
 
 const KIND_TONE: Record<LiveEventKind, NonNullable<BadgeProps["tone"]>> = {
@@ -10,7 +11,7 @@ const KIND_TONE: Record<LiveEventKind, NonNullable<BadgeProps["tone"]>> = {
   tool_start: "tool",
   tool_result: "tool",
   status: "primary",
-  message: "llm",
+  message: "neutral",
   error: "danger",
   other: "neutral",
 };
@@ -55,18 +56,25 @@ export function LiveTail({ runId }: { runId: string }) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex shrink-0 items-center justify-between border-b border-white/[0.06] px-3 py-1.5">
-        <span className="text-label text-muted-foreground">{events.length} events</span>
-        <label className="flex items-center gap-1.5 text-label text-muted-foreground">
-          <input type="checkbox" checked={autoscroll} onChange={(e) => setAutoscroll(e.target.checked)} />
-          follow
-        </label>
+      <div className="flex shrink-0 items-center justify-between border-b border-border px-3 py-2">
+        <Badge tone="neutral" className="normal-case">{events.length} events</Badge>
+        <Button
+          size="sm"
+          variant={autoscroll ? "secondary" : "ghost"}
+          onClick={() => setAutoscroll((v) => !v)}
+          aria-pressed={autoscroll}
+        >
+          {autoscroll ? "Following" : "Follow"}
+        </Button>
       </div>
       <div className="flex-1 overflow-auto p-2 font-mono text-xs">
         {events.map((e) => (
-          <div key={e.id} className="flex animate-fade-in items-start gap-2 py-0.5">
+          <div
+            key={e.id}
+            className="flex animate-fade-in items-start gap-2 rounded-md px-1.5 py-1 hover:bg-muted"
+          >
             <Badge tone={KIND_TONE[e.kind] ?? "neutral"}>{e.kind}</Badge>
-            <span className="whitespace-pre-wrap break-all text-foreground/85">
+            <span className="whitespace-pre-wrap break-all text-foreground">
               {e.content_preview}
               {e.content_truncated && <span className="text-warn"> …(truncated)</span>}
             </span>
