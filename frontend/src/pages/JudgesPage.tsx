@@ -6,7 +6,7 @@ import { api } from "@/lib/api";
 import { useApi } from "@/hooks/useApi";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/ui/page-header";
-import { MeasurePlane } from "@/components/MeasurePlane";
+import { MeasureTable } from "@/components/MeasureTable";
 import { humanize } from "@/lib/format";
 
 export function JudgesPage() {
@@ -17,11 +17,11 @@ export function JudgesPage() {
     <div className="flex h-full flex-col">
       <PageHeader
         title="Judges"
-        description="LLM-as-judge evaluations — evidence only"
+        description="LLM-as-judge evaluations — baselines and how their scores change. Evidence only."
         icon={<Scale className="h-5 w-5" />}
       />
       <div className="flex flex-1 overflow-hidden">
-        <MeasurePlane
+        <MeasureTable
           defs={defs.data ?? []}
           runs={defRuns.data ?? []}
           loading={defs.loading}
@@ -31,7 +31,7 @@ export function JudgesPage() {
           emptyTitle="No judge templates registered"
           emptyHint="LLM-eval judges are registered with kyoko llm-eval register."
           noRunsHint="Run kyoko llm-eval run to produce measurement data."
-          listExtraBadges={(d) => (
+          typeBadges={(d) => (
             <>
               <Badge tone="neutral">{humanize(d.unit_type)}</Badge>
               <Badge tone="neutral">{humanize(d.output_type)}</Badge>
