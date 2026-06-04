@@ -54,9 +54,11 @@ build step" guidance wherever they conflict.**
     `/v1` to a running `kyoko serve` (default `:8765`; override with `KYOKO_SERVE_URL`).
   - **Transport:** push is **SSE, not WebSocket** (the threaded server's natural fit);
     `src/hooks/useLiveBus.ts` wraps a single `EventSource` over the `run_upsert` /
-    `live_event` / `mcp_log` / `annotation` events. Client→server actions are plain POSTs.
+    `live_event` / `mcp_log` / `annotation` / `analysis_run` events. Client→server actions are plain POSTs.
   - **Pages:** Overview, Runs (list + span-tree/flame/live-tail/payload/annotations detail),
-    Agent ↔ Kyoko (live MCP log), Proposals, Autonomy, Evals & Replay, Settings.
+    Agent ↔ Kyoko (live MCP log), Proposals, Autonomy, Analysis (trigger an analyzer —
+    ace/codex/claude/openclaw/hermes — and manage recurring openclaw/hermes schedules),
+    Evals & Replay, Settings.
   - **SCOPE:** loopback-only, no auth/login, **no profile selector** (single invisible
     profile). The inline-dashboard tests now assert against `_dashboard_html()` directly
     (the fallback), since `GET /` serves the compiled SPA.
@@ -101,7 +103,7 @@ script `kyoko`, entry point `kyoko.cli:main`).
   subparsers, then dispatches with a long `if args.command == "...":` chain, each branch
   delegating to a feature module. To add a command: add an `add_parser(...)` block and a
   matching dispatch branch, then wire it to the feature module's function.
-- **`storage.py`** owns the SQLite schema (`SCHEMA_VERSION`, currently 27), `connect()`,
+- **`storage.py`** owns the SQLite schema (`SCHEMA_VERSION`, currently 28), `connect()`,
   and `initialize_database()`. Kyoko **refuses to open a DB whose `user_version` is newer
   than the installed `SCHEMA_VERSION`**. Schema changes mean bumping `SCHEMA_VERSION` and
   adding a migration (additive `CREATE TABLE IF NOT EXISTS` + `_ensure_column`, or a
@@ -110,7 +112,8 @@ script `kyoko`, entry point `kyoko.cli:main`).
   learning_proposals, issues, skills, `check_specs`/`check_locks`/`check_runs` (the gate's
   apply-check plane), `eval_definitions`/`eval_measure_runs`/`eval_measure_results` (the
   measurement plane), replay_runs, patch_transactions, payload_blobs, autonomy_policies,
-  live_events, mcp_log, annotations, and a per-span FTS5 search index) is specified in
+  live_events, mcp_log, annotations, `analysis_schedules` (recurring openclaw/hermes
+  analysis runs — schema 28), and a per-span FTS5 search index) is specified in
   `docs/specs/0001-canonical-model.md`. **SCOPE
   simplifications applied:** the per-profile `redaction_policies`/`retention_policies`
   tables and the `redaction_audit_events` ledger were removed (redaction is a single global
@@ -123,7 +126,11 @@ script `kyoko`, entry point `kyoko.cli:main`).
   etc.). Keep CLI and API behavior in sync when changing a feature.
 - **Feature modules** map closely to command groups: `proposals.py`, `apply.py`,
   `evals.py`, `replay_adapters.py`/`replay_servers.py`, `autonomy_runner.py`, `harness.py`,
-  `improve.py`, `analyze.py`, `operator_adapters.py`, `profiles.py`/`profile_next.py`,
+  `improve.py`, `analyze.py`, `operator_adapters.py`, `analysis_runner.py` (dashboard-driven
+  analysis: one `execute_analysis_job` does refresh-import → scope (`all`/`new` via an
+  optional `since` cutoff)/`run` → dispatch to ace/codex/claude/openclaw/hermes → the normal
+  autonomy gate; plus a single-worker `AnalysisRunner` + a `Scheduler` daemon thread that
+  `kyoko serve` starts for recurring openclaw/hermes schedules), `profiles.py`/`profile_next.py`,
   `retention.py` (manual age-cutoff prune), `redaction.py` (a single global redact-on-export
   default — `DEFAULT_REDACTION_POLICY` + `redact_evidence_bundle`), `issues.py` (first-class
   Issue evidence entity — create/list/get/status, outside the gate), `event_envelope.py`
