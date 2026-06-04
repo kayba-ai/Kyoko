@@ -43,7 +43,9 @@ def analyze_with_mock_operator(
     output_dir: Path,
     profile_id: Optional[str] = None,
     run_id: Optional[str] = None,
+    since: Optional[str] = None,
     schema_path: Optional[Path] = None,
+    schedule_id: Optional[str] = None,
 ) -> AnalyzeReport:
     prompt_report = write_operator_prompt_artifacts(
         db_path=db_path,
@@ -51,6 +53,7 @@ def analyze_with_mock_operator(
         target="mock",
         profile_id=profile_id,
         run_id=run_id,
+        since=since,
         schema_path=schema_path,
     )
     resolved_schema_path = prompt_report.schema_path
@@ -66,6 +69,8 @@ def analyze_with_mock_operator(
         command=None,
         schema_path=resolved_schema_path,
         max_retries=0,
+        analyzed_since=since,
+        schedule_id=schedule_id,
     )
 
     try:
@@ -114,12 +119,14 @@ def analyze_with_command_operator(
     operator_label: str = "command",
     profile_id: Optional[str] = None,
     run_id: Optional[str] = None,
+    since: Optional[str] = None,
     schema_path: Optional[Path] = None,
     timeout_seconds: int = 120,
     operator_kind: str = "generic",
     adapter_id: Optional[str] = None,
     max_retries: int = 0,
     prompt_suffix: Optional[str] = None,
+    schedule_id: Optional[str] = None,
 ) -> AnalyzeReport:
     if not command:
         raise AnalyzeError("operator_command_required")
@@ -132,6 +139,7 @@ def analyze_with_command_operator(
         target=operator_kind if operator_kind else operator_label,
         profile_id=profile_id,
         run_id=run_id,
+        since=since,
         schema_path=schema_path,
     )
     resolved_schema_path = prompt_report.schema_path
@@ -159,6 +167,8 @@ def analyze_with_command_operator(
         command=command,
         schema_path=resolved_schema_path,
         max_retries=max_retries,
+        analyzed_since=since,
+        schedule_id=schedule_id,
     )
 
     env = os.environ.copy()
@@ -648,6 +658,8 @@ def _insert_operator_run(
     command: Optional[Sequence[str]],
     schema_path: Optional[Path],
     max_retries: int,
+    analyzed_since: Optional[str] = None,
+    schedule_id: Optional[str] = None,
 ) -> str:
     initialize_database(db_path)
     operator_run_id = f"oprun_{utc_now().replace(':', '').replace('-', '').replace('Z', '')}_{uuid.uuid4().hex[:8]}"
@@ -677,10 +689,12 @@ def _insert_operator_run(
               proposal_id,
               error,
               metadata_json,
+              schedule_id,
+              analyzed_since,
               created_at,
               updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 operator_run_id,
@@ -697,6 +711,8 @@ def _insert_operator_run(
                 None,
                 None,
                 _json_dumps(metadata),
+                schedule_id,
+                analyzed_since,
                 now,
                 now,
             ),

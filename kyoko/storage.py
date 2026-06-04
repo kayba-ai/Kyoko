@@ -4,13 +4,14 @@ import base64
 import hashlib
 import json
 import sqlite3
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
 
-SCHEMA_VERSION = 27
+SCHEMA_VERSION = 28
 
 
 class StorageError(Exception):
@@ -727,6 +728,38 @@ CREATE INDEX IF NOT EXISTS idx_eval_definitions_profile_id ON eval_definitions(p
 CREATE INDEX IF NOT EXISTS idx_eval_measure_runs_profile_id ON eval_measure_runs(profile_id);
 CREATE INDEX IF NOT EXISTS idx_eval_measure_runs_definition_id ON eval_measure_runs(eval_definition_id);
 CREATE INDEX IF NOT EXISTS eval_measure_results_run ON eval_measure_results(eval_run_id);
+
+-- v28: recurring analysis schedules. A local single-user convenience (SCOPE: the
+-- scheduler is a background thread inside `kyoko serve`; rows persist so they survive
+-- restarts but only fire while the server runs). Each schedule re-imports new traces
+-- from a connected source (openclaw/hermes) and runs that same operator over the new
+-- runs, through the normal autonomy gate. `watermark` is the max run `started_at`
+-- already analyzed; only newer runs are analyzed on the next fire.
+CREATE TABLE IF NOT EXISTS analysis_schedules (
+  id TEXT PRIMARY KEY,
+  profile_id TEXT NOT NULL,
+  analyzer_kind TEXT NOT NULL,          -- openclaw | hermes
+  adapter_id TEXT,                      -- operator adapter that does the analysis
+  source_kind TEXT,                     -- openclaw_sessions | hermes_kanban
+  source_path TEXT,                     -- path re-imported on each fire (idempotent)
+  refresh_import INTEGER NOT NULL DEFAULT 1,
+  interval_hours INTEGER NOT NULL DEFAULT 24,
+  at_time TEXT,                         -- 'HH:MM' local anchor, NULL = interval-only
+  enabled INTEGER NOT NULL DEFAULT 1,
+  run_autonomy INTEGER NOT NULL DEFAULT 1,
+  watermark TEXT,                       -- last analyzed run cutoff (ISO)
+  last_run_at TEXT,
+  next_run_at TEXT,
+  last_status TEXT,
+  last_operator_run_id TEXT,
+  last_error TEXT,
+  metadata_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (profile_id) REFERENCES profiles(id)
+);
+CREATE INDEX IF NOT EXISTS idx_analysis_schedules_profile_id ON analysis_schedules(profile_id);
+CREATE INDEX IF NOT EXISTS idx_analysis_schedules_enabled ON analysis_schedules(enabled);
 """
 
 
@@ -958,6 +991,7 @@ STATUS_TABLES = [
     "operator_runs",
     "patch_transactions",
     "issues",
+    "analysis_schedules",
 ]
 
 
@@ -1010,6 +1044,10 @@ def initialize_database(db_path: Path) -> None:
         connection.executescript(SCHEMA_SQL)
         # v27: per-issue free-text review comment (evidence triage; never gated).
         _ensure_column(connection, "issues", "review_comment", "review_comment TEXT")
+        # v28: link operator_runs back to the schedule that triggered them (if any)
+        # and record the "new traces" cutoff that scoped the analysis.
+        _ensure_column(connection, "operator_runs", "schedule_id", "schedule_id TEXT")
+        _ensure_column(connection, "operator_runs", "analyzed_since", "analyzed_since TEXT")
         _ensure_column(connection, "skills", "human_lock_reason", "human_lock_reason TEXT")
         _ensure_column(
             connection,
@@ -1738,3 +1776,263 @@ def _backfill_spans_fts(connection: sqlite3.Connection) -> None:
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+# ---------------------------------------------------------------------------
+# Analysis schedules (v28). Recurring openclaw/hermes analysis runs. These are a
+# local single-user convenience; the scheduler thread in `kyoko serve` reads these
+# rows. No autonomy shortcut lives here — a fired schedule runs the normal gate.
+# ---------------------------------------------------------------------------
+
+ANALYSIS_SCHEDULE_ANALYZER_KINDS = ("openclaw", "hermes")
+_ANALYZER_SOURCE_KIND = {
+    "openclaw": "openclaw_sessions",
+    "hermes": "hermes_kanban",
+}
+
+
+def _resolve_schedule_profile_id(connection: sqlite3.Connection, profile_id: Optional[str]) -> str:
+    if profile_id:
+        if connection.execute("SELECT 1 FROM profiles WHERE id = ?", (profile_id,)).fetchone() is None:
+            raise StorageError(f"profile_not_found:{profile_id}")
+        return profile_id
+    row = connection.execute("SELECT id FROM profiles ORDER BY created_at, id LIMIT 1").fetchone()
+    if row is None:
+        raise StorageError("no_profiles_found")
+    return str(row["id"])
+
+
+def create_analysis_schedule(
+    *,
+    db_path: Path,
+    analyzer_kind: str,
+    adapter_id: Optional[str] = None,
+    source_path: Optional[str] = None,
+    refresh_import: bool = True,
+    interval_hours: int = 24,
+    at_time: Optional[str] = None,
+    enabled: bool = True,
+    run_autonomy: bool = True,
+    next_run_at: Optional[str] = None,
+    profile_id: Optional[str] = None,
+    metadata: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
+    if analyzer_kind not in ANALYSIS_SCHEDULE_ANALYZER_KINDS:
+        raise StorageError(f"unsupported_schedule_analyzer:{analyzer_kind}")
+    if int(interval_hours) <= 0:
+        raise StorageError("interval_hours_must_be_positive")
+    if at_time is not None and not _valid_hhmm(at_time):
+        raise StorageError(f"invalid_at_time:{at_time}")
+    initialize_database(db_path)
+    now = utc_now()
+    schedule_id = f"sched_{uuid.uuid4().hex[:12]}"
+    with connect(db_path) as connection:
+        resolved_profile_id = _resolve_schedule_profile_id(connection, profile_id)
+        connection.execute(
+            """
+            INSERT INTO analysis_schedules (
+              id, profile_id, analyzer_kind, adapter_id, source_kind, source_path,
+              refresh_import, interval_hours, at_time, enabled, run_autonomy,
+              watermark, last_run_at, next_run_at, last_status, last_operator_run_id,
+              last_error, metadata_json, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, NULL, NULL, NULL, ?, ?, ?)
+            """,
+            (
+                schedule_id,
+                resolved_profile_id,
+                analyzer_kind,
+                adapter_id or analyzer_kind,
+                _ANALYZER_SOURCE_KIND.get(analyzer_kind),
+                source_path,
+                1 if refresh_import else 0,
+                int(interval_hours),
+                at_time,
+                1 if enabled else 0,
+                1 if run_autonomy else 0,
+                next_run_at,
+                json.dumps(metadata or {}, sort_keys=True, separators=(",", ":")),
+                now,
+                now,
+            ),
+        )
+    return get_analysis_schedule(db_path=db_path, schedule_id=schedule_id)  # type: ignore[return-value]
+
+
+def update_analysis_schedule(
+    *,
+    db_path: Path,
+    schedule_id: str,
+    **fields: Any,
+) -> dict[str, Any]:
+    allowed = {
+        "adapter_id",
+        "source_path",
+        "refresh_import",
+        "interval_hours",
+        "at_time",
+        "enabled",
+        "run_autonomy",
+        "next_run_at",
+        "watermark",
+    }
+    initialize_database(db_path)
+    sets: list[str] = []
+    params: list[Any] = []
+    for key, value in fields.items():
+        if key not in allowed:
+            raise StorageError(f"unsupported_schedule_field:{key}")
+        if key == "at_time" and value is not None and not _valid_hhmm(str(value)):
+            raise StorageError(f"invalid_at_time:{value}")
+        if key in {"refresh_import", "enabled", "run_autonomy"}:
+            value = 1 if value else 0
+        if key == "interval_hours":
+            value = int(value)
+            if value <= 0:
+                raise StorageError("interval_hours_must_be_positive")
+        sets.append(f"{key} = ?")
+        params.append(value)
+    if not sets:
+        existing = get_analysis_schedule(db_path=db_path, schedule_id=schedule_id)
+        if existing is None:
+            raise StorageError(f"analysis_schedule_not_found:{schedule_id}")
+        return existing
+    sets.append("updated_at = ?")
+    params.append(utc_now())
+    params.append(schedule_id)
+    with connect(db_path) as connection:
+        cursor = connection.execute(
+            f"UPDATE analysis_schedules SET {', '.join(sets)} WHERE id = ?",
+            tuple(params),
+        )
+        if cursor.rowcount == 0:
+            raise StorageError(f"analysis_schedule_not_found:{schedule_id}")
+    return get_analysis_schedule(db_path=db_path, schedule_id=schedule_id)  # type: ignore[return-value]
+
+
+def record_schedule_result(
+    *,
+    db_path: Path,
+    schedule_id: str,
+    last_run_at: str,
+    last_status: str,
+    last_operator_run_id: Optional[str] = None,
+    last_error: Optional[str] = None,
+    watermark: Optional[str] = None,
+) -> None:
+    """Record the outcome of a fired schedule. Does NOT touch ``next_run_at`` — the
+    scheduler owns that and sets it when it picks the schedule up."""
+
+    with connect(db_path) as connection:
+        connection.execute(
+            """
+            UPDATE analysis_schedules
+            SET last_run_at = ?,
+                last_status = ?,
+                last_operator_run_id = ?,
+                last_error = ?,
+                watermark = COALESCE(?, watermark),
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                last_run_at,
+                last_status,
+                last_operator_run_id,
+                last_error,
+                watermark,
+                utc_now(),
+                schedule_id,
+            ),
+        )
+
+
+def list_analysis_schedules(db_path: Path, *, enabled_only: bool = False) -> list[dict[str, Any]]:
+    if not db_path.exists():
+        return []
+    initialize_database(db_path)
+    where = " WHERE enabled = 1" if enabled_only else ""
+    with connect(db_path) as connection:
+        try:
+            rows = connection.execute(
+                f"SELECT * FROM analysis_schedules{where} ORDER BY created_at, id"
+            ).fetchall()
+        except sqlite3.OperationalError:
+            return []
+    return [_decode_analysis_schedule(row) for row in rows]
+
+
+def get_analysis_schedule(*, db_path: Path, schedule_id: str) -> Optional[dict[str, Any]]:
+    initialize_database(db_path)
+    with connect(db_path) as connection:
+        row = connection.execute(
+            "SELECT * FROM analysis_schedules WHERE id = ?", (schedule_id,)
+        ).fetchone()
+    return _decode_analysis_schedule(row) if row is not None else None
+
+
+def delete_analysis_schedule(*, db_path: Path, schedule_id: str) -> bool:
+    initialize_database(db_path)
+    with connect(db_path) as connection:
+        cursor = connection.execute(
+            "DELETE FROM analysis_schedules WHERE id = ?", (schedule_id,)
+        )
+    return cursor.rowcount > 0
+
+
+def runs_newer_than(
+    db_path: Path,
+    *,
+    profile_id: str,
+    since: Optional[str],
+) -> tuple[int, Optional[str]]:
+    """Return ``(count, max_started_at)`` for runs newer than ``since`` (None = all)."""
+
+    with connect(db_path) as connection:
+        if since:
+            row = connection.execute(
+                """
+                SELECT COUNT(*) AS n, MAX(started_at) AS max_started
+                FROM runs
+                WHERE profile_id = ? AND started_at > ?
+                """,
+                (profile_id, since),
+            ).fetchone()
+        else:
+            row = connection.execute(
+                """
+                SELECT COUNT(*) AS n, MAX(started_at) AS max_started
+                FROM runs
+                WHERE profile_id = ?
+                """,
+                (profile_id,),
+            ).fetchone()
+    count = int(row["n"]) if row is not None and row["n"] is not None else 0
+    max_started = row["max_started"] if row is not None else None
+    return count, (str(max_started) if max_started is not None else None)
+
+
+def _valid_hhmm(value: str) -> bool:
+    parts = value.split(":")
+    if len(parts) != 2:
+        return False
+    hh, mm = parts
+    if not (hh.isdigit() and mm.isdigit()):
+        return False
+    return 0 <= int(hh) <= 23 and 0 <= int(mm) <= 59
+
+
+def _decode_analysis_schedule(row: sqlite3.Row) -> dict[str, Any]:
+    payload = dict(row)
+    payload["refresh_import"] = bool(payload.get("refresh_import"))
+    payload["enabled"] = bool(payload.get("enabled"))
+    payload["run_autonomy"] = bool(payload.get("run_autonomy"))
+    metadata_json = payload.pop("metadata_json", None)
+    if isinstance(metadata_json, str):
+        try:
+            payload["metadata"] = json.loads(metadata_json)
+        except json.JSONDecodeError:
+            payload["metadata"] = {}
+    else:
+        payload["metadata"] = {}
+    return payload

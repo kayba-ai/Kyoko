@@ -136,10 +136,12 @@ def run_registered_operator_adapter(
     output_dir: Optional[Path] = None,
     profile_id: Optional[str] = None,
     run_id: Optional[str] = None,
+    since: Optional[str] = None,
     schema_path: Optional[Path] = None,
     timeout_seconds: Optional[int] = None,
     max_retries: int = 0,
     prompt_suffix: Optional[str] = None,
+    schedule_id: Optional[str] = None,
 ) -> AnalyzeReport:
     initialize_database(db_path)
     with connect(db_path) as connection:
@@ -163,12 +165,14 @@ def run_registered_operator_adapter(
             operator_label=adapter_id,
             profile_id=selected_profile_id,
             run_id=run_id,
+            since=since,
             schema_path=schema_path,
             timeout_seconds=selected_timeout,
             operator_kind=str(adapter["operator_kind"]),
             adapter_id=adapter_id,
             max_retries=max_retries,
             prompt_suffix=prompt_suffix,
+            schedule_id=schedule_id,
         )
     except AnalyzeError as exc:
         raise OperatorAdapterError(str(exc)) from exc

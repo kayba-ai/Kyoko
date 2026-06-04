@@ -45,6 +45,7 @@ EVENT_RUN_UPSERT = "run_upsert"
 EVENT_CLEAR = "clear"
 EVENT_MCP_LOG = "mcp_log"
 EVENT_ANNOTATION = "annotation"
+EVENT_ANALYSIS = "analysis_run"
 EVENT_PING = "ping"
 
 # Inline preview cap (characters) for redacted live content. Token deltas are small;

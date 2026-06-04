@@ -32,6 +32,7 @@ def write_operator_prompt_artifacts(
     target: str = "generic",
     profile_id: Optional[str] = None,
     run_id: Optional[str] = None,
+    since: Optional[str] = None,
     schema_path: Optional[Path] = None,
 ) -> OperatorPromptReport:
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -39,6 +40,7 @@ def write_operator_prompt_artifacts(
         db_path=db_path,
         profile_id=profile_id,
         run_id=run_id,
+        since=since,
         consumer=f"operator_prompt:{target}",
     )
     evidence_path = output_dir / "evidence-bundle.json"

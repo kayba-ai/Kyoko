@@ -23,6 +23,7 @@ def build_evidence_bundle(
     db_path: Path,
     profile_id: Optional[str] = None,
     run_id: Optional[str] = None,
+    since: Optional[str] = None,
     consumer: str = "evidence_bundle",
 ) -> dict[str, Any]:
     if not db_path.exists():
@@ -42,6 +43,7 @@ def build_evidence_bundle(
             "schema_version": EVIDENCE_BUNDLE_VERSION,
             "profile_id": selected_profile_id,
             "run_id": run_id,
+            "since": since,
             "profile": _one(
                 connection,
                 "SELECT * FROM profiles WHERE id = ?",
@@ -69,10 +71,12 @@ def build_evidence_bundle(
             ),
             "tasks": _profile_or_run_tasks(connection, selected_profile_id, run_id),
             "task_attempts": _profile_or_run_task_attempts(connection, selected_profile_id, run_id),
-            "runs": _profile_or_run_rows(connection, "runs", selected_profile_id, run_id),
-            "spans": _profile_or_run_spans(connection, selected_profile_id, run_id),
-            "handoffs": _profile_or_run_handoffs(connection, selected_profile_id, run_id),
-            "timeline_events": _profile_or_run_timeline_events(connection, selected_profile_id, run_id),
+            "runs": _runs_rows(connection, selected_profile_id, run_id, since),
+            "spans": _profile_or_run_spans(connection, selected_profile_id, run_id, since),
+            "handoffs": _profile_or_run_handoffs(connection, selected_profile_id, run_id, since),
+            "timeline_events": _profile_or_run_timeline_events(
+                connection, selected_profile_id, run_id, since
+            ),
             "learning_proposals": _profile_or_run_rows(
                 connection,
                 "learning_proposals",
@@ -181,13 +185,43 @@ def _profile_or_run_rows(
     return _all(connection, f"SELECT * FROM {table} WHERE id = ? ORDER BY id", (run_id,))
 
 
+def _runs_rows(
+    connection: sqlite3.Connection,
+    profile_id: str,
+    run_id: Optional[str],
+    since: Optional[str],
+) -> list[dict[str, Any]]:
+    if run_id is not None:
+        return _all(connection, "SELECT * FROM runs WHERE id = ? ORDER BY id", (run_id,))
+    if since:
+        return _all(
+            connection,
+            "SELECT * FROM runs WHERE profile_id = ? AND started_at > ? ORDER BY id",
+            (profile_id, since),
+        )
+    return _all(connection, "SELECT * FROM runs WHERE profile_id = ? ORDER BY id", (profile_id,))
+
+
 def _profile_or_run_spans(
     connection: sqlite3.Connection,
     profile_id: str,
     run_id: Optional[str],
+    since: Optional[str] = None,
 ) -> list[dict[str, Any]]:
     if run_id is not None:
         return _all(connection, "SELECT * FROM spans WHERE run_id = ? ORDER BY started_at, id", (run_id,))
+    if since:
+        return _all(
+            connection,
+            """
+            SELECT spans.*
+            FROM spans
+            JOIN runs ON runs.id = spans.run_id
+            WHERE runs.profile_id = ? AND runs.started_at > ?
+            ORDER BY spans.started_at, spans.id
+            """,
+            (profile_id, since),
+        )
     return _all(
         connection,
         """
@@ -205,12 +239,24 @@ def _profile_or_run_handoffs(
     connection: sqlite3.Connection,
     profile_id: str,
     run_id: Optional[str],
+    since: Optional[str] = None,
 ) -> list[dict[str, Any]]:
     if run_id is not None:
         return _all(
             connection,
             "SELECT * FROM handoffs WHERE run_id = ? ORDER BY created_at, id",
             (run_id,),
+        )
+    if since:
+        return _all(
+            connection,
+            """
+            SELECT * FROM handoffs
+            WHERE profile_id = ?
+              AND run_id IN (SELECT id FROM runs WHERE profile_id = ? AND started_at > ?)
+            ORDER BY created_at, id
+            """,
+            (profile_id, profile_id, since),
         )
     return _all(
         connection,
@@ -271,8 +317,30 @@ def _profile_or_run_timeline_events(
     connection: sqlite3.Connection,
     profile_id: str,
     run_id: Optional[str],
+    since: Optional[str] = None,
 ) -> list[dict[str, Any]]:
     if run_id is None:
+        if since:
+            return _all(
+                connection,
+                """
+                SELECT *
+                FROM timeline_events
+                WHERE profile_id = ?
+                  AND (
+                    (entity_type = 'run' AND entity_id IN (
+                       SELECT id FROM runs WHERE profile_id = ? AND started_at > ?))
+                    OR (entity_type = 'span' AND entity_id IN (
+                       SELECT spans.id FROM spans JOIN runs ON runs.id = spans.run_id
+                       WHERE runs.profile_id = ? AND runs.started_at > ?))
+                    OR (entity_type = 'handoff' AND entity_id IN (
+                       SELECT handoffs.id FROM handoffs JOIN runs ON runs.id = handoffs.run_id
+                       WHERE runs.profile_id = ? AND runs.started_at > ?))
+                  )
+                ORDER BY at, id
+                """,
+                (profile_id, profile_id, since, profile_id, since, profile_id, since),
+            )
         return _all(
             connection,
             "SELECT * FROM timeline_events WHERE profile_id = ? ORDER BY at, id",

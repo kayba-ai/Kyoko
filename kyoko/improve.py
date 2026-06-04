@@ -71,6 +71,7 @@ def run_improvement_loop(
     operator_max_retries: int = 0,
     profile_id: Optional[str] = None,
     run_id: Optional[str] = None,
+    since: Optional[str] = None,
     schema_path: Optional[Path] = None,
     replay_adapter_id: Optional[str] = None,
     replay_output_dir: Optional[Path] = None,
@@ -80,6 +81,7 @@ def run_improvement_loop(
     source_candidate_id: Optional[str] = None,
     source_home: Optional[Path] = None,
     source_import_output_dir: Optional[Path] = None,
+    schedule_id: Optional[str] = None,
 ) -> ImproveReport:
     initialize_database(db_path)
     selected_output_dir = output_dir or _default_output_dir(db_path)
@@ -115,7 +117,9 @@ def run_improvement_loop(
             operator_max_retries=operator_max_retries,
             profile_id=profile_id,
             run_id=run_id,
+            since=since,
             schema_path=schema_path,
+            schedule_id=schedule_id,
         )
         proposal_id = analyze_report.proposal_id
         profile_id = analyze_report.profile_id
@@ -213,6 +217,8 @@ def _run_analysis(
     profile_id: Optional[str],
     run_id: Optional[str],
     schema_path: Optional[Path],
+    since: Optional[str] = None,
+    schedule_id: Optional[str] = None,
 ) -> AnalyzeReport:
     if operator == "mock":
         return analyze_with_mock_operator(
@@ -220,7 +226,9 @@ def _run_analysis(
             output_dir=output_dir,
             profile_id=profile_id,
             run_id=run_id,
+            since=since,
             schema_path=schema_path,
+            schedule_id=schedule_id,
         )
     if operator == "command":
         if operator_command is None:
@@ -233,9 +241,11 @@ def _run_analysis(
                 operator_label="command",
                 profile_id=profile_id,
                 run_id=run_id,
+                since=since,
                 schema_path=schema_path,
                 timeout_seconds=operator_timeout_seconds,
                 max_retries=operator_max_retries,
+                schedule_id=schedule_id,
             )
         except AnalyzeError as exc:
             raise ImproveError(str(exc)) from exc
@@ -250,9 +260,11 @@ def _run_analysis(
             output_dir=output_dir,
             profile_id=profile_id,
             run_id=run_id,
+            since=since,
             schema_path=schema_path,
             timeout_seconds=operator_timeout_seconds,
             max_retries=operator_max_retries,
+            schedule_id=schedule_id,
         )
     except OperatorAdapterError as exc:
         raise ImproveError(str(exc)) from exc

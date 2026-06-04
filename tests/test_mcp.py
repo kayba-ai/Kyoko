@@ -435,7 +435,7 @@ class McpTests(unittest.TestCase):
             )
 
             self.assertFalse(status["isError"])
-            self.assertEqual(status["structuredContent"]["schema_version"], 27)
+            self.assertEqual(status["structuredContent"]["schema_version"], 28)
             self.assertEqual(
                 profiles["structuredContent"]["profiles"][0]["id"],
                 "profile_news_research_001",
