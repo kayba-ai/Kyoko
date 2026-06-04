@@ -11,14 +11,18 @@ export default {
         mono: ["'JetBrains Mono'", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
       },
       fontSize: {
-        label: ["12px", "16px"],
-        xs: ["12px", "16px"],
-        sm: ["12px", "18px"],
-        base: ["13px", "20px"],
-        md: ["14px", "22px"],
-        lg: ["16px", "24px"],
-        xl: ["20px", "28px"],
-        "2xl": ["24px", "32px"],
+        // Sizes are rem-relative so the whole UI scales from one knob: the html
+        // root font-size (see index.css). rem values mirror the prior px scale
+        // at a 16px base; the root is nudged up so everything reads a tad bigger
+        // (closer to kayba-hosted) without re-tuning each token.
+        label: ["0.75rem", "1rem"], /* 12/16 */
+        xs: ["0.75rem", "1rem"], /* 12/16 */
+        sm: ["0.75rem", "1.125rem"], /* 12/18 */
+        base: ["0.8125rem", "1.25rem"], /* 13/20 */
+        md: ["0.875rem", "1.375rem"], /* 14/22 */
+        lg: ["1rem", "1.5rem"], /* 16/24 */
+        xl: ["1.25rem", "1.75rem"], /* 20/28 */
+        "2xl": ["1.5rem", "2rem"], /* 24/32 */
       },
       colors: {
         border: "hsl(var(--border))",

@@ -82,6 +82,10 @@
 
   html {
     color-scheme: light;
+    /* Single global scale knob. rem-based type + spacing key off this, so a
+       small bump above the 16px default makes the whole UI read a tad bigger
+       (closer to kayba-hosted). Tweak this one value to taste. */
+    font-size: 17.5px;
   }
   html.dark {
     color-scheme: dark;
@@ -96,7 +100,7 @@
     background: hsl(var(--background));
     color: hsl(var(--foreground));
     font-family: theme("fontFamily.sans");
-    font-size: 14px;
+    font-size: 0.875rem; /* scales with the html root knob (≈ prior 14px) */
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
