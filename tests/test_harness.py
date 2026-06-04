@@ -42,7 +42,7 @@ class HarnessTests(unittest.TestCase):
 
             report = prepare_harness_proposal(
                 db_path=db_path,
-                proposal_id="proposal_harness_timeout_eval_001",
+                proposal_id="proposal_harness_timeout_check_001",
             )
             patch_transactions = list_patch_transactions(db_path)
             proposals = list_learning_proposals(db_path)
@@ -51,7 +51,7 @@ class HarnessTests(unittest.TestCase):
             self.assertEqual(report.state, "pending")
             self.assertEqual(
                 report.patch_transaction_ids,
-                ("patch_proposal_harness_timeout_eval_001_1",),
+                ("patch_proposal_harness_timeout_check_001_1",),
             )
             self.assertEqual(status.counts["patch_transactions"], 1)
             self.assertEqual(status.counts["timeline_events"], 4)
@@ -60,7 +60,7 @@ class HarnessTests(unittest.TestCase):
             self.assertEqual(patch_transactions[0]["patch_kind"], "command_plan")
             self.assertEqual(
                 patch_transactions[0]["target_paths"],
-                ["evals/news_research_timeout_replay.py"],
+                ["checks/news_research_timeout_replay.py"],
             )
             self.assertFalse(patch_transactions[0]["rollback"]["available"])
 
@@ -121,7 +121,7 @@ class HarnessTests(unittest.TestCase):
             )
             lock = set_harness_target_lock(
                 db_path=db_path,
-                target_path="evals/generated_timeout_eval.py",
+                target_path="checks/generated_timeout_check.py",
                 locked=True,
                 reason="manual owner review",
                 actor_agent_identity_id="agent_researcher_001",
@@ -130,13 +130,13 @@ class HarnessTests(unittest.TestCase):
             with self.assertRaisesRegex(HarnessError, "human_locked_harness_target"):
                 prepare_harness_proposal(
                     db_path=db_path,
-                    proposal_id="proposal_harness_generated_eval_001",
+                    proposal_id="proposal_harness_generated_check_001",
                 )
 
             locks = list_harness_target_locks(db_path)
 
             self.assertTrue(lock.human_locked)
-            self.assertEqual(lock.target_path, "evals/generated_timeout_eval.py")
+            self.assertEqual(lock.target_path, "checks/generated_timeout_check.py")
             self.assertEqual(lock.actor_agent_identity_id, "agent_researcher_001")
             self.assertTrue(locks[0]["human_locked"])
             self.assertEqual(locks[0]["reason"], "manual owner review")
@@ -145,7 +145,7 @@ class HarnessTests(unittest.TestCase):
             with self.assertRaisesRegex(HarnessError, "actor_agent_identity_not_found"):
                 set_harness_target_lock(
                     db_path=db_path,
-                    target_path="evals/generated_timeout_eval.py",
+                    target_path="checks/generated_timeout_check.py",
                     locked=True,
                     actor_agent_identity_id="agent_missing",
                 )
@@ -166,7 +166,7 @@ class HarnessTests(unittest.TestCase):
             db_path = Path(tmpdir) / "kyoko.db"
             workspace = Path(tmpdir) / "workspace"
             workspace.mkdir()
-            target = workspace / "evals/generated_timeout_eval.py"
+            target = workspace / "checks/generated_timeout_check.py"
             ingest_source_fixture(db_path, SOURCE_FIXTURE)
             submit_learning_proposal(
                 db_path=db_path,
@@ -176,12 +176,12 @@ class HarnessTests(unittest.TestCase):
             update_autonomy_policy(db_path=db_path, allow_repo_patch=True)
             prepare_harness_proposal(
                 db_path=db_path,
-                proposal_id="proposal_harness_generated_eval_001",
+                proposal_id="proposal_harness_generated_check_001",
             )
 
             apply_report = apply_patch_transaction(
                 db_path=db_path,
-                patch_transaction_id="patch_proposal_harness_generated_eval_001_1",
+                patch_transaction_id="patch_proposal_harness_generated_check_001_1",
                 workspace_root=workspace,
             )
             applied_patches = list_patch_transactions(db_path)
@@ -195,7 +195,7 @@ class HarnessTests(unittest.TestCase):
 
             rollback_report = rollback_patch_transaction(
                 db_path=db_path,
-                patch_transaction_id="patch_proposal_harness_generated_eval_001_1",
+                patch_transaction_id="patch_proposal_harness_generated_check_001_1",
                 workspace_root=workspace,
             )
             rolled_back_patches = list_patch_transactions(db_path)
@@ -211,7 +211,7 @@ class HarnessTests(unittest.TestCase):
             db_path = Path(tmpdir) / "kyoko.db"
             workspace = Path(tmpdir) / "workspace"
             workspace.mkdir()
-            target = workspace / "evals/generated_timeout_eval.py"
+            target = workspace / "checks/generated_timeout_check.py"
             ingest_source_fixture(db_path, SOURCE_FIXTURE)
             submit_learning_proposal(
                 db_path=db_path,
@@ -221,11 +221,11 @@ class HarnessTests(unittest.TestCase):
             update_autonomy_policy(db_path=db_path, allow_repo_patch=True)
             prepare_harness_proposal(
                 db_path=db_path,
-                proposal_id="proposal_harness_generated_eval_001",
+                proposal_id="proposal_harness_generated_check_001",
             )
             set_harness_target_lock(
                 db_path=db_path,
-                target_path="evals/generated_timeout_eval.py",
+                target_path="checks/generated_timeout_check.py",
                 locked=True,
                 actor_agent_identity_id="agent_researcher_001",
             )
@@ -233,7 +233,7 @@ class HarnessTests(unittest.TestCase):
             with self.assertRaisesRegex(HarnessError, "human_locked_harness_target"):
                 apply_patch_transaction(
                     db_path=db_path,
-                    patch_transaction_id="patch_proposal_harness_generated_eval_001_1",
+                    patch_transaction_id="patch_proposal_harness_generated_check_001_1",
                     workspace_root=workspace,
                 )
             self.assertFalse(target.exists())
@@ -241,13 +241,13 @@ class HarnessTests(unittest.TestCase):
 
             unlock = set_harness_target_lock(
                 db_path=db_path,
-                target_path="evals/generated_timeout_eval.py",
+                target_path="checks/generated_timeout_check.py",
                 locked=False,
                 actor_agent_identity_id="agent_researcher_001",
             )
             apply_report = apply_patch_transaction(
                 db_path=db_path,
-                patch_transaction_id="patch_proposal_harness_generated_eval_001_1",
+                patch_transaction_id="patch_proposal_harness_generated_check_001_1",
                 workspace_root=workspace,
             )
 
@@ -260,7 +260,7 @@ class HarnessTests(unittest.TestCase):
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
             workspace = Path(tmpdir) / "workspace"
-            target = workspace / "evals/generated_timeout_eval.py"
+            target = workspace / "checks/generated_timeout_check.py"
             target.parent.mkdir(parents=True)
             target.write_text("previous content\n")
             ingest_source_fixture(db_path, SOURCE_FIXTURE)
@@ -272,17 +272,17 @@ class HarnessTests(unittest.TestCase):
             update_autonomy_policy(db_path=db_path, allow_repo_patch=True)
             prepare_harness_proposal(
                 db_path=db_path,
-                proposal_id="proposal_harness_generated_eval_001",
+                proposal_id="proposal_harness_generated_check_001",
             )
 
             apply_patch_transaction(
                 db_path=db_path,
-                patch_transaction_id="patch_proposal_harness_generated_eval_001_1",
+                patch_transaction_id="patch_proposal_harness_generated_check_001_1",
                 workspace_root=workspace,
             )
             rollback_patch_transaction(
                 db_path=db_path,
-                patch_transaction_id="patch_proposal_harness_generated_eval_001_1",
+                patch_transaction_id="patch_proposal_harness_generated_check_001_1",
                 workspace_root=workspace,
             )
 
@@ -308,13 +308,13 @@ class HarnessTests(unittest.TestCase):
             )
             prepare_harness_proposal(
                 db_path=db_path,
-                proposal_id="proposal_harness_generated_eval_001",
+                proposal_id="proposal_harness_generated_check_001",
             )
 
             with self.assertRaisesRegex(HarnessError, "dirty_worktree_blocks_harness_apply"):
                 apply_patch_transaction(
                     db_path=db_path,
-                    patch_transaction_id="patch_proposal_harness_generated_eval_001_1",
+                    patch_transaction_id="patch_proposal_harness_generated_check_001_1",
                     workspace_root=workspace,
                 )
 
@@ -323,7 +323,7 @@ class HarnessTests(unittest.TestCase):
             db_path = Path(tmpdir) / "kyoko.db"
             workspace = Path(tmpdir) / "workspace"
             workspace.mkdir()
-            target = workspace / "evals/generated_timeout_eval.py"
+            target = workspace / "checks/generated_timeout_check.py"
             subprocess.run(["git", "init"], cwd=workspace, check=True, capture_output=True)
             (workspace / "notes.txt").write_text("unrelated dirty file\n")
             ingest_source_fixture(db_path, SOURCE_FIXTURE)
@@ -339,12 +339,12 @@ class HarnessTests(unittest.TestCase):
             )
             prepare_harness_proposal(
                 db_path=db_path,
-                proposal_id="proposal_harness_generated_eval_001",
+                proposal_id="proposal_harness_generated_check_001",
             )
 
             report = apply_patch_transaction(
                 db_path=db_path,
-                patch_transaction_id="patch_proposal_harness_generated_eval_001_1",
+                patch_transaction_id="patch_proposal_harness_generated_check_001_1",
                 workspace_root=workspace,
             )
 
@@ -355,7 +355,7 @@ class HarnessTests(unittest.TestCase):
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
             workspace = Path(tmpdir) / "workspace"
-            target = workspace / "evals/generated_timeout_eval.py"
+            target = workspace / "checks/generated_timeout_check.py"
             target.parent.mkdir(parents=True)
             target.write_text("dirty target\n")
             subprocess.run(["git", "init"], cwd=workspace, check=True, capture_output=True)
@@ -372,13 +372,13 @@ class HarnessTests(unittest.TestCase):
             )
             prepare_harness_proposal(
                 db_path=db_path,
-                proposal_id="proposal_harness_generated_eval_001",
+                proposal_id="proposal_harness_generated_check_001",
             )
 
             with self.assertRaisesRegex(HarnessError, "dirty_target_paths_block_harness_apply"):
                 apply_patch_transaction(
                     db_path=db_path,
-                    patch_transaction_id="patch_proposal_harness_generated_eval_001_1",
+                    patch_transaction_id="patch_proposal_harness_generated_check_001_1",
                     workspace_root=workspace,
                 )
 
@@ -386,7 +386,7 @@ class HarnessTests(unittest.TestCase):
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
             workspace = Path(tmpdir) / "workspace"
-            target = workspace / "evals/generated_timeout_eval.py"
+            target = workspace / "checks/generated_timeout_check.py"
             target.parent.mkdir(parents=True)
             target.write_text("old\n")
             ingest_source_fixture(db_path, SOURCE_FIXTURE)
@@ -396,10 +396,10 @@ class HarnessTests(unittest.TestCase):
                 kind="patch_diff",
                 media_type="text/x-diff",
                 data=(
-                    "diff --git a/evals/generated_timeout_eval.py b/evals/generated_timeout_eval.py\n"
+                    "diff --git a/checks/generated_timeout_check.py b/checks/generated_timeout_check.py\n"
                     "index 1111111..2222222 100644\n"
-                    "--- a/evals/generated_timeout_eval.py\n"
-                    "+++ b/evals/generated_timeout_eval.py\n"
+                    "--- a/checks/generated_timeout_check.py\n"
+                    "+++ b/checks/generated_timeout_check.py\n"
                     "@@ -1 +1,2 @@\n"
                     "-old\n"
                     "+new\n"
@@ -411,7 +411,7 @@ class HarnessTests(unittest.TestCase):
             proposal["producer"]["session_id"] = "operator_session_harness_unified_diff_001"
             proposal["proposed_changes"][0]["patch_kind"] = "unified_diff"
             proposal["proposed_changes"][0]["diff_ref"] = diff_blob.blob_id
-            proposal["proposed_changes"][0]["target_paths"] = ["evals/generated_timeout_eval.py"]
+            proposal["proposed_changes"][0]["target_paths"] = ["checks/generated_timeout_check.py"]
             proposal["proposed_changes"][0]["command_plan"] = []
             submit_learning_proposal_payload(
                 db_path=db_path,
@@ -450,7 +450,7 @@ class HarnessTests(unittest.TestCase):
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
             workspace = Path(tmpdir) / "workspace"
-            target = workspace / "evals/generated_timeout_eval.py"
+            target = workspace / "checks/generated_timeout_check.py"
             target.parent.mkdir(parents=True)
             target.write_text("unexpected\n")
             ingest_source_fixture(db_path, SOURCE_FIXTURE)
@@ -460,8 +460,8 @@ class HarnessTests(unittest.TestCase):
                 kind="patch_diff",
                 media_type="text/x-diff",
                 data=(
-                    "--- a/evals/generated_timeout_eval.py\n"
-                    "+++ b/evals/generated_timeout_eval.py\n"
+                    "--- a/checks/generated_timeout_check.py\n"
+                    "+++ b/checks/generated_timeout_check.py\n"
                     "@@ -1 +1 @@\n"
                     "-old\n"
                     "+new\n"
@@ -472,7 +472,7 @@ class HarnessTests(unittest.TestCase):
             proposal["producer"]["session_id"] = "operator_session_harness_unified_mismatch_001"
             proposal["proposed_changes"][0]["patch_kind"] = "unified_diff"
             proposal["proposed_changes"][0]["diff_ref"] = diff_blob.blob_id
-            proposal["proposed_changes"][0]["target_paths"] = ["evals/generated_timeout_eval.py"]
+            proposal["proposed_changes"][0]["target_paths"] = ["checks/generated_timeout_check.py"]
             proposal["proposed_changes"][0]["command_plan"] = []
             submit_learning_proposal_payload(
                 db_path=db_path,
@@ -509,13 +509,13 @@ class HarnessTests(unittest.TestCase):
             update_autonomy_policy(db_path=db_path, allow_repo_patch=True)
             prepare_harness_proposal(
                 db_path=db_path,
-                proposal_id="proposal_harness_timeout_eval_001",
+                proposal_id="proposal_harness_timeout_check_001",
             )
 
             with self.assertRaisesRegex(HarnessError, "unsupported_patch_apply_kind"):
                 apply_patch_transaction(
                     db_path=db_path,
-                    patch_transaction_id="patch_proposal_harness_timeout_eval_001_1",
+                    patch_transaction_id="patch_proposal_harness_timeout_check_001_1",
                     workspace_root=workspace,
                 )
 
@@ -532,13 +532,13 @@ class HarnessTests(unittest.TestCase):
             )
             prepare_harness_proposal(
                 db_path=db_path,
-                proposal_id="proposal_harness_generated_eval_001",
+                proposal_id="proposal_harness_generated_check_001",
             )
 
             with self.assertRaisesRegex(HarnessError, "repo_patch_not_allowed"):
                 apply_patch_transaction(
                     db_path=db_path,
-                    patch_transaction_id="patch_proposal_harness_generated_eval_001_1",
+                    patch_transaction_id="patch_proposal_harness_generated_check_001_1",
                     workspace_root=workspace,
                 )
 

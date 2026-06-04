@@ -8,7 +8,7 @@ class VocabularyTests(unittest.TestCase):
         self.assertEqual(section_label("context"), "Context fix")
         self.assertEqual(section_label("harness"), "Harness fix")
         self.assertIn("agent-facing", section_description("context"))
-        self.assertIn("eval", section_description("harness"))
+        self.assertIn("check", section_description("harness"))
 
     def test_unknown_sections_have_stable_fallback_copy(self) -> None:
         self.assertEqual(section_label("custom_plane"), "Custom Plane")

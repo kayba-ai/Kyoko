@@ -126,7 +126,7 @@
             "$ref": "#/$defs/skillbook_update"
           },
           {
-            "$ref": "#/$defs/eval_spec"
+            "$ref": "#/$defs/check_spec"
           },
           {
             "$ref": "#/$defs/replay_request"
@@ -143,13 +143,13 @@
     "gate_expectations": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["requires_human_review", "requires_eval_level", "requires_replay"],
+      "required": ["requires_human_review", "requires_check_level", "requires_replay"],
       "properties": {
         "requires_human_review": {
           "type": "boolean"
         },
-        "requires_eval_level": {
-          "$ref": "#/$defs/eval_trust_level"
+        "requires_check_level": {
+          "$ref": "#/$defs/check_trust_level"
         },
         "requires_replay": {
           "type": "boolean"
@@ -215,7 +215,7 @@
             "handoff",
             "timeline_event",
             "issue",
-            "eval_run",
+            "check_run",
             "replay_run",
             "patch_transaction",
             "blob"
@@ -270,7 +270,7 @@
         }
       }
     },
-    "eval_trust_level": {
+    "check_trust_level": {
       "type": "string",
       "enum": ["L0_generated", "L1_repeated", "L2_regression", "L3_human_approved"]
     },
@@ -329,25 +329,25 @@
         }
       }
     },
-    "eval_spec": {
+    "check_spec": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "name", "eval_type", "trust_level", "side_effect_mode", "definition"],
+      "required": ["type", "name", "check_type", "trust_level", "side_effect_mode", "definition"],
       "properties": {
         "type": {
           "type": "string",
-          "const": "eval_spec"
+          "const": "check_spec"
         },
         "name": {
           "type": "string",
           "minLength": 1
         },
-        "eval_type": {
+        "check_type": {
           "type": "string",
           "enum": ["deterministic_assertion", "judge", "regression_replay", "smoke_run"]
         },
         "trust_level": {
-          "$ref": "#/$defs/eval_trust_level"
+          "$ref": "#/$defs/check_trust_level"
         },
         "side_effect_mode": {
           "$ref": "#/$defs/side_effect_mode"

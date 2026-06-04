@@ -29,7 +29,7 @@ from .dashboard_metrics import DashboardMetricsError, get_dashboard_metrics
 from .demo import DemoError, run_demo_setup
 from .details import (
     DetailError,
-    get_eval_detail,
+    get_check_detail,
     get_issue_detail,
     get_proposal_detail,
     get_replay_detail,
@@ -39,23 +39,23 @@ from .details import (
 from .issues import IssueError, create_issue, list_issues
 from .doctor import DEFAULT_SMOKE_EVIDENCE_DIR, run_doctor
 from .evidence import build_evidence_bundle
-from .evals import (
-    EvalError,
-    approve_eval_spec,
+from .checks import (
+    CheckError,
+    approve_check_spec,
     complete_replay_from_fixture,
     create_replay_run,
-    generate_evals_for_proposal,
+    generate_checks_for_proposal,
     list_assertion_presets,
-    list_eval_capabilities,
-    list_eval_runs,
-    list_eval_spec_locks,
-    list_eval_specs,
+    list_check_capabilities,
+    list_check_runs,
+    list_check_locks,
+    list_check_specs,
     list_replay_runs,
     parse_judge_command,
     parse_replay_command,
-    run_eval,
+    run_check,
     run_judge_command,
-    set_eval_spec_lock,
+    set_check_lock,
 )
 from .harness import (
     HarnessError,
@@ -614,28 +614,28 @@ def make_handler(
                         }
                     )
                     return
-                if path == "/api/evals":
+                if path == "/api/checks":
                     self._send_json(
                         {
-                            "eval_specs": list_eval_specs(resolved_db_path),
-                            "eval_runs": list_eval_runs(resolved_db_path),
+                            "check_specs": list_check_specs(resolved_db_path),
+                            "check_runs": list_check_runs(resolved_db_path),
                             "replay_runs": list_replay_runs(resolved_db_path),
                         }
                     )
                     return
-                if path == "/api/eval-assertion-presets":
+                if path == "/api/check-assertion-presets":
                     self._send_json({"assertion_presets": list_assertion_presets()})
                     return
-                if path == "/api/eval-capabilities":
-                    self._send_json(list_eval_capabilities())
+                if path == "/api/check-capabilities":
+                    self._send_json(list_check_capabilities())
                     return
-                if path == "/api/eval-spec-locks":
+                if path == "/api/check-locks":
                     query = parse_qs(urlparse(self.path).query)
                     profile_id = query.get("profile_id", [None])[0]
                     include_unlocked = query.get("include_unlocked", ["0"])[0] in {"1", "true", "yes"}
                     self._send_json(
                         {
-                            "eval_spec_locks": list_eval_spec_locks(
+                            "check_locks": list_check_locks(
                                 resolved_db_path,
                                 profile_id=profile_id if isinstance(profile_id, str) and profile_id else None,
                                 locked_only=not include_unlocked,
@@ -643,15 +643,15 @@ def make_handler(
                         }
                     )
                     return
-                if path == "/api/eval-detail":
-                    eval_spec_id = _query_param(self.path, "id")
-                    if not eval_spec_id:
+                if path == "/api/check-detail":
+                    check_spec_id = _query_param(self.path, "id")
+                    if not check_spec_id:
                         self._send_json(
-                            {"error": "eval_spec_id_required"},
+                            {"error": "check_spec_id_required"},
                             status=HTTPStatus.BAD_REQUEST,
                         )
                         return
-                    self._send_json(get_eval_detail(db_path=resolved_db_path, eval_spec_id=eval_spec_id))
+                    self._send_json(get_check_detail(db_path=resolved_db_path, check_spec_id=check_spec_id))
                     return
                 if path == "/api/replay-detail":
                     replay_run_id = _query_param(self.path, "id")
@@ -1002,8 +1002,8 @@ def make_handler(
                         allow_repo_patch=payload.get("allow_repo_patch")
                         if isinstance(payload.get("allow_repo_patch"), bool)
                         else None,
-                        allow_eval_write=payload.get("allow_eval_write")
-                        if isinstance(payload.get("allow_eval_write"), bool)
+                        allow_check_write=payload.get("allow_check_write")
+                        if isinstance(payload.get("allow_check_write"), bool)
                         else None,
                         allow_skillbook_write=payload.get("allow_skillbook_write")
                         if isinstance(payload.get("allow_skillbook_write"), bool)
@@ -1244,38 +1244,38 @@ def make_handler(
                     )
                     self._send_json(report.to_json())
                     return
-                if path == "/api/eval-specs/lock":
+                if path == "/api/check-specs/lock":
                     payload = self._read_json()
-                    eval_spec_id = payload.get("eval_spec_id")
-                    if not isinstance(eval_spec_id, str) or not eval_spec_id:
+                    check_spec_id = payload.get("check_spec_id")
+                    if not isinstance(check_spec_id, str) or not check_spec_id:
                         self._send_json(
-                            {"error": "eval_spec_id_required"},
+                            {"error": "check_spec_id_required"},
                             status=HTTPStatus.BAD_REQUEST,
                         )
                         return
                     reason = payload.get("reason")
-                    report = set_eval_spec_lock(
+                    report = set_check_lock(
                         db_path=resolved_db_path,
-                        eval_spec_id=eval_spec_id,
+                        check_spec_id=check_spec_id,
                         locked=bool(payload.get("locked")),
                         reason=reason if isinstance(reason, str) else None,
                         actor_agent_identity_id=_lock_actor_agent_identity_id(payload),
                     )
                     self._send_json(report.to_json())
                     return
-                if path == "/api/eval-specs/approve":
+                if path == "/api/check-specs/approve":
                     payload = self._read_json()
-                    eval_spec_id = payload.get("eval_spec_id")
-                    if not isinstance(eval_spec_id, str) or not eval_spec_id:
+                    check_spec_id = payload.get("check_spec_id")
+                    if not isinstance(check_spec_id, str) or not check_spec_id:
                         self._send_json(
-                            {"error": "eval_spec_id_required"},
+                            {"error": "check_spec_id_required"},
                             status=HTTPStatus.BAD_REQUEST,
                         )
                         return
                     reason = payload.get("reason")
-                    report = approve_eval_spec(
+                    report = approve_check_spec(
                         db_path=resolved_db_path,
-                        eval_spec_id=eval_spec_id,
+                        check_spec_id=check_spec_id,
                         reason=reason if isinstance(reason, str) else None,
                         actor_agent_identity_id=_lock_actor_agent_identity_id(payload),
                     )
@@ -1395,7 +1395,7 @@ def make_handler(
                         }
                     )
                     return
-                if path == "/api/evals/generate":
+                if path == "/api/checks/generate":
                     payload = self._read_json()
                     proposal_id = payload.get("proposal_id")
                     if not isinstance(proposal_id, str) or not proposal_id:
@@ -1404,7 +1404,7 @@ def make_handler(
                             status=HTTPStatus.BAD_REQUEST,
                         )
                         return
-                    report = generate_evals_for_proposal(
+                    report = generate_checks_for_proposal(
                         db_path=resolved_db_path,
                         proposal_id=proposal_id,
                     )
@@ -1412,23 +1412,23 @@ def make_handler(
                         {
                             "proposal_id": report.proposal_id,
                             "profile_id": report.profile_id,
-                            "eval_spec_ids": list(report.eval_spec_ids),
-                            "existing_eval_spec_ids": list(report.existing_eval_spec_ids),
+                            "check_spec_ids": list(report.check_spec_ids),
+                            "existing_check_spec_ids": list(report.existing_check_spec_ids),
                         }
                     )
                     return
                 if path == "/api/replay":
                     payload = self._read_json()
-                    eval_spec_id = payload.get("eval_spec_id")
-                    if not isinstance(eval_spec_id, str) or not eval_spec_id:
+                    check_spec_id = payload.get("check_spec_id")
+                    if not isinstance(check_spec_id, str) or not check_spec_id:
                         self._send_json(
-                            {"error": "eval_spec_id_required"},
+                            {"error": "check_spec_id_required"},
                             status=HTTPStatus.BAD_REQUEST,
                         )
                         return
                     report = create_replay_run(
                         db_path=resolved_db_path,
-                        eval_spec_id=eval_spec_id,
+                        check_spec_id=check_spec_id,
                         mode=str(payload.get("mode") or "dry_run"),
                         side_effect_mode=payload.get("side_effect_mode")
                         if isinstance(payload.get("side_effect_mode"), str)
@@ -1442,7 +1442,7 @@ def make_handler(
                             "replay_run_id": report.replay_run_id,
                             "profile_id": report.profile_id,
                             "proposal_id": report.proposal_id,
-                            "eval_spec_id": report.eval_spec_id,
+                            "check_spec_id": report.check_spec_id,
                             "source_run_id": report.source_run_id,
                             "mode": report.mode,
                             "side_effect_mode": report.side_effect_mode,
@@ -1451,28 +1451,28 @@ def make_handler(
                         }
                     )
                     return
-                if path == "/api/evals/run":
+                if path == "/api/checks/run":
                     payload = self._read_json()
-                    eval_spec_id = payload.get("eval_spec_id")
-                    if not isinstance(eval_spec_id, str) or not eval_spec_id:
+                    check_spec_id = payload.get("check_spec_id")
+                    if not isinstance(check_spec_id, str) or not check_spec_id:
                         self._send_json(
-                            {"error": "eval_spec_id_required"},
+                            {"error": "check_spec_id_required"},
                             status=HTTPStatus.BAD_REQUEST,
                         )
                         return
-                    report = run_eval(
+                    report = run_check(
                         db_path=resolved_db_path,
-                        eval_spec_id=eval_spec_id,
+                        check_spec_id=check_spec_id,
                         replay_run_id=payload.get("replay_run_id")
                         if isinstance(payload.get("replay_run_id"), str)
                         else None,
                     )
                     self._send_json(
                         {
-                            "eval_run_id": report.eval_run_id,
+                            "check_run_id": report.check_run_id,
                             "profile_id": report.profile_id,
                             "proposal_id": report.proposal_id,
-                            "eval_spec_id": report.eval_spec_id,
+                            "check_spec_id": report.check_spec_id,
                             "replay_run_id": report.replay_run_id,
                             "status": report.status,
                             "result": report.result,
@@ -1482,12 +1482,12 @@ def make_handler(
                     return
                 if path == "/api/judge-command":
                     payload = self._read_json()
-                    eval_spec_id = payload.get("eval_spec_id")
+                    check_spec_id = payload.get("check_spec_id")
                     raw_command = payload.get("command")
                     output_dir = payload.get("output_dir")
-                    if not isinstance(eval_spec_id, str) or not eval_spec_id:
+                    if not isinstance(check_spec_id, str) or not check_spec_id:
                         self._send_json(
-                            {"error": "eval_spec_id_required"},
+                            {"error": "check_spec_id_required"},
                             status=HTTPStatus.BAD_REQUEST,
                         )
                         return
@@ -1510,7 +1510,7 @@ def make_handler(
                     timeout_seconds = payload.get("timeout_seconds", 120)
                     report = run_judge_command(
                         db_path=resolved_db_path,
-                        eval_spec_id=eval_spec_id,
+                        check_spec_id=check_spec_id,
                         output_dir=Path(output_dir),
                         command=command,
                         replay_run_id=payload.get("replay_run_id")
@@ -1545,7 +1545,7 @@ def make_handler(
                         {
                             "replay_run_id": report.replay_run_id,
                             "profile_id": report.profile_id,
-                            "eval_spec_id": report.eval_spec_id,
+                            "check_spec_id": report.check_spec_id,
                             "output_run_id": report.output_run_id,
                             "status": report.status,
                             "result": report.result,
@@ -1556,24 +1556,24 @@ def make_handler(
                 if path == "/api/replay-adapters/run":
                     payload = self._read_json()
                     adapter_id = payload.get("adapter_id")
-                    eval_spec_id = payload.get("eval_spec_id")
+                    check_spec_id = payload.get("check_spec_id")
                     if not isinstance(adapter_id, str) or not adapter_id:
                         self._send_json(
                             {"error": "adapter_id_required"},
                             status=HTTPStatus.BAD_REQUEST,
                         )
                         return
-                    if not isinstance(eval_spec_id, str) or not eval_spec_id:
+                    if not isinstance(check_spec_id, str) or not check_spec_id:
                         self._send_json(
-                            {"error": "eval_spec_id_required"},
+                            {"error": "check_spec_id_required"},
                             status=HTTPStatus.BAD_REQUEST,
                         )
                         return
                     report = run_registered_replay_adapter(
                         db_path=resolved_db_path,
                         adapter_id=adapter_id,
-                        eval_spec_id=eval_spec_id,
-                        run_eval_after=bool(payload.get("run_eval", True)),
+                        check_spec_id=check_spec_id,
+                        run_check_after=bool(payload.get("run_check", True)),
                     )
                     self._send_json(
                         {
@@ -1957,9 +1957,9 @@ def make_handler(
                     {"error": "harness_prepare_failed", "detail": str(exc)},
                     status=HTTPStatus.CONFLICT,
                 )
-            except EvalError as exc:
+            except CheckError as exc:
                 self._send_json(
-                    {"error": "eval_failed", "detail": str(exc)},
+                    {"error": "check_failed", "detail": str(exc)},
                     status=HTTPStatus.CONFLICT,
                 )
             except (ReplayAdapterError, ReplayServerError) as exc:
@@ -2314,21 +2314,21 @@ def _evidence_summary(db_path: Path, *, profile_id: Optional[str] = None) -> dic
 
 def _replay_run_report_payload(report: object) -> dict[str, Any]:
     completion = getattr(report, "completion")
-    eval_run = getattr(report, "eval_run", None)
+    check_run = getattr(report, "check_run", None)
     payload: dict[str, Any] = {
         "replay_run_id": getattr(report, "replay_run_id"),
         "profile_id": getattr(report, "profile_id"),
-        "eval_spec_id": getattr(report, "eval_spec_id"),
+        "check_spec_id": getattr(report, "check_spec_id"),
         "output_run_id": completion.output_run_id,
         "status": completion.status,
         "result": completion.result,
-        "eval_run": {
-            "eval_run_id": eval_run.eval_run_id,
-            "status": eval_run.status,
-            "promoted_trust_level": eval_run.promoted_trust_level,
-            "result": eval_run.result,
+        "check_run": {
+            "check_run_id": check_run.check_run_id,
+            "status": check_run.status,
+            "promoted_trust_level": check_run.promoted_trust_level,
+            "result": check_run.result,
         }
-        if eval_run is not None
+        if check_run is not None
         else None,
     }
     for attr in (
@@ -2357,24 +2357,24 @@ def _replay_run_report_payload(report: object) -> dict[str, Any]:
 
 
 def _judge_command_payload(report: object) -> dict[str, Any]:
-    eval_run = getattr(report, "eval_run")
+    check_run = getattr(report, "check_run")
     return {
         "profile_id": getattr(report, "profile_id"),
         "proposal_id": getattr(report, "proposal_id"),
-        "eval_spec_id": getattr(report, "eval_spec_id"),
+        "check_spec_id": getattr(report, "check_spec_id"),
         "request_path": str(getattr(report, "request_path")),
         "result_path": str(getattr(report, "result_path")),
         "raw_output_path": str(getattr(report, "raw_output_path")),
         "judgment": getattr(report, "judgment"),
-        "eval_run": {
-            "eval_run_id": eval_run.eval_run_id,
-            "profile_id": eval_run.profile_id,
-            "proposal_id": eval_run.proposal_id,
-            "eval_spec_id": eval_run.eval_spec_id,
-            "replay_run_id": eval_run.replay_run_id,
-            "status": eval_run.status,
-            "result": eval_run.result,
-            "promoted_trust_level": eval_run.promoted_trust_level,
+        "check_run": {
+            "check_run_id": check_run.check_run_id,
+            "profile_id": check_run.profile_id,
+            "proposal_id": check_run.proposal_id,
+            "check_spec_id": check_run.check_spec_id,
+            "replay_run_id": check_run.replay_run_id,
+            "status": check_run.status,
+            "result": check_run.result,
+            "promoted_trust_level": check_run.promoted_trust_level,
         },
     }
 

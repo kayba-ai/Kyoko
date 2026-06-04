@@ -6,12 +6,12 @@ from tempfile import TemporaryDirectory
 import unittest
 
 from kyoko.autonomy import update_autonomy_policy
-from kyoko.evals import (
+from kyoko.checks import (
     complete_replay_from_payload,
     create_replay_run,
-    generate_evals_for_proposal,
-    list_eval_specs,
-    run_eval,
+    generate_checks_for_proposal,
+    list_check_specs,
+    run_check,
 )
 from kyoko.harness import list_patch_transactions
 from kyoko.operator_adapters import register_operator_adapter
@@ -92,10 +92,10 @@ class ProfileTests(unittest.TestCase):
             )
 
             proposed = list_profiles(db_path)[0]["routing"]
-            self.assertEqual(proposed["state"], "needs_eval_generation")
-            self.assertEqual(proposed["next_action"], "generate_evals")
+            self.assertEqual(proposed["state"], "needs_check_generation")
+            self.assertEqual(proposed["next_action"], "generate_checks")
             self.assertEqual(proposed["proposal_id"], "proposal_context_timeout_001")
-            self.assertEqual(proposed["suggested_commands"][0]["intent"], "generate_evals")
+            self.assertEqual(proposed["suggested_commands"][0]["intent"], "generate_checks")
             self.assertEqual(
                 proposed["suggested_commands"][0]["cli_args"][-2:],
                 ["proposal_context_timeout_001", "--json"],
@@ -109,34 +109,34 @@ class ProfileTests(unittest.TestCase):
                 output_dir=Path(tmpdir) / "replay",
                 default_side_effect_mode="network_mocked",
             )
-            generate_evals_for_proposal(db_path=db_path, proposal_id="proposal_context_timeout_001")
-            eval_generated = list_profiles(db_path)[0]["routing"]
-            self.assertEqual(eval_generated["state"], "needs_replay_or_eval")
-            self.assertEqual(eval_generated["next_action"], "run_replay_or_eval")
-            self.assertEqual(eval_generated["eval_spec_id"], "eval_proposal_context_timeout_001_1")
-            self.assertEqual(eval_generated["eval_run_status"], "not_run")
+            generate_checks_for_proposal(db_path=db_path, proposal_id="proposal_context_timeout_001")
+            check_generated = list_profiles(db_path)[0]["routing"]
+            self.assertEqual(check_generated["state"], "needs_replay_or_check")
+            self.assertEqual(check_generated["next_action"], "run_replay_or_check")
+            self.assertEqual(check_generated["check_spec_id"], "check_proposal_context_timeout_001_1")
+            self.assertEqual(check_generated["check_run_status"], "not_run")
             self.assertEqual(
-                [command["intent"] for command in eval_generated["suggested_commands"]],
-                ["run_replay_adapter", "run_eval"],
+                [command["intent"] for command in check_generated["suggested_commands"]],
+                ["run_replay_adapter", "run_check"],
             )
-            self.assertIn("fixture_replay", eval_generated["suggested_commands"][0]["cli_args"])
+            self.assertIn("fixture_replay", check_generated["suggested_commands"][0]["cli_args"])
 
             replay = create_replay_run(
                 db_path=db_path,
-                eval_spec_id="eval_proposal_context_timeout_001_1",
+                check_spec_id="check_proposal_context_timeout_001_1",
             )
             _complete_replay_from_fixture_payload(db_path, replay.replay_run_id)
-            run_eval(
+            run_check(
                 db_path=db_path,
-                eval_spec_id="eval_proposal_context_timeout_001_1",
+                check_spec_id="check_proposal_context_timeout_001_1",
                 replay_run_id=replay.replay_run_id,
             )
 
             ready = list_profiles(db_path)[0]["routing"]
             self.assertEqual(ready["state"], "ready_for_autonomy")
             self.assertEqual(ready["next_action"], "review_proposal")
-            self.assertEqual(ready["reason"], "passing_eval_available")
-            self.assertEqual(ready["eval_run_status"], "passed")
+            self.assertEqual(ready["reason"], "passing_check_available")
+            self.assertEqual(ready["check_run_status"], "passed")
             self.assertEqual(ready["replay_run_status"], "passed")
             self.assertEqual(ready["suggested_commands"][0]["intent"], "proposal_detail")
 
@@ -176,7 +176,7 @@ class ProfileTests(unittest.TestCase):
             db_path = Path(tmpdir) / "kyoko.db"
             workspace = Path(tmpdir) / "workspace"
             workspace.mkdir()
-            target = workspace / "evals/generated_timeout_eval.py"
+            target = workspace / "checks/generated_timeout_check.py"
             _prepare_ready_harness_proposal(db_path=db_path, workspace=workspace)
 
             report = run_profile_next_step(db_path=db_path, run=True)
@@ -203,7 +203,7 @@ class ProfileTests(unittest.TestCase):
             self.assertEqual(report.reason, f"harness_workspace_root_not_found:{workspace}")
             self.assertIn("pass --harness-workspace-root", report.notes[0])
 
-    def test_profile_next_step_dry_run_and_eval_generation(self) -> None:
+    def test_profile_next_step_dry_run_and_check_generation(self) -> None:
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
             ingest_source_fixture(db_path, FIXTURE)
@@ -216,19 +216,19 @@ class ProfileTests(unittest.TestCase):
             dry_run = run_profile_next_step(db_path=db_path)
             self.assertFalse(dry_run.run_requested)
             self.assertEqual(dry_run.status, "planned")
-            self.assertEqual(dry_run.action, "generate_evals")
-            self.assertEqual(list_eval_specs(db_path), [])
+            self.assertEqual(dry_run.action, "generate_checks")
+            self.assertEqual(list_check_specs(db_path), [])
 
             report = run_profile_next_step(db_path=db_path, run=True)
 
             self.assertTrue(report.run_requested)
             self.assertEqual(report.status, "executed")
-            self.assertEqual(report.reason, "generated_eval_specs")
-            self.assertEqual(report.result["eval_spec_ids"], ["eval_proposal_context_timeout_001_1"])
-            self.assertEqual(report.routing_after["state"], "needs_replay_or_eval")
-            self.assertEqual(len(list_eval_specs(db_path)), 1)
+            self.assertEqual(report.reason, "generated_check_specs")
+            self.assertEqual(report.result["check_spec_ids"], ["check_proposal_context_timeout_001_1"])
+            self.assertEqual(report.routing_after["state"], "needs_replay_or_check")
+            self.assertEqual(len(list_check_specs(db_path)), 1)
 
-    def test_profile_next_step_generates_fallback_eval_for_harness_proposal(self) -> None:
+    def test_profile_next_step_generates_fallback_check_for_harness_proposal(self) -> None:
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
             ingest_source_fixture(db_path, FIXTURE)
@@ -240,19 +240,19 @@ class ProfileTests(unittest.TestCase):
 
             dry_run = run_profile_next_step(db_path=db_path)
             report = run_profile_next_step(db_path=db_path, run=True)
-            eval_specs = list_eval_specs(db_path)
+            check_specs = list_check_specs(db_path)
 
-            self.assertEqual(dry_run.action, "generate_evals")
+            self.assertEqual(dry_run.action, "generate_checks")
             self.assertEqual(report.status, "executed")
-            self.assertEqual(report.reason, "generated_eval_specs")
+            self.assertEqual(report.reason, "generated_check_specs")
             self.assertEqual(
-                report.result["eval_spec_ids"],
-                ["eval_proposal_harness_generated_eval_001_1"],
+                report.result["check_spec_ids"],
+                ["check_proposal_harness_generated_check_001_1"],
             )
-            self.assertEqual(report.routing_after["state"], "needs_replay_or_eval")
+            self.assertEqual(report.routing_after["state"], "needs_replay_or_check")
             self.assertEqual(
-                eval_specs[0]["definition"]["operator_definition"]["generated_by"],
-                "kyoko_fallback_harness_eval",
+                check_specs[0]["definition"]["operator_definition"]["generated_by"],
+                "kyoko_fallback_harness_check",
             )
 
     def test_profile_next_step_prepares_operator_prompt_for_analysis(self) -> None:
@@ -328,7 +328,7 @@ class ProfileTests(unittest.TestCase):
             self.assertEqual(report.result["proposal_id"], "proposal_command_span_fetch_timeout_001")
             self.assertTrue(report.result["operator_run_id"])
             self.assertTrue(Path(report.result["raw_output_path"]).exists())
-            self.assertEqual(report.routing_after["state"], "needs_eval_generation")
+            self.assertEqual(report.routing_after["state"], "needs_check_generation")
 
     def test_profile_next_step_explicit_operator_target_keeps_prompt_only_with_registered_adapter(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -364,7 +364,7 @@ class ProfileTests(unittest.TestCase):
                 proposal_path=VALID_PROPOSAL,
                 schema_path=SCHEMA,
             )
-            generate_evals_for_proposal(db_path=db_path, proposal_id="proposal_context_timeout_001")
+            generate_checks_for_proposal(db_path=db_path, proposal_id="proposal_context_timeout_001")
             register_replay_adapter(
                 db_path=db_path,
                 adapter_id="aaa_replay",
@@ -398,9 +398,9 @@ def _prepare_ready_harness_proposal(*, db_path: Path, workspace: Path) -> None:
     proposal["gate_expectations"]["requires_human_review"] = False
     proposal["proposed_changes"].append(
         {
-            "type": "eval_spec",
+            "type": "check_spec",
             "name": "harness generated file profile-next gate",
-            "eval_type": "deterministic_assertion",
+            "check_type": "deterministic_assertion",
             "trust_level": "L0_generated",
             "side_effect_mode": "network_mocked",
             "definition": {
@@ -430,13 +430,13 @@ def _prepare_ready_harness_proposal(*, db_path: Path, workspace: Path) -> None:
         harness_mode="autonomous",
         allow_repo_patch=True,
     )
-    generate_evals_for_proposal(db_path=db_path, proposal_id=proposal_id)
-    eval_spec_id = f"eval_{proposal_id}_1"
-    replay = create_replay_run(db_path=db_path, eval_spec_id=eval_spec_id)
+    generate_checks_for_proposal(db_path=db_path, proposal_id=proposal_id)
+    check_spec_id = f"check_{proposal_id}_1"
+    replay = create_replay_run(db_path=db_path, check_spec_id=check_spec_id)
     _complete_replay_from_fixture_payload(db_path, replay.replay_run_id)
-    run_eval(
+    run_check(
         db_path=db_path,
-        eval_spec_id=eval_spec_id,
+        check_spec_id=check_spec_id,
         replay_run_id=replay.replay_run_id,
     )
     _set_profile_root_path(db_path, workspace)

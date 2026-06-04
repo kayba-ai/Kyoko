@@ -9,7 +9,7 @@ from threading import Thread
 import unittest
 
 from kyoko.details import get_replay_detail
-from kyoko.evals import generate_evals_for_proposal
+from kyoko.checks import generate_checks_for_proposal
 from kyoko.proposals import submit_learning_proposal
 from kyoko.replay_adapters import (
     register_replay_adapter,
@@ -40,39 +40,39 @@ class ReplayServerTests(unittest.TestCase):
     def test_replay_server_health_and_run(self) -> None:
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
-            eval_spec_id = _create_eval_spec(db_path)
+            check_spec_id = _create_check_spec(db_path)
             with RunningReplayServer() as server:
                 health = check_replay_server_health(server_url=server.base_url)
                 report = run_replay_server(
                     db_path=db_path,
-                    eval_spec_id=eval_spec_id,
+                    check_spec_id=check_spec_id,
                     server_url=server.base_url,
-                    run_eval_after=True,
+                    run_check_after=True,
                 )
             status = get_database_status(db_path)
 
             self.assertTrue(health.ok)
-            self.assertEqual(report.replay_run_id, "replay_eval_proposal_context_timeout_001_1_001")
+            self.assertEqual(report.replay_run_id, "replay_check_proposal_context_timeout_001_1_001")
             self.assertEqual(report.completion.output_run_id, "run_research_topic_replay_001")
-            self.assertEqual(report.eval_run.status, "passed")
+            self.assertEqual(report.check_run.status, "passed")
             self.assertEqual(report.request["schema_version"], "kyoko.replay_server_request.v1")
             self.assertEqual(report.request["side_effect_mode"], "network_mocked")
             self.assertEqual(report.request["idempotency_key"], report.replay_run_id)
             self.assertEqual(report.response["replay"]["idempotency_key"], report.replay_run_id)
             self.assertEqual(status.counts["runs"], 2)
-            self.assertEqual(status.counts["eval_runs"], 1)
+            self.assertEqual(status.counts["check_runs"], 1)
 
     def test_remote_replay_server_url_requires_explicit_opt_in(self) -> None:
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
-            eval_spec_id = _create_eval_spec(db_path)
+            check_spec_id = _create_check_spec(db_path)
 
             with self.assertRaisesRegex(ReplayServerError, "remote_replay_server_requires_opt_in"):
                 check_replay_server_health(server_url="http://example.com:61200")
             with self.assertRaisesRegex(ReplayServerError, "remote_replay_server_requires_opt_in"):
                 run_replay_server(
                     db_path=db_path,
-                    eval_spec_id=eval_spec_id,
+                    check_spec_id=check_spec_id,
                     server_url="http://example.com:61200",
                     check_health=False,
                 )
@@ -90,7 +90,7 @@ class ReplayServerTests(unittest.TestCase):
     def test_replay_server_health_side_effect_modes_must_support_request(self) -> None:
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
-            eval_spec_id = _create_eval_spec(db_path)
+            check_spec_id = _create_check_spec(db_path)
             with RunningReplayServer(side_effect_modes=["none"]) as server:
                 with self.assertRaisesRegex(
                     ReplayServerError,
@@ -98,14 +98,14 @@ class ReplayServerTests(unittest.TestCase):
                 ):
                     run_replay_server(
                         db_path=db_path,
-                        eval_spec_id=eval_spec_id,
+                        check_spec_id=check_spec_id,
                         server_url=server.base_url,
                     )
                 self.assertEqual(server.replay_requests, [])
 
             detail = get_replay_detail(
                 db_path=db_path,
-                replay_run_id="replay_eval_proposal_context_timeout_001_1_001",
+                replay_run_id="replay_check_proposal_context_timeout_001_1_001",
             )
             self.assertEqual(detail["summary"]["status"], "errored")
             self.assertEqual(
@@ -116,7 +116,7 @@ class ReplayServerTests(unittest.TestCase):
     def test_replay_server_health_capabilities_must_include_replay_when_advertised(self) -> None:
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
-            eval_spec_id = _create_eval_spec(db_path)
+            check_spec_id = _create_check_spec(db_path)
             with RunningReplayServer(capabilities=["trace"]) as server:
                 with self.assertRaisesRegex(
                     ReplayServerError,
@@ -124,14 +124,14 @@ class ReplayServerTests(unittest.TestCase):
                 ):
                     run_replay_server(
                         db_path=db_path,
-                        eval_spec_id=eval_spec_id,
+                        check_spec_id=check_spec_id,
                         server_url=server.base_url,
                     )
                 self.assertEqual(server.replay_requests, [])
 
             detail = get_replay_detail(
                 db_path=db_path,
-                replay_run_id="replay_eval_proposal_context_timeout_001_1_001",
+                replay_run_id="replay_check_proposal_context_timeout_001_1_001",
             )
             self.assertEqual(detail["summary"]["status"], "errored")
             self.assertEqual(
@@ -142,13 +142,13 @@ class ReplayServerTests(unittest.TestCase):
     def test_http_replay_request_respects_profile_redaction_policy(self) -> None:
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
-            eval_spec_id = _create_eval_spec(db_path)
+            check_spec_id = _create_check_spec(db_path)
             _add_sensitive_span_attribute(db_path)
 
             with RunningReplayServer() as server:
                 report = run_replay_server(
                     db_path=db_path,
-                    eval_spec_id=eval_spec_id,
+                    check_spec_id=check_spec_id,
                     server_url=server.base_url,
                 )
 
@@ -176,7 +176,7 @@ class ReplayServerTests(unittest.TestCase):
     def test_http_replay_server_can_be_registered_as_adapter(self) -> None:
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
-            eval_spec_id = _create_eval_spec(db_path)
+            check_spec_id = _create_check_spec(db_path)
             with RunningReplayServer() as server:
                 register = register_replay_adapter(
                     db_path=db_path,
@@ -187,37 +187,37 @@ class ReplayServerTests(unittest.TestCase):
                 report = run_registered_replay_adapter(
                     db_path=db_path,
                     adapter_id="http_replay",
-                    eval_spec_id=eval_spec_id,
-                    run_eval_after=True,
+                    check_spec_id=check_spec_id,
+                    run_check_after=True,
                 )
 
             self.assertEqual(register.adapter_kind, "http_server")
             self.assertEqual(register.server_url, server.base_url)
             self.assertEqual(report.server_url, server.base_url)
             self.assertEqual(report.completion.status, "passed")
-            self.assertEqual(report.eval_run.promoted_trust_level, "L2_regression")
+            self.assertEqual(report.check_run.promoted_trust_level, "L2_regression")
 
     def test_managed_replay_server_command_runs_and_captures_logs(self) -> None:
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
             output_dir = Path(tmpdir) / "managed-server"
-            eval_spec_id = _create_eval_spec(db_path)
+            check_spec_id = _create_check_spec(db_path)
             port = _free_port()
             server_url = f"http://127.0.0.1:{port}"
 
             report = run_managed_replay_server(
                 db_path=db_path,
-                eval_spec_id=eval_spec_id,
+                check_spec_id=check_spec_id,
                 command=_fixture_replay_server_command(port),
                 server_url=server_url,
                 output_dir=output_dir,
                 startup_timeout_seconds=5,
-                run_eval_after=True,
+                run_check_after=True,
             )
 
             self.assertEqual(report.server_url, server_url)
             self.assertEqual(report.completion.output_run_id, "run_research_topic_replay_001")
-            self.assertEqual(report.eval_run.status, "passed")
+            self.assertEqual(report.check_run.status, "passed")
             self.assertEqual(report.command, tuple(_fixture_replay_server_command(port)))
             self.assertTrue(report.stdout_path.exists())
             self.assertTrue(report.stderr_path.exists())
@@ -231,7 +231,7 @@ class ReplayServerTests(unittest.TestCase):
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
             output_dir = Path(tmpdir) / "managed-adapter"
-            eval_spec_id = _create_eval_spec(db_path)
+            check_spec_id = _create_check_spec(db_path)
             port = _free_port()
             server_url = f"http://127.0.0.1:{port}"
             command = _fixture_replay_server_command(port)
@@ -248,8 +248,8 @@ class ReplayServerTests(unittest.TestCase):
             report = run_registered_replay_adapter(
                 db_path=db_path,
                 adapter_id="managed_http_replay",
-                eval_spec_id=eval_spec_id,
-                run_eval_after=True,
+                check_spec_id=check_spec_id,
+                run_check_after=True,
             )
 
             self.assertEqual(register.adapter_kind, "managed_http_server")
@@ -257,14 +257,14 @@ class ReplayServerTests(unittest.TestCase):
             self.assertEqual(register.server_url, server_url)
             self.assertEqual(report.server_url, server_url)
             self.assertEqual(report.completion.status, "passed")
-            self.assertEqual(report.eval_run.promoted_trust_level, "L2_regression")
+            self.assertEqual(report.check_run.promoted_trust_level, "L2_regression")
             self.assertTrue(report.stdout_path.exists())
 
     def test_registered_replay_server_can_start_status_and_stop(self) -> None:
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
             output_dir = Path(tmpdir) / "server-process"
-            _create_eval_spec(db_path)
+            _create_check_spec(db_path)
             port = _free_port()
             server_url = f"http://127.0.0.1:{port}"
             register_replay_adapter(
@@ -313,7 +313,7 @@ class ReplayServerTests(unittest.TestCase):
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
             output_dir = Path(tmpdir) / "server-process"
-            eval_spec_id = _create_eval_spec(db_path)
+            check_spec_id = _create_check_spec(db_path)
             port = _free_port()
             server_url = f"http://127.0.0.1:{port}"
             register_replay_adapter(
@@ -333,8 +333,8 @@ class ReplayServerTests(unittest.TestCase):
                 report = run_registered_replay_adapter(
                     db_path=db_path,
                     adapter_id="persistent_http_replay",
-                    eval_spec_id=eval_spec_id,
-                    run_eval_after=True,
+                    check_spec_id=check_spec_id,
+                    run_check_after=True,
                 )
                 status = registered_replay_server_status(
                     db_path=db_path,
@@ -349,7 +349,7 @@ class ReplayServerTests(unittest.TestCase):
             self.assertEqual(report.server_url, server_url)
             self.assertFalse(hasattr(report, "stdout_path"))
             self.assertEqual(report.completion.status, "passed")
-            self.assertEqual(report.eval_run.promoted_trust_level, "L2_regression")
+            self.assertEqual(report.check_run.promoted_trust_level, "L2_regression")
             self.assertEqual(status.pid, start.pid)
             self.assertTrue(status.running)
 
@@ -429,18 +429,18 @@ def make_handler(
     return ReplayHandler
 
 
-def _create_eval_spec(db_path: Path) -> str:
+def _create_check_spec(db_path: Path) -> str:
     ingest_source_fixture(db_path, FIXTURE)
     submit_learning_proposal(
         db_path=db_path,
         proposal_path=VALID_PROPOSAL,
         schema_path=SCHEMA,
     )
-    report = generate_evals_for_proposal(
+    report = generate_checks_for_proposal(
         db_path=db_path,
         proposal_id="proposal_context_timeout_001",
     )
-    return report.eval_spec_ids[0]
+    return report.check_spec_ids[0]
 
 
 def _add_sensitive_span_attribute(db_path: Path) -> None:

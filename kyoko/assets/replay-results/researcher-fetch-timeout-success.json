@@ -3,7 +3,7 @@
   "name": "researcher-fetch-timeout-success",
   "description": "Controlled replay result where the researcher retries a transient source fetch timeout and succeeds before handoff.",
   "replay": {
-    "replay_run_id": "replay_eval_proposal_context_timeout_001_1_001",
+    "replay_run_id": "replay_check_proposal_context_timeout_001_1_001",
     "output_run_id": "run_research_topic_replay_001",
     "status": "passed",
     "executed_agent": true,

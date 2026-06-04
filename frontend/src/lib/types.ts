@@ -201,7 +201,7 @@ export interface AutonomyPolicy {
   context_mode: string;
   harness_mode: string;
   allow_repo_patch: boolean;
-  allow_eval_write: boolean;
+  allow_check_write: boolean;
   allow_skillbook_write: boolean;
   allow_profile_config_write: boolean;
   allow_replay_server_patch: boolean;
@@ -223,11 +223,11 @@ export interface TimelineEvent {
   [k: string]: unknown;
 }
 
-export interface EvalSpec {
+export interface CheckSpec {
   id: string;
   [k: string]: unknown;
 }
-export interface EvalRun {
+export interface CheckRun {
   id: string;
   [k: string]: unknown;
 }
@@ -236,9 +236,9 @@ export interface ReplayRun {
   [k: string]: unknown;
 }
 
-export interface EvalsBundle {
-  eval_specs: EvalSpec[];
-  eval_runs: EvalRun[];
+export interface ChecksBundle {
+  check_specs: CheckSpec[];
+  check_runs: CheckRun[];
   replay_runs: ReplayRun[];
 }
 
@@ -248,7 +248,7 @@ export interface DashboardMetrics {
   scope?: unknown;
   cards?: Record<string, unknown>;
   runs?: Record<string, unknown>;
-  evals?: Record<string, unknown>;
+  checks?: Record<string, unknown>;
   replay?: Record<string, unknown>;
   autonomy?: Record<string, unknown>;
   issues?: unknown;

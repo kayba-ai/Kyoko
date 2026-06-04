@@ -9,17 +9,17 @@ from kyoko.autonomy import update_autonomy_policy
 from kyoko.autonomy_runner import run_autonomy
 from kyoko.details import (
     DetailError,
-    get_eval_detail,
+    get_check_detail,
     get_proposal_detail,
     get_replay_detail,
     get_run_detail,
     list_runs,
 )
-from kyoko.evals import (
+from kyoko.checks import (
     complete_replay_from_fixture,
     create_replay_run,
-    generate_evals_for_proposal,
-    run_eval,
+    generate_checks_for_proposal,
+    run_check,
     run_replay_command,
 )
 from kyoko.proposals import submit_learning_proposal
@@ -151,18 +151,18 @@ class ProposalDetailTests(unittest.TestCase):
                 detail["confidence_assessment"]["operator_confidence"],
             )
             self.assertEqual(detail["confidence_assessment"]["evidence"]["resolved_refs"], 2)
-            self.assertEqual(detail["confidence_assessment"]["verification"]["eval_runs"], 0)
+            self.assertEqual(detail["confidence_assessment"]["verification"]["check_runs"], 0)
             self.assertEqual(
-                detail["eval_guidance"]["gateable_eval_types"],
+                detail["check_guidance"]["gateable_check_types"],
                 ["deterministic_assertion", "regression_replay"],
             )
             self.assertEqual(
-                [preset["name"] for preset in detail["eval_guidance"]["assertion_presets"]],
+                [preset["name"] for preset in detail["check_guidance"]["assertion_presets"]],
                 ["replay_success_shape", "replay_handoff_present"],
             )
-            self.assertEqual(detail["eval_guidance"]["informational_eval_types"], ["judge", "smoke_run"])
-            self.assertTrue(detail["eval_guidance"]["recorded_judge_only"])
-            self.assertEqual(detail["eval_specs"], [])
+            self.assertEqual(detail["check_guidance"]["informational_check_types"], ["judge", "smoke_run"])
+            self.assertTrue(detail["check_guidance"]["recorded_judge_only"])
+            self.assertEqual(detail["check_specs"], [])
             self.assertEqual(detail["timeline_events"], [])
             chain_by_stage = {
                 step["stage"]: step for step in detail["evidence_chain"]["steps"]
@@ -170,12 +170,12 @@ class ProposalDetailTests(unittest.TestCase):
             self.assertEqual(chain_by_stage["observed_issue"]["status"], "resolved")
             self.assertEqual(chain_by_stage["observed_issue"]["resolved_refs"], 2)
             self.assertEqual(chain_by_stage["proposed_fix"]["target_label"], "researcher (agent_identity:agent_researcher_001)")
-            self.assertEqual(chain_by_stage["eval_gate"]["status"], "not_generated")
+            self.assertEqual(chain_by_stage["check_gate"]["status"], "not_generated")
             self.assertEqual(chain_by_stage["replay"]["status"], "not_run")
             self.assertEqual(chain_by_stage["autonomy"]["status"], "awaiting_human_review")
             self.assertFalse(detail["evidence_chain"]["ready_to_apply"])
 
-    def test_proposal_detail_reports_eval_replay_and_would_apply_gate(self) -> None:
+    def test_proposal_detail_reports_check_replay_and_would_apply_gate(self) -> None:
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
             ingest_source_fixture(db_path, SOURCE_FIXTURE)
@@ -185,19 +185,19 @@ class ProposalDetailTests(unittest.TestCase):
                 schema_path=SCHEMA,
             )
             update_autonomy_policy(db_path=db_path, context_mode="autonomous")
-            generate_evals_for_proposal(db_path=db_path, proposal_id="proposal_context_timeout_001")
+            generate_checks_for_proposal(db_path=db_path, proposal_id="proposal_context_timeout_001")
             replay = create_replay_run(
                 db_path=db_path,
-                eval_spec_id="eval_proposal_context_timeout_001_1",
+                check_spec_id="check_proposal_context_timeout_001_1",
             )
             complete_replay_from_fixture(
                 db_path=db_path,
                 replay_run_id=replay.replay_run_id,
                 fixture_path=REPLAY_SUCCESS,
             )
-            run_eval(
+            run_check(
                 db_path=db_path,
-                eval_spec_id="eval_proposal_context_timeout_001_1",
+                check_spec_id="check_proposal_context_timeout_001_1",
                 replay_run_id=replay.replay_run_id,
             )
 
@@ -207,10 +207,10 @@ class ProposalDetailTests(unittest.TestCase):
             )
 
             self.assertEqual(detail["autonomy_gate"]["action"], "would_apply")
-            self.assertEqual(detail["autonomy_gate"]["reason"], "eval_gate_passed")
-            self.assertEqual(detail["autonomy_gate"]["eval_gate"]["passed"], True)
-            self.assertEqual(detail["eval_specs"][0]["trust_level"], "L2_regression")
-            self.assertEqual(detail["eval_runs"][0]["status"], "passed")
+            self.assertEqual(detail["autonomy_gate"]["reason"], "check_gate_passed")
+            self.assertEqual(detail["autonomy_gate"]["check_gate"]["passed"], True)
+            self.assertEqual(detail["check_specs"][0]["trust_level"], "L2_regression")
+            self.assertEqual(detail["check_runs"][0]["status"], "passed")
             self.assertEqual(detail["replay_runs"][0]["status"], "passed")
             self.assertEqual(detail["confidence_assessment"]["kyoko_confidence"], 0.93)
             self.assertEqual(detail["confidence_assessment"]["level"], "high")
@@ -222,24 +222,24 @@ class ProposalDetailTests(unittest.TestCase):
             chain_by_stage = {
                 step["stage"]: step for step in detail["evidence_chain"]["steps"]
             }
-            self.assertEqual(chain_by_stage["eval_gate"]["status"], "passed")
-            self.assertEqual(chain_by_stage["eval_gate"]["latest_trust_level"], "L2_regression")
+            self.assertEqual(chain_by_stage["check_gate"]["status"], "passed")
+            self.assertEqual(chain_by_stage["check_gate"]["latest_trust_level"], "L2_regression")
             self.assertEqual(chain_by_stage["replay"]["status"], "passed")
             self.assertEqual(chain_by_stage["replay"]["side_effect_mode"], "network_mocked")
             self.assertEqual(chain_by_stage["autonomy"]["status"], "would_apply")
             self.assertTrue(detail["evidence_chain"]["ready_to_apply"])
 
-    def test_eval_detail_explains_target_replay_and_latest_result(self) -> None:
+    def test_check_detail_explains_target_replay_and_latest_result(self) -> None:
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
-            replay_run_id = _completed_eval_flow(db_path)
+            replay_run_id = _completed_check_flow(db_path)
 
-            detail = get_eval_detail(
+            detail = get_check_detail(
                 db_path=db_path,
-                eval_spec_id="eval_proposal_context_timeout_001_1",
+                check_spec_id="check_proposal_context_timeout_001_1",
             )
 
-            self.assertEqual(detail["eval_spec"]["id"], "eval_proposal_context_timeout_001_1")
+            self.assertEqual(detail["check_spec"]["id"], "check_proposal_context_timeout_001_1")
             self.assertEqual(detail["target"]["ref"]["entity_id"], "span_fetch_timeout_001")
             self.assertTrue(detail["target"]["found"])
             self.assertEqual(detail["source_run"]["id"], "run_research_topic_001")
@@ -255,33 +255,33 @@ class ProposalDetailTests(unittest.TestCase):
             self.assertEqual(detail["summary"]["trust_level"], "L2_regression")
             self.assertEqual(detail["latest_replay_run"]["id"], replay_run_id)
 
-    def test_eval_detail_includes_unsupported_assertion_preset_context(self) -> None:
+    def test_check_detail_includes_unsupported_assertion_preset_context(self) -> None:
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
-            _prepare_eval(db_path)
-            _set_eval_definition(
+            _prepare_check(db_path)
+            _set_check_definition(
                 db_path,
-                "eval_proposal_context_timeout_001_1",
+                "check_proposal_context_timeout_001_1",
                 {"assertion_preset": "unknown_framework_shape"},
             )
             replay = create_replay_run(
                 db_path=db_path,
-                eval_spec_id="eval_proposal_context_timeout_001_1",
+                check_spec_id="check_proposal_context_timeout_001_1",
             )
             complete_replay_from_fixture(
                 db_path=db_path,
                 replay_run_id=replay.replay_run_id,
                 fixture_path=REPLAY_SUCCESS,
             )
-            run_eval(
+            run_check(
                 db_path=db_path,
-                eval_spec_id="eval_proposal_context_timeout_001_1",
+                check_spec_id="check_proposal_context_timeout_001_1",
                 replay_run_id=replay.replay_run_id,
             )
 
-            detail = get_eval_detail(
+            detail = get_check_detail(
                 db_path=db_path,
-                eval_spec_id="eval_proposal_context_timeout_001_1",
+                check_spec_id="check_proposal_context_timeout_001_1",
             )
 
             assertion = detail["summary"]["latest_assertions"][0]
@@ -295,7 +295,7 @@ class ProposalDetailTests(unittest.TestCase):
     def test_replay_detail_explains_source_output_and_side_effects(self) -> None:
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
-            replay_run_id = _completed_eval_flow(db_path)
+            replay_run_id = _completed_check_flow(db_path)
 
             detail = get_replay_detail(db_path=db_path, replay_run_id=replay_run_id)
 
@@ -305,19 +305,19 @@ class ProposalDetailTests(unittest.TestCase):
             self.assertEqual(detail["summary"]["actual_side_effect_mode"], "network_mocked")
             self.assertEqual(detail["summary"]["source_spans"], 2)
             self.assertEqual(detail["summary"]["output_spans"], 2)
-            self.assertEqual(detail["eval_runs"][0]["status"], "passed")
+            self.assertEqual(detail["check_runs"][0]["status"], "passed")
 
     def test_replay_detail_includes_command_artifact_previews(self) -> None:
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
             output_dir = Path(tmpdir) / "replay-command"
-            _prepare_eval(db_path)
+            _prepare_check(db_path)
             report = run_replay_command(
                 db_path=db_path,
-                eval_spec_id="eval_proposal_context_timeout_001_1",
+                check_spec_id="check_proposal_context_timeout_001_1",
                 output_dir=output_dir,
                 command=[sys.executable, str(REPLAY_COMMAND)],
-                run_eval_after=True,
+                run_check_after=True,
             )
 
             detail = get_replay_detail(db_path=db_path, replay_run_id=report.replay_run_id)
@@ -350,10 +350,10 @@ class ProposalDetailTests(unittest.TestCase):
                 event for event in detail["gate_history"] if event["kind"] == "autonomy_decision"
             ]
             self.assertEqual(decision_events[-1]["action"], "gated")
-            self.assertEqual(decision_events[-1]["reason"], "missing_eval_run")
+            self.assertEqual(decision_events[-1]["reason"], "missing_check_run")
             self.assertEqual(
-                decision_events[-1]["eval_spec_ids"],
-                ["eval_proposal_context_timeout_001_1"],
+                decision_events[-1]["check_spec_ids"],
+                ["check_proposal_context_timeout_001_1"],
             )
 
     def test_proposal_detail_rejects_missing_proposal(self) -> None:
@@ -365,41 +365,41 @@ class ProposalDetailTests(unittest.TestCase):
                 get_proposal_detail(db_path=db_path, proposal_id="missing")
 
 
-def _completed_eval_flow(db_path: Path) -> str:
-    _prepare_eval(db_path)
+def _completed_check_flow(db_path: Path) -> str:
+    _prepare_check(db_path)
     replay = create_replay_run(
         db_path=db_path,
-        eval_spec_id="eval_proposal_context_timeout_001_1",
+        check_spec_id="check_proposal_context_timeout_001_1",
     )
     complete_replay_from_fixture(
         db_path=db_path,
         replay_run_id=replay.replay_run_id,
         fixture_path=REPLAY_SUCCESS,
     )
-    run_eval(
+    run_check(
         db_path=db_path,
-        eval_spec_id="eval_proposal_context_timeout_001_1",
+        check_spec_id="check_proposal_context_timeout_001_1",
         replay_run_id=replay.replay_run_id,
     )
     return replay.replay_run_id
 
 
-def _prepare_eval(db_path: Path) -> None:
+def _prepare_check(db_path: Path) -> None:
     ingest_source_fixture(db_path, SOURCE_FIXTURE)
     submit_learning_proposal(
         db_path=db_path,
         proposal_path=VALID_PROPOSAL,
         schema_path=SCHEMA,
     )
-    generate_evals_for_proposal(db_path=db_path, proposal_id="proposal_context_timeout_001")
+    generate_checks_for_proposal(db_path=db_path, proposal_id="proposal_context_timeout_001")
 
 
-def _set_eval_definition(db_path: Path, eval_spec_id: str, definition: dict) -> None:
+def _set_check_definition(db_path: Path, check_spec_id: str, definition: dict) -> None:
     connection = sqlite3.connect(str(db_path))
     try:
         connection.execute(
-            "UPDATE eval_specs SET definition_json = ? WHERE id = ?",
-            (json.dumps(definition, sort_keys=True), eval_spec_id),
+            "UPDATE check_specs SET definition_json = ? WHERE id = ?",
+            (json.dumps(definition, sort_keys=True), check_spec_id),
         )
         connection.commit()
     finally:

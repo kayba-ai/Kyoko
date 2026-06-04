@@ -110,7 +110,7 @@ class RetentionTests(unittest.TestCase):
             self.assertEqual(status.counts["task_attempts"], 1)
             self.assertEqual(status.counts["replay_runs"], 1)
 
-    def test_replay_eval_and_operator_retention_apply_prunes_only_runtime_rows(self) -> None:
+    def test_replay_check_and_operator_retention_apply_prunes_only_runtime_rows(self) -> None:
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
             output_dir = Path(tmpdir) / "output"
@@ -140,15 +140,15 @@ class RetentionTests(unittest.TestCase):
             after = get_database_status(db_path)
 
             self.assertEqual(before.counts["replay_runs"], 1)
-            self.assertEqual(before.counts["eval_runs"], 1)
+            self.assertEqual(before.counts["check_runs"], 1)
             self.assertEqual(before.counts["operator_runs"], 1)
-            self.assertEqual(report.pruned_rows["replay_runs"], ["replay_eval_proposal_context_timeout_001_1_001"])
-            self.assertEqual(len(report.pruned_rows["eval_runs"]), 1)
+            self.assertEqual(report.pruned_rows["replay_runs"], ["replay_check_proposal_context_timeout_001_1_001"])
+            self.assertEqual(len(report.pruned_rows["check_runs"]), 1)
             self.assertEqual(len(report.pruned_rows["operator_runs"]), 1)
             self.assertEqual(after.counts["replay_runs"], 0)
-            self.assertEqual(after.counts["eval_runs"], 0)
+            self.assertEqual(after.counts["check_runs"], 0)
             self.assertEqual(after.counts["operator_runs"], 0)
-            self.assertEqual(after.counts["eval_specs"], 1)
+            self.assertEqual(after.counts["check_specs"], 1)
             self.assertGreaterEqual(after.counts["learning_proposals"], 1)
 
 def _insert_replay_task_attempt_reference(db_path: Path) -> None:
@@ -159,7 +159,7 @@ def _insert_replay_task_attempt_reference(db_path: Path) -> None:
               id,
               profile_id,
               proposal_id,
-              eval_spec_id,
+              check_spec_id,
               source_run_id,
               task_attempt_id,
               mode,

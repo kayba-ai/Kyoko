@@ -10,7 +10,7 @@ from .storage import StorageError, connect, initialize_database, utc_now
 
 VALID_MODES = {"off", "propose", "autonomous"}
 VALID_DIRTY_WORKTREE_POLICIES = {"block", "allow_touched_only", "allow"}
-VALID_EVAL_LEVELS = {"L0_generated", "L1_repeated", "L2_regression", "L3_human_approved"}
+VALID_CHECK_LEVELS = {"L0_generated", "L1_repeated", "L2_regression", "L3_human_approved"}
 
 
 class AutonomyError(Exception):
@@ -40,13 +40,13 @@ def update_autonomy_policy(
     context_mode: Optional[str] = None,
     harness_mode: Optional[str] = None,
     allow_skillbook_write: Optional[bool] = None,
-    allow_eval_write: Optional[bool] = None,
+    allow_check_write: Optional[bool] = None,
     allow_profile_config_write: Optional[bool] = None,
     allow_repo_patch: Optional[bool] = None,
     allow_replay_server_patch: Optional[bool] = None,
     dirty_worktree_policy: Optional[str] = None,
-    required_eval_level_context: Optional[str] = None,
-    required_eval_level_harness: Optional[str] = None,
+    required_check_level_context: Optional[str] = None,
+    required_check_level_harness: Optional[str] = None,
     rollback_on_regression: Optional[bool] = None,
 ) -> dict[str, Any]:
     initialize_database(db_path)
@@ -66,13 +66,13 @@ def update_autonomy_policy(
             context_mode=context_mode,
             harness_mode=harness_mode,
             allow_skillbook_write=allow_skillbook_write,
-            allow_eval_write=allow_eval_write,
+            allow_check_write=allow_check_write,
             allow_profile_config_write=allow_profile_config_write,
             allow_repo_patch=allow_repo_patch,
             allow_replay_server_patch=allow_replay_server_patch,
             dirty_worktree_policy=dirty_worktree_policy,
-            required_eval_level_context=required_eval_level_context,
-            required_eval_level_harness=required_eval_level_harness,
+            required_check_level_context=required_check_level_context,
+            required_check_level_harness=required_check_level_harness,
             rollback_on_regression=rollback_on_regression,
         )
         if updates:
@@ -99,13 +99,13 @@ def _policy_updates(
     context_mode: Optional[str],
     harness_mode: Optional[str],
     allow_skillbook_write: Optional[bool],
-    allow_eval_write: Optional[bool],
+    allow_check_write: Optional[bool],
     allow_profile_config_write: Optional[bool],
     allow_repo_patch: Optional[bool],
     allow_replay_server_patch: Optional[bool],
     dirty_worktree_policy: Optional[str],
-    required_eval_level_context: Optional[str],
-    required_eval_level_harness: Optional[str],
+    required_check_level_context: Optional[str],
+    required_check_level_harness: Optional[str],
     rollback_on_regression: Optional[bool],
 ) -> dict[str, Any]:
     updates: dict[str, Any] = {}
@@ -118,16 +118,16 @@ def _policy_updates(
     if dirty_worktree_policy is not None:
         _validate_value("dirty_worktree_policy", dirty_worktree_policy, VALID_DIRTY_WORKTREE_POLICIES)
         updates["dirty_worktree_policy"] = dirty_worktree_policy
-    if required_eval_level_context is not None:
-        _validate_value("required_eval_level_context", required_eval_level_context, VALID_EVAL_LEVELS)
-        updates["required_eval_level_context"] = required_eval_level_context
-    if required_eval_level_harness is not None:
-        _validate_value("required_eval_level_harness", required_eval_level_harness, VALID_EVAL_LEVELS)
-        updates["required_eval_level_harness"] = required_eval_level_harness
+    if required_check_level_context is not None:
+        _validate_value("required_check_level_context", required_check_level_context, VALID_CHECK_LEVELS)
+        updates["required_check_level_context"] = required_check_level_context
+    if required_check_level_harness is not None:
+        _validate_value("required_check_level_harness", required_check_level_harness, VALID_CHECK_LEVELS)
+        updates["required_check_level_harness"] = required_check_level_harness
 
     boolean_updates = {
         "allow_skillbook_write": allow_skillbook_write,
-        "allow_eval_write": allow_eval_write,
+        "allow_check_write": allow_check_write,
         "allow_profile_config_write": allow_profile_config_write,
         "allow_repo_patch": allow_repo_patch,
         "allow_replay_server_patch": allow_replay_server_patch,
@@ -147,7 +147,7 @@ def _validate_value(field: str, value: str, allowed: set[str]) -> None:
 def _decode_policy(row: sqlite3.Row) -> dict[str, Any]:
     payload = dict(row)
     payload["allow_skillbook_write"] = bool(payload["allow_skillbook_write"])
-    payload["allow_eval_write"] = bool(payload["allow_eval_write"])
+    payload["allow_check_write"] = bool(payload["allow_check_write"])
     payload["allow_profile_config_write"] = bool(payload["allow_profile_config_write"])
     payload["allow_repo_patch"] = bool(payload["allow_repo_patch"])
     payload["allow_replay_server_patch"] = bool(payload["allow_replay_server_patch"])

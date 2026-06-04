@@ -153,18 +153,18 @@ ISSUE_DETAIL_GOLDEN = ROOT / "docs/fixtures/cli-json/issue-detail.contract.golde
 PROFILE_NEXT_GOLDEN = ROOT / "docs/fixtures/cli-json/profile-next-context.contract.golden.json"
 IMPROVE_GOLDEN = ROOT / "docs/fixtures/cli-json/improve-existing-proposal.contract.golden.json"
 AUTONOMY_EVENTS_GOLDEN = ROOT / "docs/fixtures/cli-json/autonomy-events.contract.golden.json"
-EVAL_CAPABILITIES_GOLDEN = ROOT / "docs/fixtures/cli-json/eval-capabilities.contract.golden.json"
-GENERATE_EVALS_GOLDEN = ROOT / "docs/fixtures/cli-json/generate-evals.contract.golden.json"
-EVALS_GOLDEN = ROOT / "docs/fixtures/cli-json/evals.contract.golden.json"
-EVAL_ASSERTION_PRESETS_GOLDEN = (
-    ROOT / "docs/fixtures/cli-json/eval-assertion-presets.contract.golden.json"
+CHECK_CAPABILITIES_GOLDEN = ROOT / "docs/fixtures/cli-json/check-capabilities.contract.golden.json"
+GENERATE_CHECKS_GOLDEN = ROOT / "docs/fixtures/cli-json/generate-checks.contract.golden.json"
+CHECKS_GOLDEN = ROOT / "docs/fixtures/cli-json/checks.contract.golden.json"
+CHECK_ASSERTION_PRESETS_GOLDEN = (
+    ROOT / "docs/fixtures/cli-json/check-assertion-presets.contract.golden.json"
 )
-RUN_EVAL_GOLDEN = ROOT / "docs/fixtures/cli-json/run-eval.contract.golden.json"
-EVAL_DETAIL_GOLDEN = ROOT / "docs/fixtures/cli-json/eval-detail.contract.golden.json"
-EVAL_SPEC_LOCK_GOLDEN = ROOT / "docs/fixtures/cli-json/eval-spec-lock.contract.golden.json"
-EVAL_SPEC_LOCKS_GOLDEN = ROOT / "docs/fixtures/cli-json/eval-spec-locks.contract.golden.json"
-EVAL_SPEC_UNLOCK_GOLDEN = ROOT / "docs/fixtures/cli-json/eval-spec-unlock.contract.golden.json"
-EVAL_SPEC_APPROVE_GOLDEN = ROOT / "docs/fixtures/cli-json/eval-spec-approve.contract.golden.json"
+RUN_CHECK_GOLDEN = ROOT / "docs/fixtures/cli-json/run-check.contract.golden.json"
+CHECK_DETAIL_GOLDEN = ROOT / "docs/fixtures/cli-json/check-detail.contract.golden.json"
+CHECK_LOCK_GOLDEN = ROOT / "docs/fixtures/cli-json/check-lock.contract.golden.json"
+CHECK_LOCKS_GOLDEN = ROOT / "docs/fixtures/cli-json/check-locks.contract.golden.json"
+CHECK_UNLOCK_GOLDEN = ROOT / "docs/fixtures/cli-json/check-unlock.contract.golden.json"
+CHECK_APPROVE_GOLDEN = ROOT / "docs/fixtures/cli-json/check-approve.contract.golden.json"
 REPLAY_DETAIL_GOLDEN = ROOT / "docs/fixtures/cli-json/replay-detail.contract.golden.json"
 DOCTOR_GOLDEN = ROOT / "docs/fixtures/cli-json/doctor-readiness.contract.golden.json"
 DISCOVER_SOURCES_GOLDEN = ROOT / "docs/fixtures/cli-json/discover-sources.contract.golden.json"
@@ -623,13 +623,13 @@ class CliJsonContractTests(unittest.TestCase):
                         "seeded_demo": True,
                         "api_status": {
                             "initialized": True,
-                            "schema_version": 24,
+                            "schema_version": 25,
                             "counts": {
                                 "profiles": 1,
                                 "runs": 2,
                                 "spans": 4,
                                 "learning_proposals": 1,
-                                "eval_specs": 1,
+                                "check_specs": 1,
                                 "replay_runs": 1,
                                 "skills": 1,
                             },
@@ -763,7 +763,7 @@ class CliJsonContractTests(unittest.TestCase):
                     "prepare-harness",
                     "--db",
                     str(db_path),
-                    "proposal_harness_generated_eval_001",
+                    "proposal_harness_generated_check_001",
                     "--json",
                 ]
             )
@@ -794,7 +794,7 @@ class CliJsonContractTests(unittest.TestCase):
                     "harness-target-lock",
                     "--db",
                     str(db_path),
-                    "evals/generated_timeout_eval.py",
+                    "checks/generated_timeout_check.py",
                     "--reason",
                     "manual owner review",
                     "--actor-agent-identity-id",
@@ -815,7 +815,7 @@ class CliJsonContractTests(unittest.TestCase):
                     "harness-target-lock",
                     "--db",
                     str(db_path),
-                    "evals/generated_timeout_eval.py",
+                    "checks/generated_timeout_check.py",
                     "--reason",
                     "manual owner review",
                     "--actor-agent-identity-id",
@@ -842,7 +842,7 @@ class CliJsonContractTests(unittest.TestCase):
                     "harness-target-lock",
                     "--db",
                     str(db_path),
-                    "evals/generated_timeout_eval.py",
+                    "checks/generated_timeout_check.py",
                     "--reason",
                     "manual owner review",
                     "--actor-agent-identity-id",
@@ -857,7 +857,7 @@ class CliJsonContractTests(unittest.TestCase):
                     "harness-target-unlock",
                     "--db",
                     str(db_path),
-                    "evals/generated_timeout_eval.py",
+                    "checks/generated_timeout_check.py",
                     "--reason",
                     "review complete",
                     "--actor-agent-identity-id",
@@ -882,7 +882,7 @@ class CliJsonContractTests(unittest.TestCase):
                     "apply-harness",
                     "--db",
                     str(db_path),
-                    "patch_proposal_harness_generated_eval_001_1",
+                    "patch_proposal_harness_generated_check_001_1",
                     "--workspace-root",
                     str(workspace),
                     "--json",
@@ -907,7 +907,7 @@ class CliJsonContractTests(unittest.TestCase):
                     "apply-harness",
                     "--db",
                     str(db_path),
-                    "patch_proposal_harness_generated_eval_001_1",
+                    "patch_proposal_harness_generated_check_001_1",
                     "--workspace-root",
                     str(workspace),
                     "--json",
@@ -920,7 +920,7 @@ class CliJsonContractTests(unittest.TestCase):
                     "rollback-harness",
                     "--db",
                     str(db_path),
-                    "patch_proposal_harness_generated_eval_001_1",
+                    "patch_proposal_harness_generated_check_001_1",
                     "--workspace-root",
                     str(workspace),
                     "--json",
@@ -1562,7 +1562,7 @@ class CliJsonContractTests(unittest.TestCase):
             root = Path(tmpdir)
             db_path = root / "kyoko.db"
             output_dir = root / "replay-adapter"
-            _seed_eval_spec_db(db_path)
+            _seed_check_spec_db(db_path)
             code, _ = _register_fixture_replay_adapter(db_path, output_dir)
             self.assertEqual(code, 0)
 
@@ -1572,8 +1572,8 @@ class CliJsonContractTests(unittest.TestCase):
                     "--db",
                     str(db_path),
                     "fixture_replay",
-                    "eval_proposal_context_timeout_001_1",
-                    "--run-eval",
+                    "check_proposal_context_timeout_001_1",
+                    "--run-check",
                     "--json",
                 ]
             )
@@ -1587,14 +1587,14 @@ class CliJsonContractTests(unittest.TestCase):
     def test_replay_json_matches_golden_contract(self) -> None:
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
-            _seed_eval_spec_db(db_path)
+            _seed_check_spec_db(db_path)
 
             code, payload = _run_json(
                 [
                     "replay",
                     "--db",
                     str(db_path),
-                    "eval_proposal_context_timeout_001_1",
+                    "check_proposal_context_timeout_001_1",
                     "--json",
                 ]
             )
@@ -1605,7 +1605,7 @@ class CliJsonContractTests(unittest.TestCase):
     def test_complete_replay_json_matches_golden_contract(self) -> None:
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
-            _seed_eval_spec_db(db_path)
+            _seed_check_spec_db(db_path)
             replay_payload, completion_payload = _complete_fixture_replay(db_path)
 
             self.assertEqual(replay_payload["replay_run_id"], completion_payload["replay_run_id"])
@@ -1619,7 +1619,7 @@ class CliJsonContractTests(unittest.TestCase):
             root = Path(tmpdir)
             db_path = root / "kyoko.db"
             output_dir = root / "replay-command"
-            _seed_eval_spec_db(db_path)
+            _seed_check_spec_db(db_path)
 
             code, payload = _run_fixture_replay_command(db_path, output_dir)
 
@@ -1634,7 +1634,7 @@ class CliJsonContractTests(unittest.TestCase):
             root = Path(tmpdir)
             db_path = root / "kyoko.db"
             output_dir = root / "judge-command"
-            _seed_judge_eval_spec_db(db_path)
+            _seed_judge_check_spec_db(db_path)
 
             code, payload = _run_fixture_judge_command(db_path, output_dir)
 
@@ -1960,7 +1960,7 @@ def replay(request):
     def test_replay_server_run_json_matches_golden_contract_projection(self) -> None:
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
-            _seed_eval_spec_db(db_path)
+            _seed_check_spec_db(db_path)
 
             with RunningReplayServer() as server:
                 code, payload = _run_json(
@@ -1969,8 +1969,8 @@ def replay(request):
                         "--db",
                         str(db_path),
                         server.base_url,
-                        "eval_proposal_context_timeout_001_1",
-                        "--run-eval",
+                        "check_proposal_context_timeout_001_1",
+                        "--run-check",
                         "--json",
                     ]
                 )
@@ -1988,7 +1988,7 @@ def replay(request):
             output_dir = root / "server-process"
             port = _free_port()
             server_url = f"http://127.0.0.1:{port}"
-            _seed_eval_spec_db(db_path)
+            _seed_check_spec_db(db_path)
             code, _ = _register_fixture_managed_replay_adapter(
                 db_path,
                 output_dir,
@@ -2031,7 +2031,7 @@ def replay(request):
             output_dir = root / "server-process"
             port = _free_port()
             server_url = f"http://127.0.0.1:{port}"
-            _seed_eval_spec_db(db_path)
+            _seed_check_spec_db(db_path)
             code, _ = _register_fixture_managed_replay_adapter(
                 db_path,
                 output_dir,
@@ -2085,7 +2085,7 @@ def replay(request):
             output_dir = root / "server-process"
             port = _free_port()
             server_url = f"http://127.0.0.1:{port}"
-            _seed_eval_spec_db(db_path)
+            _seed_check_spec_db(db_path)
             code, _ = _register_fixture_managed_replay_adapter(
                 db_path,
                 output_dir,
@@ -2141,7 +2141,7 @@ def replay(request):
             output_dir = root / "server-process"
             port = _free_port()
             server_url = f"http://127.0.0.1:{port}"
-            _seed_eval_spec_db(db_path)
+            _seed_check_spec_db(db_path)
             code, _ = _register_fixture_managed_replay_adapter(
                 db_path,
                 output_dir,
@@ -2368,20 +2368,20 @@ def replay(request):
             self.assertEqual(code, 0)
             self.assertEqual(_autonomy_events_contract(payload), _load_json(AUTONOMY_EVENTS_GOLDEN))
 
-    def test_eval_capabilities_json_matches_golden_contract(self) -> None:
-        code, payload = _run_json(["eval-capabilities", "--json"])
+    def test_check_capabilities_json_matches_golden_contract(self) -> None:
+        code, payload = _run_json(["check-capabilities", "--json"])
 
         self.assertEqual(code, 0)
-        self.assertEqual(payload, _load_json(EVAL_CAPABILITIES_GOLDEN))
+        self.assertEqual(payload, _load_json(CHECK_CAPABILITIES_GOLDEN))
 
-    def test_generate_evals_json_matches_golden_contract_projection(self) -> None:
+    def test_generate_checks_json_matches_golden_contract_projection(self) -> None:
         with TemporaryDirectory() as tmpdir:
             kyoko_db = Path(tmpdir) / "kyoko.db"
             _seed_context_proposal_db(kyoko_db)
 
             code, payload = _run_json(
                 [
-                    "generate-evals",
+                    "generate-checks",
                     "--db",
                     str(kyoko_db),
                     "proposal_context_timeout_001",
@@ -2390,36 +2390,36 @@ def replay(request):
             )
 
             self.assertEqual(code, 0)
-            self.assertEqual(_generate_evals_contract(payload), _load_json(GENERATE_EVALS_GOLDEN))
+            self.assertEqual(_generate_checks_contract(payload), _load_json(GENERATE_CHECKS_GOLDEN))
 
-    def test_evals_json_matches_golden_contract_projection(self) -> None:
+    def test_checks_json_matches_golden_contract_projection(self) -> None:
         with TemporaryDirectory() as tmpdir:
             kyoko_db = Path(tmpdir) / "kyoko.db"
-            _seed_eval_spec_db(kyoko_db)
+            _seed_check_spec_db(kyoko_db)
 
-            code, payload = _run_json(["evals", "--db", str(kyoko_db), "--json"])
+            code, payload = _run_json(["checks", "--db", str(kyoko_db), "--json"])
 
             self.assertEqual(code, 0)
-            self.assertEqual(_evals_contract(payload), _load_json(EVALS_GOLDEN))
+            self.assertEqual(_checks_contract(payload), _load_json(CHECKS_GOLDEN))
 
-    def test_eval_assertion_presets_json_matches_golden_contract(self) -> None:
-        code, payload = _run_json(["eval-assertion-presets", "--json"])
+    def test_check_assertion_presets_json_matches_golden_contract(self) -> None:
+        code, payload = _run_json(["check-assertion-presets", "--json"])
 
         self.assertEqual(code, 0)
-        self.assertEqual(payload, _load_json(EVAL_ASSERTION_PRESETS_GOLDEN))
+        self.assertEqual(payload, _load_json(CHECK_ASSERTION_PRESETS_GOLDEN))
 
-    def test_run_eval_json_matches_golden_contract_projection(self) -> None:
+    def test_run_check_json_matches_golden_contract_projection(self) -> None:
         with TemporaryDirectory() as tmpdir:
             kyoko_db = Path(tmpdir) / "kyoko.db"
-            _seed_eval_spec_db(kyoko_db)
+            _seed_check_spec_db(kyoko_db)
             replay_payload, _ = _complete_fixture_replay(kyoko_db)
 
             code, payload = _run_json(
                 [
-                    "run-eval",
+                    "run-check",
                     "--db",
                     str(kyoko_db),
-                    "eval_proposal_context_timeout_001_1",
+                    "check_proposal_context_timeout_001_1",
                     "--replay-run-id",
                     replay_payload["replay_run_id"],
                     "--json",
@@ -2427,19 +2427,19 @@ def replay(request):
             )
 
             self.assertEqual(code, 0)
-            self.assertEqual(_run_eval_contract(payload), _load_json(RUN_EVAL_GOLDEN))
+            self.assertEqual(_run_check_contract(payload), _load_json(RUN_CHECK_GOLDEN))
 
-    def test_eval_detail_json_matches_golden_contract_projection(self) -> None:
+    def test_check_detail_json_matches_golden_contract_projection(self) -> None:
         with TemporaryDirectory() as tmpdir:
             kyoko_db = Path(tmpdir) / "kyoko.db"
-            _seed_eval_spec_db(kyoko_db)
+            _seed_check_spec_db(kyoko_db)
             replay_payload, _ = _complete_fixture_replay(kyoko_db)
             code, _ = _run_json(
                 [
-                    "run-eval",
+                    "run-check",
                     "--db",
                     str(kyoko_db),
-                    "eval_proposal_context_timeout_001_1",
+                    "check_proposal_context_timeout_001_1",
                     "--replay-run-id",
                     replay_payload["replay_run_id"],
                     "--json",
@@ -2449,28 +2449,28 @@ def replay(request):
 
             code, payload = _run_json(
                 [
-                    "eval-detail",
+                    "check-detail",
                     "--db",
                     str(kyoko_db),
-                    "eval_proposal_context_timeout_001_1",
+                    "check_proposal_context_timeout_001_1",
                     "--json",
                 ]
             )
 
             self.assertEqual(code, 0)
-            self.assertEqual(_eval_detail_contract(payload), _load_json(EVAL_DETAIL_GOLDEN))
+            self.assertEqual(_check_detail_contract(payload), _load_json(CHECK_DETAIL_GOLDEN))
 
-    def test_eval_spec_lock_json_matches_golden_contract(self) -> None:
+    def test_check_lock_json_matches_golden_contract(self) -> None:
         with TemporaryDirectory() as tmpdir:
             kyoko_db = Path(tmpdir) / "kyoko.db"
-            _seed_eval_spec_db(kyoko_db)
+            _seed_check_spec_db(kyoko_db)
 
             code, payload = _run_json(
                 [
-                    "eval-spec-lock",
+                    "check-lock",
                     "--db",
                     str(kyoko_db),
-                    "eval_proposal_context_timeout_001_1",
+                    "check_proposal_context_timeout_001_1",
                     "--reason",
                     "manual review",
                     "--actor-agent-identity-id",
@@ -2480,36 +2480,36 @@ def replay(request):
             )
 
             self.assertEqual(code, 0)
-            self.assertEqual(payload, _load_json(EVAL_SPEC_LOCK_GOLDEN))
+            self.assertEqual(payload, _load_json(CHECK_LOCK_GOLDEN))
 
-    def test_eval_spec_locks_json_matches_golden_contract_projection(self) -> None:
+    def test_check_locks_json_matches_golden_contract_projection(self) -> None:
         with TemporaryDirectory() as tmpdir:
             kyoko_db = Path(tmpdir) / "kyoko.db"
-            _seed_eval_spec_db(kyoko_db)
-            code, _ = _lock_fixture_eval_spec(kyoko_db)
+            _seed_check_spec_db(kyoko_db)
+            code, _ = _lock_fixture_check_spec(kyoko_db)
             self.assertEqual(code, 0)
 
-            code, payload = _run_json(["eval-spec-locks", "--db", str(kyoko_db), "--json"])
+            code, payload = _run_json(["check-locks", "--db", str(kyoko_db), "--json"])
 
             self.assertEqual(code, 0)
             self.assertEqual(
-                _eval_spec_locks_contract(payload),
-                _load_json(EVAL_SPEC_LOCKS_GOLDEN),
+                _check_locks_contract(payload),
+                _load_json(CHECK_LOCKS_GOLDEN),
             )
 
-    def test_eval_spec_unlock_json_matches_golden_contract(self) -> None:
+    def test_check_unlock_json_matches_golden_contract(self) -> None:
         with TemporaryDirectory() as tmpdir:
             kyoko_db = Path(tmpdir) / "kyoko.db"
-            _seed_eval_spec_db(kyoko_db)
-            code, _ = _lock_fixture_eval_spec(kyoko_db)
+            _seed_check_spec_db(kyoko_db)
+            code, _ = _lock_fixture_check_spec(kyoko_db)
             self.assertEqual(code, 0)
 
             code, payload = _run_json(
                 [
-                    "eval-spec-unlock",
+                    "check-unlock",
                     "--db",
                     str(kyoko_db),
-                    "eval_proposal_context_timeout_001_1",
+                    "check_proposal_context_timeout_001_1",
                     "--actor-agent-identity-id",
                     "agent_researcher_001",
                     "--json",
@@ -2517,19 +2517,19 @@ def replay(request):
             )
 
             self.assertEqual(code, 0)
-            self.assertEqual(payload, _load_json(EVAL_SPEC_UNLOCK_GOLDEN))
+            self.assertEqual(payload, _load_json(CHECK_UNLOCK_GOLDEN))
 
-    def test_eval_spec_approve_json_matches_golden_contract(self) -> None:
+    def test_check_approve_json_matches_golden_contract(self) -> None:
         with TemporaryDirectory() as tmpdir:
             kyoko_db = Path(tmpdir) / "kyoko.db"
-            _seed_eval_spec_db(kyoko_db)
+            _seed_check_spec_db(kyoko_db)
             replay_payload, _ = _complete_fixture_replay(kyoko_db)
             code, _ = _run_json(
                 [
-                    "run-eval",
+                    "run-check",
                     "--db",
                     str(kyoko_db),
-                    "eval_proposal_context_timeout_001_1",
+                    "check_proposal_context_timeout_001_1",
                     "--replay-run-id",
                     replay_payload["replay_run_id"],
                     "--json",
@@ -2539,10 +2539,10 @@ def replay(request):
 
             code, payload = _run_json(
                 [
-                    "eval-spec-approve",
+                    "check-approve",
                     "--db",
                     str(kyoko_db),
-                    "eval_proposal_context_timeout_001_1",
+                    "check_proposal_context_timeout_001_1",
                     "--reason",
                     "reviewed gate evidence",
                     "--actor-agent-identity-id",
@@ -2552,14 +2552,14 @@ def replay(request):
             )
 
             self.assertEqual(code, 0)
-            self.assertEqual(payload, _load_json(EVAL_SPEC_APPROVE_GOLDEN))
+            self.assertEqual(payload, _load_json(CHECK_APPROVE_GOLDEN))
 
     def test_replay_detail_json_matches_golden_contract_projection(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             kyoko_db = root / "kyoko.db"
             output_dir = root / "replay-command"
-            _seed_eval_spec_db(kyoko_db)
+            _seed_check_spec_db(kyoko_db)
             code, replay_payload = _run_fixture_replay_command(kyoko_db, output_dir)
             self.assertEqual(code, 0)
 
@@ -3127,11 +3127,11 @@ def _demo_contract(payload: dict, db_path: Path, output_dir: Path) -> dict:
         "adapter_id": payload["adapter_id"],
         "applied_skill_ids": payload["applied_skill_ids"],
         "db_path": _db_path_contract(payload["db_path"], db_path),
-        "eval_run_id": payload["eval_run_id"],
-        "eval_spec_created_ids": payload["eval_spec_created_ids"],
-        "eval_spec_existing_ids": payload["eval_spec_existing_ids"],
-        "eval_spec_ids": payload["eval_spec_ids"],
-        "eval_status": payload["eval_status"],
+        "check_run_id": payload["check_run_id"],
+        "check_spec_created_ids": payload["check_spec_created_ids"],
+        "check_spec_existing_ids": payload["check_spec_existing_ids"],
+        "check_spec_ids": payload["check_spec_ids"],
+        "check_status": payload["check_status"],
         "output_dir": _output_path_contract(payload["output_dir"], output_dir),
         "output_dir_exists": output_dir.exists(),
         "profile_id": payload["profile_id"],
@@ -3470,7 +3470,7 @@ def _ace_native_smoke_contract(payload: dict, output_dir: Path, db_path: Path) -
 def _ace_diff_proposal_contract(proposal: dict) -> dict:
     changes = proposal["proposed_changes"]
     skill_change = changes[0]
-    eval_change = changes[1]
+    check_change = changes[1]
     return {
         "confidence": proposal["confidence"],
         "created_at_present": bool(proposal["created_at"]),
@@ -3493,12 +3493,12 @@ def _ace_diff_proposal_contract(proposal: dict) -> dict:
                 "type": skill_change["type"],
             },
             {
-                "definition": eval_change["definition"],
-                "eval_type": eval_change["eval_type"],
-                "name": eval_change["name"],
-                "side_effect_mode": eval_change["side_effect_mode"],
-                "trust_level": eval_change["trust_level"],
-                "type": eval_change["type"],
+                "definition": check_change["definition"],
+                "check_type": check_change["check_type"],
+                "name": check_change["name"],
+                "side_effect_mode": check_change["side_effect_mode"],
+                "trust_level": check_change["trust_level"],
+                "type": check_change["type"],
             },
         ],
         "schema_version": proposal["schema_version"],
@@ -3606,7 +3606,7 @@ def _dashboard_metrics_contract(payload: dict) -> dict:
         "autonomy": payload["autonomy"],
         "before_after": payload["before_after"],
         "cards": payload["cards"],
-        "evals": payload["evals"],
+        "checks": payload["checks"],
         "issues": payload["issues"],
         "profile_id": payload["profile_id"],
         "profile_name": payload["profile_name"],
@@ -3629,7 +3629,7 @@ def _dashboard_smoke_contract(payload: dict, output_dir: Path, db_path: Path) ->
                 "runs": counts["runs"],
                 "spans": counts["spans"],
                 "learning_proposals": counts["learning_proposals"],
-                "eval_specs": counts["eval_specs"],
+                "check_specs": counts["check_specs"],
                 "replay_runs": counts["replay_runs"],
                 "skills": counts["skills"],
             },
@@ -3721,7 +3721,7 @@ def _policy_payload_contract(payload: dict) -> dict:
 
 def _policy_contract(policy: dict) -> dict:
     return {
-        "allow_eval_write": policy["allow_eval_write"],
+        "allow_check_write": policy["allow_check_write"],
         "allow_profile_config_write": policy["allow_profile_config_write"],
         "allow_replay_server_patch": policy["allow_replay_server_patch"],
         "allow_repo_patch": policy["allow_repo_patch"],
@@ -3732,8 +3732,8 @@ def _policy_contract(policy: dict) -> dict:
         "harness_mode": policy["harness_mode"],
         "profile_id": policy["profile_id"],
         "protected_paths": policy["protected_paths"],
-        "required_eval_level_context": policy["required_eval_level_context"],
-        "required_eval_level_harness": policy["required_eval_level_harness"],
+        "required_check_level_context": policy["required_check_level_context"],
+        "required_check_level_harness": policy["required_check_level_harness"],
         "rollback_on_regression": policy["rollback_on_regression"],
         "timestamps_present": _timestamps_present(policy, ("created_at", "updated_at")),
     }
@@ -3976,13 +3976,13 @@ def _run_autonomy_contract(payload: dict) -> dict:
                 "applied_context_rule_ids": decision["applied_context_rule_ids"],
                 "applied_skill_ids": decision["applied_skill_ids"],
                 "detail": decision["detail"],
-                "eval_run_ids": decision["eval_run_ids"],
-                "eval_spec_ids": decision["eval_spec_ids"],
+                "check_run_ids": decision["check_run_ids"],
+                "check_spec_ids": decision["check_spec_ids"],
                 "patch_transaction_ids": decision["patch_transaction_ids"],
                 "profile_id": decision["profile_id"],
                 "proposal_id": decision["proposal_id"],
                 "reason": decision["reason"],
-                "required_eval_level": decision["required_eval_level"],
+                "required_check_level": decision["required_check_level"],
                 "section": decision["section"],
                 "state_after": decision["state_after"],
                 "state_before": decision["state_before"],
@@ -4496,13 +4496,13 @@ def _replay_adapter_run_contract(payload: dict, output_dir: Path) -> dict:
             "request_path": _output_path_contract(payload["request_path"], output_dir),
             "result_path": _output_path_contract(payload["result_path"], output_dir),
         },
-        "eval_run": {
-            "eval_run_id": payload["eval_run"]["eval_run_id"],
-            "promoted_trust_level": payload["eval_run"]["promoted_trust_level"],
-            "result": payload["eval_run"]["result"],
-            "status": payload["eval_run"]["status"],
+        "check_run": {
+            "check_run_id": payload["check_run"]["check_run_id"],
+            "promoted_trust_level": payload["check_run"]["promoted_trust_level"],
+            "result": payload["check_run"]["result"],
+            "status": payload["check_run"]["status"],
         },
-        "eval_spec_id": payload["eval_spec_id"],
+        "check_spec_id": payload["check_spec_id"],
         "output_run_id": payload["output_run_id"],
         "profile_id": payload["profile_id"],
         "replay_run_id": payload["replay_run_id"],
@@ -4521,7 +4521,7 @@ def _replay_adapter_run_contract(payload: dict, output_dir: Path) -> dict:
 
 def _replay_contract(payload: dict) -> dict:
     return {
-        "eval_spec_id": payload["eval_spec_id"],
+        "check_spec_id": payload["check_spec_id"],
         "mode": payload["mode"],
         "profile_id": payload["profile_id"],
         "proposal_id": payload["proposal_id"],
@@ -4535,7 +4535,7 @@ def _replay_contract(payload: dict) -> dict:
 
 def _complete_replay_contract(payload: dict) -> dict:
     return {
-        "eval_spec_id": payload["eval_spec_id"],
+        "check_spec_id": payload["check_spec_id"],
         "ingested_counts": payload["ingested_counts"],
         "output_run_id": payload["output_run_id"],
         "profile_id": payload["profile_id"],
@@ -4558,13 +4558,13 @@ def _replay_command_contract(payload: dict, output_dir: Path) -> dict:
             "request_path": _output_path_contract(payload["request_path"], output_dir),
             "result_path": _output_path_contract(payload["result_path"], output_dir),
         },
-        "eval_run": {
-            "eval_run_id": payload["eval_run"]["eval_run_id"],
-            "promoted_trust_level": payload["eval_run"]["promoted_trust_level"],
-            "result": _eval_result_contract(payload["eval_run"]["result"]),
-            "status": payload["eval_run"]["status"],
+        "check_run": {
+            "check_run_id": payload["check_run"]["check_run_id"],
+            "promoted_trust_level": payload["check_run"]["promoted_trust_level"],
+            "result": _check_result_contract(payload["check_run"]["result"]),
+            "status": payload["check_run"]["status"],
         },
-        "eval_spec_id": payload["eval_spec_id"],
+        "check_spec_id": payload["check_spec_id"],
         "output_run_id": payload["output_run_id"],
         "profile_id": payload["profile_id"],
         "raw_output_contract": {
@@ -4592,13 +4592,13 @@ def _judge_command_contract(payload: dict, output_dir: Path) -> dict:
             "request_path": _output_path_contract(payload["request_path"], output_dir),
             "result_path": _output_path_contract(payload["result_path"], output_dir),
         },
-        "eval_run": {
-            "eval_run_id": payload["eval_run"]["eval_run_id"],
-            "promoted_trust_level": payload["eval_run"]["promoted_trust_level"],
-            "result": _judge_eval_result_contract(payload["eval_run"]["result"]),
-            "status": payload["eval_run"]["status"],
+        "check_run": {
+            "check_run_id": payload["check_run"]["check_run_id"],
+            "promoted_trust_level": payload["check_run"]["promoted_trust_level"],
+            "result": _judge_check_result_contract(payload["check_run"]["result"]),
+            "status": payload["check_run"]["status"],
         },
-        "eval_spec_id": payload["eval_spec_id"],
+        "check_spec_id": payload["check_spec_id"],
         "judgment": {
             "backend": payload["judgment"]["backend"],
             "judge": payload["judgment"]["judge"],
@@ -4616,12 +4616,12 @@ def _judge_command_contract(payload: dict, output_dir: Path) -> dict:
     }
 
 
-def _judge_eval_result_contract(result: dict) -> dict:
+def _judge_check_result_contract(result: dict) -> dict:
     return {
         "assertion_counts": result["assertion_counts"],
-        "assertions": [_eval_assertion_contract(assertion) for assertion in result["assertions"]],
+        "assertions": [_check_assertion_contract(assertion) for assertion in result["assertions"]],
         "comparison": result["comparison"],
-        "eval_type": result["eval_type"],
+        "check_type": result["check_type"],
         "gateable": result["gateable"],
         "judge": result["judge"],
         "judge_backend": result["judge_backend"],
@@ -4651,9 +4651,9 @@ def _judge_smoke_contract(payload: dict, output_dir: Path) -> dict:
             "result_path": _output_path_contract(payload["result_path"], output_dir),
         },
         "command": _operator_command_contract(payload["command"], output_dir),
-        "eval_run_id": payload["eval_run_id"],
-        "eval_spec_id": payload["eval_spec_id"],
-        "eval_status": payload["eval_status"],
+        "check_run_id": payload["check_run_id"],
+        "check_spec_id": payload["check_spec_id"],
+        "check_status": payload["check_status"],
         "external_command_invoked": payload["external_command_invoked"],
         "external_model_invoked": payload["external_model_invoked"],
         "handoff": {
@@ -4925,8 +4925,8 @@ def _integration_smoke_improve_contract(payload: dict, output_dir: Path) -> dict
         "replay_server_url": _server_url_contract(server_url, server_url),
         "source_smoke": _integration_smoke_source_contract(payload["source_smoke"], output_dir),
         "status_counts": {
-            "eval_runs": status_counts["eval_runs"],
-            "eval_specs": status_counts["eval_specs"],
+            "check_runs": status_counts["check_runs"],
+            "check_specs": status_counts["check_specs"],
             "learning_proposals": status_counts["learning_proposals"],
             "operator_runs": status_counts["operator_runs"],
             "replay_adapters": status_counts["replay_adapters"],
@@ -5037,13 +5037,13 @@ def _replay_server_health_contract(payload: dict, server_url: str) -> dict:
 def _replay_server_run_contract(payload: dict, server_url: str) -> dict:
     return {
         "adapter_id": payload["adapter_id"],
-        "eval_run": {
-            "eval_run_id": payload["eval_run"]["eval_run_id"],
-            "promoted_trust_level": payload["eval_run"]["promoted_trust_level"],
-            "result": _eval_result_contract(payload["eval_run"]["result"]),
-            "status": payload["eval_run"]["status"],
+        "check_run": {
+            "check_run_id": payload["check_run"]["check_run_id"],
+            "promoted_trust_level": payload["check_run"]["promoted_trust_level"],
+            "result": _check_result_contract(payload["check_run"]["result"]),
+            "status": payload["check_run"]["status"],
         },
-        "eval_spec_id": payload["eval_spec_id"],
+        "check_spec_id": payload["check_spec_id"],
         "health": _replay_server_health_contract(payload["health"], server_url),
         "output_run_id": payload["output_run_id"],
         "profile_id": payload["profile_id"],
@@ -5151,52 +5151,52 @@ def _server_url_contract(value: str, server_url: str) -> str:
     return value
 
 
-def _generate_evals_contract(payload: dict) -> dict:
+def _generate_checks_contract(payload: dict) -> dict:
     return {
-        "eval_spec_ids": payload["eval_spec_ids"],
-        "existing_eval_spec_ids": payload["existing_eval_spec_ids"],
+        "check_spec_ids": payload["check_spec_ids"],
+        "existing_check_spec_ids": payload["existing_check_spec_ids"],
         "profile_id": payload["profile_id"],
         "proposal_id": payload["proposal_id"],
     }
 
 
-def _evals_contract(payload: dict) -> dict:
+def _checks_contract(payload: dict) -> dict:
     return {
-        "eval_specs": [_eval_spec_contract(spec) for spec in payload["eval_specs"]],
-        "eval_runs": [_eval_run_contract(run) for run in payload["eval_runs"]],
+        "check_specs": [_check_spec_contract(spec) for spec in payload["check_specs"]],
+        "check_runs": [_check_run_contract(run) for run in payload["check_runs"]],
         "replay_runs": [_replay_run_contract(run) for run in payload["replay_runs"]],
     }
 
 
-def _run_eval_contract(payload: dict) -> dict:
+def _run_check_contract(payload: dict) -> dict:
     return {
-        "eval_run_id": payload["eval_run_id"],
-        "eval_spec_id": payload["eval_spec_id"],
+        "check_run_id": payload["check_run_id"],
+        "check_spec_id": payload["check_spec_id"],
         "profile_id": payload["profile_id"],
         "promoted_trust_level": payload["promoted_trust_level"],
         "proposal_id": payload["proposal_id"],
         "replay_run_id": payload["replay_run_id"],
-        "result": _eval_result_contract(payload["result"]),
+        "result": _check_result_contract(payload["result"]),
         "status": payload["status"],
     }
 
 
-def _eval_detail_contract(payload: dict) -> dict:
+def _check_detail_contract(payload: dict) -> dict:
     return {
         "counts": {
-            "eval_runs": len(payload["eval_runs"]),
+            "check_runs": len(payload["check_runs"]),
             "replay_runs": len(payload["replay_runs"]),
             "timeline_events": len(payload["timeline_events"]),
         },
-        "eval_runs": [_eval_run_contract(run) for run in payload["eval_runs"]],
-        "eval_spec": _eval_spec_contract(payload["eval_spec"]),
-        "latest_eval_run": _eval_run_contract(payload["latest_eval_run"]),
+        "check_runs": [_check_run_contract(run) for run in payload["check_runs"]],
+        "check_spec": _check_spec_contract(payload["check_spec"]),
+        "latest_check_run": _check_run_contract(payload["latest_check_run"]),
         "latest_replay_run": _replay_run_contract(payload["latest_replay_run"]),
-        "proposal": _eval_detail_proposal_contract(payload["proposal"]),
+        "proposal": _check_detail_proposal_contract(payload["proposal"]),
         "replay_runs": [_replay_run_contract(run) for run in payload["replay_runs"]],
-        "source_run": _eval_detail_source_run_contract(payload["source_run"]),
-        "summary": _eval_detail_summary_contract(payload["summary"]),
-        "target": _eval_detail_target_contract(payload["target"]),
+        "source_run": _check_detail_source_run_contract(payload["source_run"]),
+        "summary": _check_detail_summary_contract(payload["summary"]),
+        "target": _check_detail_target_contract(payload["target"]),
         "timeline_events": sorted(
             [
                 {
@@ -5215,11 +5215,11 @@ def _eval_detail_contract(payload: dict) -> dict:
     }
 
 
-def _eval_spec_locks_contract(payload: dict) -> dict:
+def _check_locks_contract(payload: dict) -> dict:
     return {
-        "eval_spec_locks": [
+        "check_locks": [
             {
-                "eval_spec_id": lock["eval_spec_id"],
+                "check_spec_id": lock["check_spec_id"],
                 "human_locked": lock["human_locked"],
                 "profile_id": lock["profile_id"],
                 "reason": lock["reason"],
@@ -5228,7 +5228,7 @@ def _eval_spec_locks_contract(payload: dict) -> dict:
                     ("created_at", "updated_at"),
                 ),
             }
-            for lock in payload["eval_spec_locks"]
+            for lock in payload["check_locks"]
         ],
     }
 
@@ -5241,18 +5241,18 @@ def _replay_detail_contract(payload: dict, output_dir: Path) -> dict:
         ],
         "counts": {
             "artifacts": len(payload["artifacts"]),
-            "eval_runs": len(payload["eval_runs"]),
+            "check_runs": len(payload["check_runs"]),
             "output_spans": len(payload["output_spans"]),
             "source_spans": len(payload["source_spans"]),
             "timeline_events": len(payload["timeline_events"]),
         },
-        "eval_runs": [_eval_run_contract(run) for run in payload["eval_runs"]],
-        "eval_spec": _eval_spec_contract(payload["eval_spec"]),
-        "output_run": _eval_detail_source_run_contract(payload["output_run"]),
+        "check_runs": [_check_run_contract(run) for run in payload["check_runs"]],
+        "check_spec": _check_spec_contract(payload["check_spec"]),
+        "output_run": _check_detail_source_run_contract(payload["output_run"]),
         "output_spans": [_span_contract(span) for span in payload["output_spans"]],
-        "proposal": _eval_detail_proposal_contract(payload["proposal"]),
+        "proposal": _check_detail_proposal_contract(payload["proposal"]),
         "replay_run": _replay_detail_run_contract(payload["replay_run"], output_dir),
-        "source_run": _eval_detail_source_run_contract(payload["source_run"]),
+        "source_run": _check_detail_source_run_contract(payload["source_run"]),
         "source_spans": [_span_contract(span) for span in payload["source_spans"]],
         "summary": payload["summary"],
         "timeline_events": sorted(
@@ -5284,7 +5284,7 @@ def _replay_detail_artifact_contract(artifact: dict, output_dir: Path) -> dict:
             "contains_replay_result_begin": "BEGIN_KYOKO_REPLAY_RESULT_JSON" in preview,
             "contains_replay_result_end": "END_KYOKO_REPLAY_RESULT_JSON" in preview,
             "contains_replay_result_schema": "kyoko.replay_result.v1" in preview,
-            "contains_replay_run_id": "replay_eval_proposal_context_timeout_001_1_001" in preview,
+            "contains_replay_run_id": "replay_check_proposal_context_timeout_001_1_001" in preview,
             "contains_replay_target_map": "span_fetch_retry_success_001" in preview,
             "contains_request_schema": "kyoko.replay_request.v1" in preview,
             "preview_present": bool(preview),
@@ -5304,7 +5304,7 @@ def _replay_detail_run_contract(run: dict, output_dir: Path) -> dict:
             }
             for ref in run["artifact_refs"]
         ],
-        "eval_spec_id": run["eval_spec_id"],
+        "check_spec_id": run["check_spec_id"],
         "id": run["id"],
         "input_ref": run["input_ref"],
         "mode": run["mode"],
@@ -5323,10 +5323,10 @@ def _replay_detail_run_contract(run: dict, output_dir: Path) -> dict:
     }
 
 
-def _eval_spec_contract(spec: dict) -> dict:
+def _check_spec_contract(spec: dict) -> dict:
     return {
-        "definition": _eval_definition_contract(spec["definition"]),
-        "eval_type": spec["eval_type"],
+        "definition": _check_definition_contract(spec["definition"]),
+        "check_type": spec["check_type"],
         "human_lock_reason": spec["human_lock_reason"],
         "human_locked": spec["human_locked"],
         "id": spec["id"],
@@ -5341,7 +5341,7 @@ def _eval_spec_contract(spec: dict) -> dict:
     }
 
 
-def _eval_definition_contract(definition: dict) -> dict:
+def _check_definition_contract(definition: dict) -> dict:
     return {
         "assertion": definition["assertion"],
         "assertions": definition["assertions"],
@@ -5353,15 +5353,15 @@ def _eval_definition_contract(definition: dict) -> dict:
     }
 
 
-def _eval_run_contract(run: dict) -> dict:
+def _check_run_contract(run: dict) -> dict:
     return {
         "artifact_refs": run["artifact_refs"],
-        "eval_spec_id": run["eval_spec_id"],
+        "check_spec_id": run["check_spec_id"],
         "id": run["id"],
         "profile_id": run["profile_id"],
         "proposal_id": run["proposal_id"],
         "replay_run_id": run["replay_run_id"],
-        "result": _eval_result_contract(run["result"]),
+        "result": _check_result_contract(run["result"]),
         "status": run["status"],
         "timestamps_present": _timestamps_present(
             run,
@@ -5373,7 +5373,7 @@ def _eval_run_contract(run: dict) -> dict:
 def _replay_run_contract(run: dict) -> dict:
     return {
         "artifact_refs": run["artifact_refs"],
-        "eval_spec_id": run["eval_spec_id"],
+        "check_spec_id": run["check_spec_id"],
         "id": run["id"],
         "input_ref": run["input_ref"],
         "mode": run["mode"],
@@ -5392,12 +5392,12 @@ def _replay_run_contract(run: dict) -> dict:
     }
 
 
-def _eval_result_contract(result: dict) -> dict:
+def _check_result_contract(result: dict) -> dict:
     return {
         "assertion": result["assertion"],
         "assertion_counts": result["assertion_counts"],
         "assertions": [
-            _eval_assertion_contract(assertion)
+            _check_assertion_contract(assertion)
             for assertion in result["assertions"]
         ],
         "baseline_status": result["baseline_status"],
@@ -5414,7 +5414,7 @@ def _eval_result_contract(result: dict) -> dict:
     }
 
 
-def _eval_assertion_contract(assertion: dict) -> dict:
+def _check_assertion_contract(assertion: dict) -> dict:
     contracted = {}
     for key in (
         "actual",
@@ -5449,7 +5449,7 @@ def _replay_result_contract(result: dict) -> dict:
     }
 
 
-def _eval_detail_proposal_contract(proposal: dict) -> dict:
+def _check_detail_proposal_contract(proposal: dict) -> dict:
     return {
         "confidence": proposal["confidence"],
         "gate_expectations": proposal["gate_expectations"],
@@ -5467,7 +5467,7 @@ def _eval_detail_proposal_contract(proposal: dict) -> dict:
     }
 
 
-def _eval_detail_source_run_contract(run: dict) -> dict:
+def _check_detail_source_run_contract(run: dict) -> dict:
     return {
         "agent_identity_id": run["agent_identity_id"],
         "id": run["id"],
@@ -5479,19 +5479,19 @@ def _eval_detail_source_run_contract(run: dict) -> dict:
     }
 
 
-def _eval_detail_summary_contract(summary: dict) -> dict:
+def _check_detail_summary_contract(summary: dict) -> dict:
     return {
-        "eval_runs": summary["eval_runs"],
-        "failed_eval_runs": summary["failed_eval_runs"],
+        "check_runs": summary["check_runs"],
+        "failed_check_runs": summary["failed_check_runs"],
         "latest_assertion_counts": summary["latest_assertion_counts"],
         "latest_assertions": [
-            _eval_assertion_contract(assertion)
+            _check_assertion_contract(assertion)
             for assertion in summary["latest_assertions"]
         ],
         "latest_comparison": summary["latest_comparison"],
         "latest_replay_status": summary["latest_replay_status"],
         "latest_status": summary["latest_status"],
-        "passed_eval_runs": summary["passed_eval_runs"],
+        "passed_check_runs": summary["passed_check_runs"],
         "passed_replay_runs": summary["passed_replay_runs"],
         "replay_runs": summary["replay_runs"],
         "side_effect_mode": summary["side_effect_mode"],
@@ -5499,7 +5499,7 @@ def _eval_detail_summary_contract(summary: dict) -> dict:
     }
 
 
-def _eval_detail_target_contract(target: dict) -> dict:
+def _check_detail_target_contract(target: dict) -> dict:
     resolved = target["resolved"]
     return {
         "found": target["found"],
@@ -5740,7 +5740,7 @@ def _seed_prepared_generated_harness_db(db_path: Path, *, repo_patch: bool = Fal
             "prepare-harness",
             "--db",
             str(db_path),
-            "proposal_harness_generated_eval_001",
+            "proposal_harness_generated_check_001",
             "--json",
         ]
     )
@@ -5748,27 +5748,27 @@ def _seed_prepared_generated_harness_db(db_path: Path, *, repo_patch: bool = Fal
         raise AssertionError("failed to prepare generated harness proposal")
 
 
-def _seed_eval_spec_db(db_path: Path) -> None:
+def _seed_check_spec_db(db_path: Path) -> None:
     _seed_context_proposal_db(db_path)
     stdout = io.StringIO()
     with redirect_stdout(stdout):
         code = main(
             [
-                "generate-evals",
+                "generate-checks",
                 "--db",
                 str(db_path),
                 "proposal_context_timeout_001",
             ]
         )
     if code != 0:
-        raise AssertionError("failed to seed eval spec")
+        raise AssertionError("failed to seed check spec")
 
 
-def _seed_judge_eval_spec_db(db_path: Path) -> None:
-    _seed_eval_spec_db(db_path)
+def _seed_judge_check_spec_db(db_path: Path) -> None:
+    _seed_check_spec_db(db_path)
     with sqlite3.connect(db_path) as connection:
         connection.execute(
-            "UPDATE eval_specs SET eval_type = ?, definition_json = ? WHERE id = ?",
+            "UPDATE check_specs SET check_type = ?, definition_json = ? WHERE id = ?",
             (
                 "judge",
                 json.dumps(
@@ -5783,7 +5783,7 @@ def _seed_judge_eval_spec_db(db_path: Path) -> None:
                     },
                     sort_keys=True,
                 ),
-                "eval_proposal_context_timeout_001_1",
+                "check_proposal_context_timeout_001_1",
             ),
         )
 
@@ -5794,7 +5794,7 @@ def _complete_fixture_replay(db_path: Path) -> tuple[dict, dict]:
             "replay",
             "--db",
             str(db_path),
-            "eval_proposal_context_timeout_001_1",
+            "check_proposal_context_timeout_001_1",
             "--json",
         ]
     )
@@ -5815,13 +5815,13 @@ def _complete_fixture_replay(db_path: Path) -> tuple[dict, dict]:
     return replay_payload, completion_payload
 
 
-def _lock_fixture_eval_spec(db_path: Path) -> tuple[int, dict]:
+def _lock_fixture_check_spec(db_path: Path) -> tuple[int, dict]:
     return _run_json(
         [
-            "eval-spec-lock",
+            "check-lock",
             "--db",
             str(db_path),
-            "eval_proposal_context_timeout_001_1",
+            "check_proposal_context_timeout_001_1",
             "--reason",
             "manual review",
             "--actor-agent-identity-id",
@@ -5841,12 +5841,12 @@ def _run_fixture_replay_command(db_path: Path, output_dir: Path) -> tuple[int, d
             "replay-command",
             "--db",
             str(db_path),
-            "eval_proposal_context_timeout_001_1",
+            "check_proposal_context_timeout_001_1",
             "--command",
             command,
             "--output-dir",
             str(output_dir),
-            "--run-eval",
+            "--run-check",
             "--json",
         ]
     )
@@ -5862,7 +5862,7 @@ def _run_fixture_judge_command(db_path: Path, output_dir: Path) -> tuple[int, di
             "judge-command",
             "--db",
             str(db_path),
-            "eval_proposal_context_timeout_001_1",
+            "check_proposal_context_timeout_001_1",
             "--command",
             command,
             "--output-dir",
@@ -5992,8 +5992,8 @@ def _profile_next_contract(payload: dict, db_path: Path) -> dict:
 
 def _profile_next_routing_contract(routing: dict, db_path: Path) -> dict:
     return {
-        "eval_run_id": routing.get("eval_run_id"),
-        "eval_spec_id": routing.get("eval_spec_id"),
+        "check_run_id": routing.get("check_run_id"),
+        "check_spec_id": routing.get("check_spec_id"),
         "next_action": routing.get("next_action"),
         "proposal_id": routing.get("proposal_id"),
         "proposal_section": routing.get("proposal_section"),
@@ -6053,15 +6053,15 @@ def _proposal_detail_contract(payload: dict) -> dict:
             "level": confidence["level"],
             "operator_confidence": confidence["operator_confidence"],
             "verification": {
-                "eval_runs": verification["eval_runs"],
-                "latest_eval_status": verification["latest_eval_status"],
+                "check_runs": verification["check_runs"],
+                "latest_check_status": verification["latest_check_status"],
                 "latest_replay_status": verification["latest_replay_status"],
                 "replay_runs": verification["replay_runs"],
             },
         },
         "counts": {
-            "eval_runs": len(payload["eval_runs"]),
-            "eval_specs": len(payload["eval_specs"]),
+            "check_runs": len(payload["check_runs"]),
+            "check_specs": len(payload["check_specs"]),
             "evidence": len(payload["evidence"]),
             "gate_history": len(payload["gate_history"]),
             "patch_transactions": len(payload["patch_transactions"]),
@@ -6077,19 +6077,19 @@ def _proposal_detail_contract(payload: dict) -> dict:
             }
             for item in payload["evidence"]
         ],
-        "eval_guidance": {
+        "check_guidance": {
             "assertion_presets": [
                 {
                     "assertions": preset["assertions"],
-                    "gateable_eval_types": preset["gateable_eval_types"],
+                    "gateable_check_types": preset["gateable_check_types"],
                     "name": preset["name"],
                 }
-                for preset in payload["eval_guidance"]["assertion_presets"]
+                for preset in payload["check_guidance"]["assertion_presets"]
             ],
-            "gateable_eval_types": payload["eval_guidance"]["gateable_eval_types"],
-            "informational_eval_types": payload["eval_guidance"]["informational_eval_types"],
-            "recorded_judge_only": payload["eval_guidance"]["recorded_judge_only"],
-            "safe_replay_side_effect_modes": payload["eval_guidance"]["safe_replay_side_effect_modes"],
+            "gateable_check_types": payload["check_guidance"]["gateable_check_types"],
+            "informational_check_types": payload["check_guidance"]["informational_check_types"],
+            "recorded_judge_only": payload["check_guidance"]["recorded_judge_only"],
+            "safe_replay_side_effect_modes": payload["check_guidance"]["safe_replay_side_effect_modes"],
         },
         "evidence_chain": {
             "blocking_reason": payload["evidence_chain"]["blocking_reason"],
@@ -6190,8 +6190,8 @@ def _improve_contract(payload: dict) -> dict:
         replay_runs.append(
             {
                 "adapter_id": run["adapter_id"],
-                "eval_run": run["eval_run"],
-                "eval_spec_id": run["eval_spec_id"],
+                "check_run": run["check_run"],
+                "check_spec_id": run["check_spec_id"],
                 "output_run_id": run["output_run_id"],
                 "path_fields_present": {
                     "raw_output_path": bool(run.get("raw_output_path")),
@@ -6211,12 +6211,12 @@ def _improve_contract(payload: dict) -> dict:
                     "action": decision["action"],
                     "applied_context_rule_ids": decision["applied_context_rule_ids"],
                     "applied_skill_ids": decision["applied_skill_ids"],
-                    "eval_run_ids": decision["eval_run_ids"],
-                    "eval_spec_ids": decision["eval_spec_ids"],
+                    "check_run_ids": decision["check_run_ids"],
+                    "check_spec_ids": decision["check_spec_ids"],
                     "patch_transaction_ids": decision["patch_transaction_ids"],
                     "proposal_id": decision["proposal_id"],
                     "reason": decision["reason"],
-                    "required_eval_level": decision["required_eval_level"],
+                    "required_check_level": decision["required_check_level"],
                     "section": decision["section"],
                     "state_after": decision["state_after"],
                     "state_before": decision["state_before"],
@@ -6228,15 +6228,15 @@ def _improve_contract(payload: dict) -> dict:
                 "allow_skillbook_write": autonomy["policy"]["allow_skillbook_write"],
                 "context_mode": autonomy["policy"]["context_mode"],
                 "harness_mode": autonomy["policy"]["harness_mode"],
-                "required_eval_level_context": autonomy["policy"]["required_eval_level_context"],
-                "required_eval_level_harness": autonomy["policy"]["required_eval_level_harness"],
+                "required_check_level_context": autonomy["policy"]["required_check_level_context"],
+                "required_check_level_harness": autonomy["policy"]["required_check_level_harness"],
                 "rollback_on_regression": autonomy["policy"]["rollback_on_regression"],
             },
             "profile_id": autonomy["profile_id"],
         },
-        "eval_spec_ids": payload["eval_spec_ids"],
-        "existing_eval_spec_ids": payload["existing_eval_spec_ids"],
-        "generated_eval_spec_ids": payload["generated_eval_spec_ids"],
+        "check_spec_ids": payload["check_spec_ids"],
+        "existing_check_spec_ids": payload["existing_check_spec_ids"],
+        "generated_check_spec_ids": payload["generated_check_spec_ids"],
         "notes": payload["notes"],
         "operator": payload["operator"],
         "profile_id": payload["profile_id"],
@@ -6260,12 +6260,12 @@ def _autonomy_events_contract(payload: dict) -> dict:
                     "applied_context_rule_ids": metadata.get("applied_context_rule_ids"),
                     "applied_skill_ids": metadata.get("applied_skill_ids"),
                     "decision_kind": metadata.get("decision_kind"),
-                    "eval_run_ids": metadata.get("eval_run_ids"),
-                    "eval_spec_ids": metadata.get("eval_spec_ids"),
+                    "check_run_ids": metadata.get("check_run_ids"),
+                    "check_spec_ids": metadata.get("check_spec_ids"),
                     "patch_transaction_ids": metadata.get("patch_transaction_ids"),
                     "profile_id": metadata.get("profile_id"),
                     "reason": metadata.get("reason"),
-                    "required_eval_level": metadata.get("required_eval_level"),
+                    "required_check_level": metadata.get("required_check_level"),
                     "section": metadata.get("section"),
                     "state_after": metadata.get("state_after"),
                     "state_before": metadata.get("state_before"),

@@ -465,7 +465,7 @@ def _validate_prepare_allowed(
         change_type = change.get("type")
         if change_type == "skillbook_update":
             raise HarnessError("unsupported_harness_prepare_change:skillbook_update")
-        if change_type in {"eval_spec", "replay_request", "context_delivery_rule"}:
+        if change_type in {"check_spec", "replay_request", "context_delivery_rule"}:
             continue
         if change_type != "harness_patch":
             raise HarnessError(f"unsupported_harness_prepare_change:{change_type}")

@@ -5,7 +5,7 @@ import { McpLogPage } from "./pages/McpLogPage";
 import { ProposalsPage } from "./pages/ProposalsPage";
 import { IssuesPage } from "./pages/IssuesPage";
 import { AutonomyPage } from "./pages/AutonomyPage";
-import { EvalsPage } from "./pages/EvalsPage";
+import { ChecksPage } from "./pages/ChecksPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { OverviewPage } from "./pages/OverviewPage";
 
@@ -23,7 +23,7 @@ export const router = createBrowserRouter([
       { path: "proposals", element: <ProposalsPage /> },
       { path: "issues", element: <IssuesPage /> },
       { path: "autonomy", element: <AutonomyPage /> },
-      { path: "evals", element: <EvalsPage /> },
+      { path: "checks", element: <ChecksPage /> },
       { path: "settings", element: <SettingsPage /> },
       { path: "*", element: <Navigate to="/runs" replace /> },
     ],

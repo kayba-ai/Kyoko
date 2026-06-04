@@ -13,7 +13,7 @@ from .apply import (
     rollback_skill_revision,
 )
 from .autonomy import AutonomyError, get_autonomy_policy
-from .evals import EvalError, GATEABLE_EVAL_TYPES, generate_evals_for_proposal
+from .checks import CheckError, GATEABLE_CHECK_TYPES, generate_checks_for_proposal
 from .harness import (
     HarnessError,
     apply_patch_transaction,
@@ -37,21 +37,21 @@ class AutonomyRunError(Exception):
 
 
 @dataclass(frozen=True)
-class EvalGateStatus:
+class CheckGateStatus:
     passed: bool
     reason: str
-    required_eval_level: str
-    eval_spec_ids: tuple[str, ...] = ()
-    eval_run_ids: tuple[str, ...] = ()
+    required_check_level: str
+    check_spec_ids: tuple[str, ...] = ()
+    check_run_ids: tuple[str, ...] = ()
     detail: dict[str, Any] = field(default_factory=dict)
 
     def to_json(self) -> dict[str, Any]:
         return {
             "passed": self.passed,
             "reason": self.reason,
-            "required_eval_level": self.required_eval_level,
-            "eval_spec_ids": list(self.eval_spec_ids),
-            "eval_run_ids": list(self.eval_run_ids),
+            "required_check_level": self.required_check_level,
+            "check_spec_ids": list(self.check_spec_ids),
+            "check_run_ids": list(self.check_run_ids),
             "detail": self.detail,
         }
 
@@ -65,9 +65,9 @@ class AutonomyDecision:
     state_after: str
     action: str
     reason: str
-    required_eval_level: Optional[str] = None
-    eval_spec_ids: tuple[str, ...] = ()
-    eval_run_ids: tuple[str, ...] = ()
+    required_check_level: Optional[str] = None
+    check_spec_ids: tuple[str, ...] = ()
+    check_run_ids: tuple[str, ...] = ()
     applied_skill_ids: tuple[str, ...] = ()
     applied_context_rule_ids: tuple[str, ...] = ()
     patch_transaction_ids: tuple[str, ...] = ()
@@ -82,9 +82,9 @@ class AutonomyDecision:
             "state_after": self.state_after,
             "action": self.action,
             "reason": self.reason,
-            "required_eval_level": self.required_eval_level,
-            "eval_spec_ids": list(self.eval_spec_ids),
-            "eval_run_ids": list(self.eval_run_ids),
+            "required_check_level": self.required_check_level,
+            "check_spec_ids": list(self.check_spec_ids),
+            "check_run_ids": list(self.check_run_ids),
             "applied_skill_ids": list(self.applied_skill_ids),
             "applied_context_rule_ids": list(self.applied_context_rule_ids),
             "patch_transaction_ids": list(self.patch_transaction_ids),
@@ -169,8 +169,8 @@ def inspect_proposal_autonomy_gate(*, db_path: Path, proposal_id: str) -> dict[s
             "harness_mode": policy["harness_mode"],
             "allow_skillbook_write": policy["allow_skillbook_write"],
             "allow_repo_patch": policy["allow_repo_patch"],
-            "required_eval_level_context": policy["required_eval_level_context"],
-            "required_eval_level_harness": policy["required_eval_level_harness"],
+            "required_check_level_context": policy["required_check_level_context"],
+            "required_check_level_harness": policy["required_check_level_harness"],
         },
     }
 
@@ -218,17 +218,17 @@ def _handle_proposal(
 def _handle_context_regression(db_path: Path, proposal_id: str) -> AutonomyDecision:
     proposal = _get_proposal(db_path, proposal_id)
     profile_id = str(proposal["profile_id"])
-    regression = _latest_failed_eval_run_for_proposal(db_path, proposal_id)
+    regression = _latest_failed_check_run_for_proposal(db_path, proposal_id)
     if regression is None:
         return _decision(
             proposal=proposal,
             state_after=str(proposal["state"]),
             action="skipped",
-            reason="no_regression_eval_failure",
+            reason="no_regression_check_failure",
         )
 
-    eval_spec_ids = (str(regression["eval_spec_id"]),)
-    eval_run_ids = (str(regression["id"]),)
+    check_spec_ids = (str(regression["check_spec_id"]),)
+    check_run_ids = (str(regression["id"]),)
     revision_rows = _skill_revision_rows_for_proposal(db_path, proposal_id)
     revision_ids = tuple(str(row["id"]) for row in revision_rows)
     rule_revision_rows = _context_delivery_rule_revision_rows_for_proposal(db_path, proposal_id)
@@ -239,8 +239,8 @@ def _handle_context_regression(db_path: Path, proposal_id: str) -> AutonomyDecis
             state_after=str(proposal["state"]),
             action="blocked",
             reason="no_context_revisions_to_rollback",
-            eval_spec_ids=eval_spec_ids,
-            eval_run_ids=eval_run_ids,
+            check_spec_ids=check_spec_ids,
+            check_run_ids=check_run_ids,
         )
 
     blocker = _skill_revision_rollback_blocker(db_path, revision_rows)
@@ -250,8 +250,8 @@ def _handle_context_regression(db_path: Path, proposal_id: str) -> AutonomyDecis
             state_after=str(proposal["state"]),
             action="blocked",
             reason=blocker,
-            eval_spec_ids=eval_spec_ids,
-            eval_run_ids=eval_run_ids,
+            check_spec_ids=check_spec_ids,
+            check_run_ids=check_run_ids,
             detail={"skill_revision_ids": list(revision_ids)},
         )
     rule_blocker = _context_delivery_rule_revision_rollback_blocker(db_path, rule_revision_rows)
@@ -261,8 +261,8 @@ def _handle_context_regression(db_path: Path, proposal_id: str) -> AutonomyDecis
             state_after=str(proposal["state"]),
             action="blocked",
             reason=rule_blocker,
-            eval_spec_ids=eval_spec_ids,
-            eval_run_ids=eval_run_ids,
+            check_spec_ids=check_spec_ids,
+            check_run_ids=check_run_ids,
             detail={
                 "skill_revision_ids": list(revision_ids),
                 "context_delivery_rule_revision_ids": list(rule_revision_ids),
@@ -287,8 +287,8 @@ def _handle_context_regression(db_path: Path, proposal_id: str) -> AutonomyDecis
             metadata={
                 "section": "context",
                 "reason": str(exc),
-                "eval_spec_id": regression["eval_spec_id"],
-                "eval_run_id": regression["id"],
+                "check_spec_id": regression["check_spec_id"],
+                "check_run_id": regression["id"],
                 "skill_revision_ids": list(revision_ids),
                 "context_delivery_rule_revision_ids": list(rule_revision_ids),
             },
@@ -298,8 +298,8 @@ def _handle_context_regression(db_path: Path, proposal_id: str) -> AutonomyDecis
             state_after=_proposal_state(db_path, proposal_id),
             action="failed",
             reason=f"regression_rollback_failed:{exc}",
-            eval_spec_ids=eval_spec_ids,
-            eval_run_ids=eval_run_ids,
+            check_spec_ids=check_spec_ids,
+            check_run_ids=check_run_ids,
             detail={
                 "skill_revision_ids": list(revision_ids),
                 "context_delivery_rule_revision_ids": list(rule_revision_ids),
@@ -310,8 +310,8 @@ def _handle_context_regression(db_path: Path, proposal_id: str) -> AutonomyDecis
         db_path,
         proposal_id,
         section="context",
-        eval_spec_id=str(regression["eval_spec_id"]),
-        eval_run_id=str(regression["id"]),
+        check_spec_id=str(regression["check_spec_id"]),
+        check_run_id=str(regression["id"]),
         patch_transaction_ids=(),
     )
     _record_autonomy_event(
@@ -321,9 +321,9 @@ def _handle_context_regression(db_path: Path, proposal_id: str) -> AutonomyDecis
         kind="autonomy_regression_rolled_back",
         metadata={
             "section": "context",
-            "reason": "regression_eval_failed",
-            "eval_spec_id": regression["eval_spec_id"],
-            "eval_run_id": regression["id"],
+            "reason": "regression_check_failed",
+            "check_spec_id": regression["check_spec_id"],
+            "check_run_id": regression["id"],
             "skill_revision_ids": list(revision_ids),
             "rollback_revision_ids": rollback_revision_ids,
             "context_delivery_rule_revision_ids": list(rule_revision_ids),
@@ -334,13 +334,13 @@ def _handle_context_regression(db_path: Path, proposal_id: str) -> AutonomyDecis
         proposal=proposal,
         state_after=state_after,
         action="rolled_back",
-        reason=f"regression_eval_failed:{regression['id']}",
-        eval_spec_ids=eval_spec_ids,
-        eval_run_ids=eval_run_ids,
+        reason=f"regression_check_failed:{regression['id']}",
+        check_spec_ids=check_spec_ids,
+        check_run_ids=check_run_ids,
         detail={
             "regression": {
-                "eval_spec_id": str(regression["eval_spec_id"]),
-                "eval_run_id": str(regression["id"]),
+                "check_spec_id": str(regression["check_spec_id"]),
+                "check_run_id": str(regression["id"]),
                 "status": str(regression["status"]),
             },
             "skill_revision_ids": list(revision_ids),
@@ -354,13 +354,13 @@ def _handle_context_regression(db_path: Path, proposal_id: str) -> AutonomyDecis
 def _handle_harness_regression(db_path: Path, proposal_id: str) -> AutonomyDecision:
     proposal = _get_proposal(db_path, proposal_id)
     profile_id = str(proposal["profile_id"])
-    regression = _latest_failed_eval_run_for_proposal(db_path, proposal_id)
+    regression = _latest_failed_check_run_for_proposal(db_path, proposal_id)
     if regression is None:
         return _decision(
             proposal=proposal,
             state_after=str(proposal["state"]),
             action="skipped",
-            reason="no_regression_eval_failure",
+            reason="no_regression_check_failure",
         )
 
     patch_rows = _rollbackable_patch_transactions_for_proposal(db_path, proposal_id)
@@ -371,8 +371,8 @@ def _handle_harness_regression(db_path: Path, proposal_id: str) -> AutonomyDecis
             state_after=str(proposal["state"]),
             action="blocked",
             reason="no_applied_patch_transactions_to_rollback",
-            eval_spec_ids=(str(regression["eval_spec_id"]),),
-            eval_run_ids=(str(regression["id"]),),
+            check_spec_ids=(str(regression["check_spec_id"]),),
+            check_run_ids=(str(regression["id"]),),
         )
 
     lock_blocker = _harness_target_lock_blocker(db_path, profile_id, patch_rows)
@@ -382,8 +382,8 @@ def _handle_harness_regression(db_path: Path, proposal_id: str) -> AutonomyDecis
             state_after=str(proposal["state"]),
             action="blocked",
             reason=lock_blocker,
-            eval_spec_ids=(str(regression["eval_spec_id"]),),
-            eval_run_ids=(str(regression["id"]),),
+            check_spec_ids=(str(regression["check_spec_id"]),),
+            check_run_ids=(str(regression["id"]),),
             patch_transaction_ids=patch_transaction_ids,
         )
 
@@ -395,8 +395,8 @@ def _handle_harness_regression(db_path: Path, proposal_id: str) -> AutonomyDecis
                 state_after=str(proposal["state"]),
                 action="blocked",
                 reason=f"patch_transaction_not_applied:{row['id']}:{row['status']}",
-                eval_spec_ids=(str(regression["eval_spec_id"]),),
-                eval_run_ids=(str(regression["id"]),),
+                check_spec_ids=(str(regression["check_spec_id"]),),
+                check_run_ids=(str(regression["id"]),),
                 patch_transaction_ids=patch_transaction_ids,
             )
         rollback = row.get("rollback")
@@ -406,8 +406,8 @@ def _handle_harness_regression(db_path: Path, proposal_id: str) -> AutonomyDecis
                 state_after=str(proposal["state"]),
                 action="blocked",
                 reason=f"rollback_not_available:{row['id']}",
-                eval_spec_ids=(str(regression["eval_spec_id"]),),
-                eval_run_ids=(str(regression["id"]),),
+                check_spec_ids=(str(regression["check_spec_id"]),),
+                check_run_ids=(str(regression["id"]),),
                 patch_transaction_ids=patch_transaction_ids,
             )
         workspace_root = rollback.get("workspace_root")
@@ -417,8 +417,8 @@ def _handle_harness_regression(db_path: Path, proposal_id: str) -> AutonomyDecis
                 state_after=str(proposal["state"]),
                 action="blocked",
                 reason=f"rollback_workspace_root_missing:{row['id']}",
-                eval_spec_ids=(str(regression["eval_spec_id"]),),
-                eval_run_ids=(str(regression["id"]),),
+                check_spec_ids=(str(regression["check_spec_id"]),),
+                check_run_ids=(str(regression["id"]),),
                 patch_transaction_ids=patch_transaction_ids,
             )
         root_by_patch_id[str(row["id"])] = Path(workspace_root)
@@ -439,8 +439,8 @@ def _handle_harness_regression(db_path: Path, proposal_id: str) -> AutonomyDecis
             metadata={
                 "section": "harness",
                 "reason": str(exc),
-                "eval_spec_id": regression["eval_spec_id"],
-                "eval_run_id": regression["id"],
+                "check_spec_id": regression["check_spec_id"],
+                "check_run_id": regression["id"],
                 "patch_transaction_ids": list(patch_transaction_ids),
             },
         )
@@ -449,8 +449,8 @@ def _handle_harness_regression(db_path: Path, proposal_id: str) -> AutonomyDecis
             state_after=_proposal_state(db_path, proposal_id),
             action="failed",
             reason=f"regression_rollback_failed:{exc}",
-            eval_spec_ids=(str(regression["eval_spec_id"]),),
-            eval_run_ids=(str(regression["id"]),),
+            check_spec_ids=(str(regression["check_spec_id"]),),
+            check_run_ids=(str(regression["id"]),),
             patch_transaction_ids=patch_transaction_ids,
         )
 
@@ -458,8 +458,8 @@ def _handle_harness_regression(db_path: Path, proposal_id: str) -> AutonomyDecis
         db_path,
         proposal_id,
         section="harness",
-        eval_spec_id=str(regression["eval_spec_id"]),
-        eval_run_id=str(regression["id"]),
+        check_spec_id=str(regression["check_spec_id"]),
+        check_run_id=str(regression["id"]),
         patch_transaction_ids=patch_transaction_ids,
     )
     _record_autonomy_event(
@@ -469,9 +469,9 @@ def _handle_harness_regression(db_path: Path, proposal_id: str) -> AutonomyDecis
         kind="autonomy_regression_rolled_back",
         metadata={
             "section": "harness",
-            "reason": "regression_eval_failed",
-            "eval_spec_id": regression["eval_spec_id"],
-            "eval_run_id": regression["id"],
+            "reason": "regression_check_failed",
+            "check_spec_id": regression["check_spec_id"],
+            "check_run_id": regression["id"],
             "patch_transaction_ids": list(patch_transaction_ids),
         },
     )
@@ -479,14 +479,14 @@ def _handle_harness_regression(db_path: Path, proposal_id: str) -> AutonomyDecis
         proposal=proposal,
         state_after=state_after,
         action="rolled_back",
-        reason=f"regression_eval_failed:{regression['id']}",
-        eval_spec_ids=(str(regression["eval_spec_id"]),),
-        eval_run_ids=(str(regression["id"]),),
+        reason=f"regression_check_failed:{regression['id']}",
+        check_spec_ids=(str(regression["check_spec_id"]),),
+        check_run_ids=(str(regression["id"]),),
         patch_transaction_ids=patch_transaction_ids,
         detail={
             "regression": {
-                "eval_spec_id": str(regression["eval_spec_id"]),
-                "eval_run_id": str(regression["id"]),
+                "check_spec_id": str(regression["check_spec_id"]),
+                "check_run_id": str(regression["id"]),
                 "status": str(regression["status"]),
             }
         },
@@ -535,30 +535,30 @@ def _handle_context_proposal(db_path: Path, proposal: dict[str, Any]) -> Autonom
             state_after=state_before,
             action="blocked",
             reason=str(requirements["blocked_reason"]),
-            required_eval_level=str(requirements["required_eval_level"]),
+            required_check_level=str(requirements["required_check_level"]),
         )
 
-    generated_eval_spec_ids: tuple[str, ...] = ()
-    existing_eval_spec_ids: tuple[str, ...] = ()
-    generated_eval_spec_ids, existing_eval_spec_ids, eval_generation_blocker = (
-        _generate_missing_eval_specs(db_path, proposal_id)
+    generated_check_spec_ids: tuple[str, ...] = ()
+    existing_check_spec_ids: tuple[str, ...] = ()
+    generated_check_spec_ids, existing_check_spec_ids, check_generation_blocker = (
+        _generate_missing_check_specs(db_path, proposal_id)
     )
-    if eval_generation_blocker is not None:
+    if check_generation_blocker is not None:
         return _decision(
             proposal=proposal,
             state_after=_proposal_state(db_path, proposal_id),
             action="blocked",
-            reason=eval_generation_blocker,
-            required_eval_level=str(requirements["required_eval_level"]),
+            reason=check_generation_blocker,
+            required_check_level=str(requirements["required_check_level"]),
         )
 
-    gate = _evaluate_eval_gate(
+    gate = _evaluate_check_gate(
         db_path=db_path,
         proposal_id=proposal_id,
-        required_eval_level=str(requirements["required_eval_level"]),
+        required_check_level=str(requirements["required_check_level"]),
         requires_replay=bool(requirements["requires_replay"]),
     )
-    eval_spec_ids = tuple(dict.fromkeys(generated_eval_spec_ids + existing_eval_spec_ids + gate.eval_spec_ids))
+    check_spec_ids = tuple(dict.fromkeys(generated_check_spec_ids + existing_check_spec_ids + gate.check_spec_ids))
     if not gate.passed:
         state_after = _mark_proposal_gated(db_path, proposal_id, gate.reason, section="context")
         return _decision(
@@ -566,9 +566,9 @@ def _handle_context_proposal(db_path: Path, proposal: dict[str, Any]) -> Autonom
             state_after=state_after,
             action="gated",
             reason=gate.reason,
-            required_eval_level=gate.required_eval_level,
-            eval_spec_ids=eval_spec_ids,
-            eval_run_ids=gate.eval_run_ids,
+            required_check_level=gate.required_check_level,
+            check_spec_ids=check_spec_ids,
+            check_run_ids=gate.check_run_ids,
             detail=gate.detail,
         )
 
@@ -591,9 +591,9 @@ def _handle_context_proposal(db_path: Path, proposal: dict[str, Any]) -> Autonom
             state_after=_proposal_state(db_path, proposal_id),
             action="failed",
             reason=f"apply_failed:{exc}",
-            required_eval_level=gate.required_eval_level,
-            eval_spec_ids=eval_spec_ids,
-            eval_run_ids=gate.eval_run_ids,
+            required_check_level=gate.required_check_level,
+            check_spec_ids=check_spec_ids,
+            check_run_ids=gate.check_run_ids,
         )
 
     _record_autonomy_event(
@@ -603,9 +603,9 @@ def _handle_context_proposal(db_path: Path, proposal: dict[str, Any]) -> Autonom
         kind="autonomy_applied",
         metadata={
             "section": "context",
-            "required_eval_level": gate.required_eval_level,
-            "eval_spec_ids": list(eval_spec_ids),
-            "eval_run_ids": list(gate.eval_run_ids),
+            "required_check_level": gate.required_check_level,
+            "check_spec_ids": list(check_spec_ids),
+            "check_run_ids": list(gate.check_run_ids),
             "applied_skill_ids": list(report.applied_skill_ids),
             "applied_context_rule_ids": list(report.applied_context_rule_ids),
         },
@@ -614,10 +614,10 @@ def _handle_context_proposal(db_path: Path, proposal: dict[str, Any]) -> Autonom
         proposal=proposal,
         state_after=report.state,
         action="applied",
-        reason="eval_gate_passed",
-        required_eval_level=gate.required_eval_level,
-        eval_spec_ids=eval_spec_ids,
-        eval_run_ids=gate.eval_run_ids,
+        reason="check_gate_passed",
+        required_check_level=gate.required_check_level,
+        check_spec_ids=check_spec_ids,
+        check_run_ids=gate.check_run_ids,
         applied_skill_ids=report.applied_skill_ids,
         applied_context_rule_ids=report.applied_context_rule_ids,
         detail=gate.detail,
@@ -643,23 +643,23 @@ def _inspect_context_gate(
             **base,
             "action": "blocked",
             "reason": str(requirements["blocked_reason"]),
-            "required_eval_level": requirements["required_eval_level"],
+            "required_check_level": requirements["required_check_level"],
             "requires_replay": requirements["requires_replay"],
         }
 
-    gate = _evaluate_eval_gate(
+    gate = _evaluate_check_gate(
         db_path=db_path,
         proposal_id=str(proposal["id"]),
-        required_eval_level=str(requirements["required_eval_level"]),
+        required_check_level=str(requirements["required_check_level"]),
         requires_replay=bool(requirements["requires_replay"]),
     )
     return {
         **base,
         "action": "would_apply" if gate.passed else "gated",
-        "reason": "eval_gate_passed" if gate.passed else gate.reason,
-        "required_eval_level": gate.required_eval_level,
+        "reason": "check_gate_passed" if gate.passed else gate.reason,
+        "required_check_level": gate.required_check_level,
         "requires_replay": requirements["requires_replay"],
-        "eval_gate": gate.to_json(),
+        "check_gate": gate.to_json(),
     }
 
 
@@ -680,17 +680,17 @@ def _inspect_harness_gate(
             **base,
             "action": "blocked",
             "reason": str(requirements["blocked_reason"]),
-            "required_eval_level": requirements["required_eval_level"],
+            "required_check_level": requirements["required_check_level"],
             "requires_replay": requirements["requires_replay"],
         }
 
     proposal_id = str(proposal["id"])
     patch_rows = _patch_transactions_for_proposal(db_path, proposal_id)
     patch_transaction_ids = tuple(str(row["id"]) for row in patch_rows)
-    gate = _evaluate_eval_gate(
+    gate = _evaluate_check_gate(
         db_path=db_path,
         proposal_id=proposal_id,
-        required_eval_level=str(requirements["required_eval_level"]),
+        required_check_level=str(requirements["required_check_level"]),
         requires_replay=bool(requirements["requires_replay"]),
     )
     if not gate.passed:
@@ -698,9 +698,9 @@ def _inspect_harness_gate(
             **base,
             "action": "gated",
             "reason": gate.reason,
-            "required_eval_level": gate.required_eval_level,
+            "required_check_level": gate.required_check_level,
             "requires_replay": requirements["requires_replay"],
-            "eval_gate": gate.to_json(),
+            "check_gate": gate.to_json(),
             "patch_transaction_ids": list(patch_transaction_ids),
         }
 
@@ -710,9 +710,9 @@ def _inspect_harness_gate(
             **base,
             "action": "blocked",
             "reason": eligibility_reason,
-            "required_eval_level": gate.required_eval_level,
+            "required_check_level": gate.required_check_level,
             "requires_replay": requirements["requires_replay"],
-            "eval_gate": gate.to_json(),
+            "check_gate": gate.to_json(),
             "patch_transaction_ids": list(patch_transaction_ids),
         }
     lock_reason = _harness_target_lock_blocker(db_path, str(proposal["profile_id"]), patch_rows)
@@ -721,9 +721,9 @@ def _inspect_harness_gate(
             **base,
             "action": "blocked",
             "reason": lock_reason,
-            "required_eval_level": gate.required_eval_level,
+            "required_check_level": gate.required_check_level,
             "requires_replay": requirements["requires_replay"],
-            "eval_gate": gate.to_json(),
+            "check_gate": gate.to_json(),
             "patch_transaction_ids": list(patch_transaction_ids),
         }
     if not policy["allow_repo_patch"]:
@@ -731,19 +731,19 @@ def _inspect_harness_gate(
             **base,
             "action": "blocked",
             "reason": "repo_patch_not_allowed",
-            "required_eval_level": gate.required_eval_level,
+            "required_check_level": gate.required_check_level,
             "requires_replay": requirements["requires_replay"],
-            "eval_gate": gate.to_json(),
+            "check_gate": gate.to_json(),
             "patch_transaction_ids": list(patch_transaction_ids),
         }
 
     return {
         **base,
         "action": "would_apply" if patch_transaction_ids else "would_prepare_then_apply",
-        "reason": "eval_gate_passed",
-        "required_eval_level": gate.required_eval_level,
+        "reason": "check_gate_passed",
+        "required_check_level": gate.required_check_level,
         "requires_replay": requirements["requires_replay"],
-        "eval_gate": gate.to_json(),
+        "check_gate": gate.to_json(),
         "patch_transaction_ids": list(patch_transaction_ids),
     }
 
@@ -788,21 +788,21 @@ def _handle_harness_proposal(
             state_after=state_before,
             action="blocked",
             reason=str(requirements["blocked_reason"]),
-            required_eval_level=str(requirements["required_eval_level"]),
+            required_check_level=str(requirements["required_check_level"]),
         )
 
-    generated_eval_spec_ids: tuple[str, ...] = ()
-    existing_eval_spec_ids: tuple[str, ...] = ()
-    generated_eval_spec_ids, existing_eval_spec_ids, eval_generation_blocker = (
-        _generate_missing_eval_specs(db_path, proposal_id)
+    generated_check_spec_ids: tuple[str, ...] = ()
+    existing_check_spec_ids: tuple[str, ...] = ()
+    generated_check_spec_ids, existing_check_spec_ids, check_generation_blocker = (
+        _generate_missing_check_specs(db_path, proposal_id)
     )
-    if eval_generation_blocker is not None:
+    if check_generation_blocker is not None:
         return _decision(
             proposal=proposal,
             state_after=_proposal_state(db_path, proposal_id),
             action="blocked",
-            reason=eval_generation_blocker,
-            required_eval_level=str(requirements["required_eval_level"]),
+            reason=check_generation_blocker,
+            required_check_level=str(requirements["required_check_level"]),
         )
 
     patch_transaction_ids = _patch_transaction_ids_for_proposal(db_path, proposal_id)
@@ -815,7 +815,7 @@ def _handle_harness_proposal(
                 state_after=_proposal_state(db_path, proposal_id),
                 action="blocked",
                 reason=f"harness_prepare_failed:{exc}",
-                required_eval_level=str(requirements["required_eval_level"]),
+                required_check_level=str(requirements["required_check_level"]),
             )
         patch_transaction_ids = report.patch_transaction_ids
         _record_autonomy_event(
@@ -826,17 +826,17 @@ def _handle_harness_proposal(
             metadata={
                 "section": "harness",
                 "patch_transaction_ids": list(report.patch_transaction_ids),
-                "reason": "prepared_before_autonomous_harness_eval_gate",
+                "reason": "prepared_before_autonomous_harness_check_gate",
             },
         )
 
-    gate = _evaluate_eval_gate(
+    gate = _evaluate_check_gate(
         db_path=db_path,
         proposal_id=proposal_id,
-        required_eval_level=str(requirements["required_eval_level"]),
+        required_check_level=str(requirements["required_check_level"]),
         requires_replay=bool(requirements["requires_replay"]),
     )
-    eval_spec_ids = tuple(dict.fromkeys(generated_eval_spec_ids + existing_eval_spec_ids + gate.eval_spec_ids))
+    check_spec_ids = tuple(dict.fromkeys(generated_check_spec_ids + existing_check_spec_ids + gate.check_spec_ids))
     if not gate.passed:
         state_after = _mark_proposal_gated(db_path, proposal_id, gate.reason, section="harness")
         return _decision(
@@ -844,9 +844,9 @@ def _handle_harness_proposal(
             state_after=state_after,
             action="gated",
             reason=gate.reason,
-            required_eval_level=gate.required_eval_level,
-            eval_spec_ids=eval_spec_ids,
-            eval_run_ids=gate.eval_run_ids,
+            required_check_level=gate.required_check_level,
+            check_spec_ids=check_spec_ids,
+            check_run_ids=gate.check_run_ids,
             patch_transaction_ids=patch_transaction_ids,
             detail=gate.detail,
         )
@@ -864,9 +864,9 @@ def _handle_harness_proposal(
             state_after=_proposal_state(db_path, proposal_id),
             action="blocked",
             reason="repo_patch_not_allowed",
-            required_eval_level=gate.required_eval_level,
-            eval_spec_ids=eval_spec_ids,
-            eval_run_ids=gate.eval_run_ids,
+            required_check_level=gate.required_check_level,
+            check_spec_ids=check_spec_ids,
+            check_run_ids=gate.check_run_ids,
             patch_transaction_ids=patch_transaction_ids,
             detail=gate.detail,
         )
@@ -879,9 +879,9 @@ def _handle_harness_proposal(
             state_after=_proposal_state(db_path, proposal_id),
             action="blocked",
             reason=patch_blocker,
-            required_eval_level=gate.required_eval_level,
-            eval_spec_ids=eval_spec_ids,
-            eval_run_ids=gate.eval_run_ids,
+            required_check_level=gate.required_check_level,
+            check_spec_ids=check_spec_ids,
+            check_run_ids=gate.check_run_ids,
             patch_transaction_ids=patch_transaction_ids,
             detail=gate.detail,
         )
@@ -893,9 +893,9 @@ def _handle_harness_proposal(
             state_after=_proposal_state(db_path, proposal_id),
             action="blocked",
             reason=lock_blocker,
-            required_eval_level=gate.required_eval_level,
-            eval_spec_ids=eval_spec_ids,
-            eval_run_ids=gate.eval_run_ids,
+            required_check_level=gate.required_check_level,
+            check_spec_ids=check_spec_ids,
+            check_run_ids=gate.check_run_ids,
             patch_transaction_ids=patch_transaction_ids,
             detail=gate.detail,
         )
@@ -911,9 +911,9 @@ def _handle_harness_proposal(
             state_after=_proposal_state(db_path, proposal_id),
             action="blocked",
             reason=str(workspace_blocker),
-            required_eval_level=gate.required_eval_level,
-            eval_spec_ids=eval_spec_ids,
-            eval_run_ids=gate.eval_run_ids,
+            required_check_level=gate.required_check_level,
+            check_spec_ids=check_spec_ids,
+            check_run_ids=gate.check_run_ids,
             patch_transaction_ids=patch_transaction_ids,
             detail=gate.detail,
         )
@@ -939,9 +939,9 @@ def _handle_harness_proposal(
             state_after=_proposal_state(db_path, proposal_id),
             action="failed",
             reason=f"harness_apply_failed:{exc}",
-            required_eval_level=gate.required_eval_level,
-            eval_spec_ids=eval_spec_ids,
-            eval_run_ids=gate.eval_run_ids,
+            required_check_level=gate.required_check_level,
+            check_spec_ids=check_spec_ids,
+            check_run_ids=gate.check_run_ids,
             patch_transaction_ids=patch_transaction_ids,
             detail=gate.detail,
         )
@@ -954,9 +954,9 @@ def _handle_harness_proposal(
         kind="autonomy_harness_applied",
         metadata={
             "section": "harness",
-            "required_eval_level": gate.required_eval_level,
-            "eval_spec_ids": list(eval_spec_ids),
-            "eval_run_ids": list(gate.eval_run_ids),
+            "required_check_level": gate.required_check_level,
+            "check_spec_ids": list(check_spec_ids),
+            "check_run_ids": list(gate.check_run_ids),
             "patch_transaction_ids": list(patch_transaction_ids),
             "workspace_root": str(workspace_root.resolve()),
         },
@@ -965,10 +965,10 @@ def _handle_harness_proposal(
         proposal=proposal,
         state_after=state_after,
         action="applied",
-        reason="eval_gate_passed",
-        required_eval_level=gate.required_eval_level,
-        eval_spec_ids=eval_spec_ids,
-        eval_run_ids=gate.eval_run_ids,
+        reason="check_gate_passed",
+        required_check_level=gate.required_check_level,
+        check_spec_ids=check_spec_ids,
+        check_run_ids=gate.check_run_ids,
         patch_transaction_ids=patch_transaction_ids,
         detail=gate.detail,
     )
@@ -997,78 +997,78 @@ def _gate_requirements(
         # demand human review are never auto-applied by the autonomy runner.
         blocked_reason = "human_review_required"
 
-    policy_key = f"required_eval_level_{section}"
+    policy_key = f"required_check_level_{section}"
     policy_level = str(policy.get(policy_key) or "L1_repeated")
-    proposal_level = expectations.get("requires_eval_level")
-    required_eval_level = _stricter_level(
+    proposal_level = expectations.get("requires_check_level")
+    required_check_level = _stricter_level(
         policy_level,
         proposal_level if isinstance(proposal_level, str) else None,
     )
     return {
         "blocked_reason": blocked_reason,
-        "required_eval_level": required_eval_level,
+        "required_check_level": required_check_level,
         "requires_replay": expectations.get("requires_replay") is True,
     }
 
 
-def _evaluate_eval_gate(
+def _evaluate_check_gate(
     *,
     db_path: Path,
     proposal_id: str,
-    required_eval_level: str,
+    required_check_level: str,
     requires_replay: bool,
-) -> EvalGateStatus:
-    eval_specs = _eval_specs_for_proposal(db_path, proposal_id)
-    if not eval_specs:
-        return EvalGateStatus(
+) -> CheckGateStatus:
+    check_specs = _check_specs_for_proposal(db_path, proposal_id)
+    if not check_specs:
+        return CheckGateStatus(
             passed=False,
-            reason="missing_eval_specs",
-            required_eval_level=required_eval_level,
+            reason="missing_check_specs",
+            required_check_level=required_check_level,
         )
 
     accepted_run_ids: list[str] = []
     blocked: list[dict[str, Any]] = []
     with connect(db_path) as connection:
-        for eval_spec in eval_specs:
-            eval_spec_id = str(eval_spec["id"])
-            eval_type = str(eval_spec["eval_type"])
-            if eval_type not in GATEABLE_EVAL_TYPES:
+        for check_spec in check_specs:
+            check_spec_id = str(check_spec["id"])
+            check_type = str(check_spec["check_type"])
+            if check_type not in GATEABLE_CHECK_TYPES:
                 blocked.append(
                     {
-                        "eval_spec_id": eval_spec_id,
-                        "reason": f"unsupported_gate_eval_type:{eval_type}",
+                        "check_spec_id": check_spec_id,
+                        "reason": f"unsupported_gate_check_type:{check_type}",
                     }
                 )
                 continue
             latest = connection.execute(
                 """
                 SELECT *
-                FROM eval_runs
-                WHERE eval_spec_id = ?
+                FROM check_runs
+                WHERE check_spec_id = ?
                 ORDER BY created_at DESC, id DESC
                 LIMIT 1
                 """,
-                (eval_spec_id,),
+                (check_spec_id,),
             ).fetchone()
             if latest is None:
-                blocked.append({"eval_spec_id": eval_spec_id, "reason": "missing_eval_run"})
+                blocked.append({"check_spec_id": check_spec_id, "reason": "missing_check_run"})
                 continue
             if str(latest["status"]) != "passed":
                 blocked.append(
                     {
-                        "eval_spec_id": eval_spec_id,
-                        "eval_run_id": latest["id"],
-                        "reason": f"latest_eval_not_passed:{latest['status']}",
+                        "check_spec_id": check_spec_id,
+                        "check_run_id": latest["id"],
+                        "reason": f"latest_check_not_passed:{latest['status']}",
                     }
                 )
                 continue
-            trust_level = str(eval_spec["trust_level"])
-            if not _trust_at_least(trust_level, required_eval_level):
+            trust_level = str(check_spec["trust_level"])
+            if not _trust_at_least(trust_level, required_check_level):
                 blocked.append(
                     {
-                        "eval_spec_id": eval_spec_id,
-                        "eval_run_id": latest["id"],
-                        "reason": f"insufficient_eval_trust:{trust_level}",
+                        "check_spec_id": check_spec_id,
+                        "check_run_id": latest["id"],
+                        "reason": f"insufficient_check_trust:{trust_level}",
                     }
                 )
                 continue
@@ -1077,8 +1077,8 @@ def _evaluate_eval_gate(
                 if replay_run_id is None:
                     blocked.append(
                         {
-                            "eval_spec_id": eval_spec_id,
-                            "eval_run_id": latest["id"],
+                            "check_spec_id": check_spec_id,
+                            "check_run_id": latest["id"],
                             "reason": "replay_required",
                         }
                     )
@@ -1090,8 +1090,8 @@ def _evaluate_eval_gate(
                 if replay is None or str(replay["status"]) != "passed":
                     blocked.append(
                         {
-                            "eval_spec_id": eval_spec_id,
-                            "eval_run_id": latest["id"],
+                            "check_spec_id": check_spec_id,
+                            "check_run_id": latest["id"],
                             "replay_run_id": replay_run_id,
                             "reason": "replay_not_passed",
                         }
@@ -1100,24 +1100,24 @@ def _evaluate_eval_gate(
             accepted_run_ids.append(str(latest["id"]))
 
     if blocked:
-        return EvalGateStatus(
+        return CheckGateStatus(
             passed=False,
             reason=str(blocked[0]["reason"]),
-            required_eval_level=required_eval_level,
-            eval_spec_ids=tuple(str(row["id"]) for row in eval_specs),
-            eval_run_ids=tuple(
-                str(item["eval_run_id"])
+            required_check_level=required_check_level,
+            check_spec_ids=tuple(str(row["id"]) for row in check_specs),
+            check_run_ids=tuple(
+                str(item["check_run_id"])
                 for item in blocked
-                if isinstance(item.get("eval_run_id"), str)
+                if isinstance(item.get("check_run_id"), str)
             ),
             detail={"blocked": blocked, "requires_replay": requires_replay},
         )
-    return EvalGateStatus(
+    return CheckGateStatus(
         passed=True,
-        reason="eval_gate_passed",
-        required_eval_level=required_eval_level,
-        eval_spec_ids=tuple(str(row["id"]) for row in eval_specs),
-        eval_run_ids=tuple(accepted_run_ids),
+        reason="check_gate_passed",
+        required_check_level=required_check_level,
+        check_spec_ids=tuple(str(row["id"]) for row in check_specs),
+        check_run_ids=tuple(accepted_run_ids),
         detail={"requires_replay": requires_replay},
     )
 
@@ -1153,7 +1153,7 @@ def _regressed_harness_proposal_ids(db_path: Path, profile_id: str) -> tuple[str
     return tuple(
         str(row["id"])
         for row in rows
-        if _latest_failed_eval_run_for_proposal(db_path, str(row["id"])) is not None
+        if _latest_failed_check_run_for_proposal(db_path, str(row["id"])) is not None
     )
 
 
@@ -1173,7 +1173,7 @@ def _regressed_context_proposal_ids(db_path: Path, profile_id: str) -> tuple[str
     return tuple(
         str(row["id"])
         for row in rows
-        if _latest_failed_eval_run_for_proposal(db_path, str(row["id"])) is not None
+        if _latest_failed_check_run_for_proposal(db_path, str(row["id"])) is not None
     )
 
 
@@ -1200,7 +1200,7 @@ def _proposal_state(db_path: Path, proposal_id: str) -> str:
 
 
 def _mark_proposal_gated(db_path: Path, proposal_id: str, reason: str, *, section: str) -> str:
-    # The collapsed 3+1 model has no "gated" proposal state: a failed eval gate is recorded
+    # The collapsed 3+1 model has no "gated" proposal state: a failed check gate is recorded
     # as evidence (autonomy event) but the proposal stays "pending" until it is applied,
     # rolled back, or failed. This records the gate event and returns the unchanged state.
     with connect(db_path) as connection:
@@ -1253,8 +1253,8 @@ def _mark_proposal_failed_regression(
     proposal_id: str,
     *,
     section: str,
-    eval_spec_id: str,
-    eval_run_id: str,
+    check_spec_id: str,
+    check_run_id: str,
     patch_transaction_ids: tuple[str, ...],
 ) -> str:
     with connect(db_path) as connection:
@@ -1277,8 +1277,8 @@ def _mark_proposal_failed_regression(
             at=now,
             metadata={
                 "section": section,
-                "eval_spec_id": eval_spec_id,
-                "eval_run_id": eval_run_id,
+                "check_spec_id": check_spec_id,
+                "check_run_id": check_run_id,
                 "patch_transaction_ids": list(patch_transaction_ids),
             },
         )
@@ -1400,12 +1400,12 @@ def _ensure_kyoko_source(connection: sqlite3.Connection, profile_id: str) -> Non
     )
 
 
-def _eval_specs_for_proposal(db_path: Path, proposal_id: str) -> tuple[dict[str, Any], ...]:
+def _check_specs_for_proposal(db_path: Path, proposal_id: str) -> tuple[dict[str, Any], ...]:
     with connect(db_path) as connection:
         rows = connection.execute(
             """
             SELECT *
-            FROM eval_specs
+            FROM check_specs
             WHERE proposal_id = ?
               AND status = 'active'
             ORDER BY created_at, id
@@ -1583,21 +1583,21 @@ def _context_delivery_rule_revision_rollback_blocker(
     return None
 
 
-def _latest_failed_eval_run_for_proposal(db_path: Path, proposal_id: str) -> Optional[dict[str, Any]]:
+def _latest_failed_check_run_for_proposal(db_path: Path, proposal_id: str) -> Optional[dict[str, Any]]:
     with connect(db_path) as connection:
         rows = connection.execute(
             """
             SELECT
               er.*,
-              es.id AS linked_eval_spec_id
-            FROM eval_specs AS es
-            JOIN eval_runs AS er ON er.eval_spec_id = es.id
+              es.id AS linked_check_spec_id
+            FROM check_specs AS es
+            JOIN check_runs AS er ON er.check_spec_id = es.id
             WHERE es.proposal_id = ?
               AND es.status = 'active'
               AND er.id = (
                 SELECT latest.id
-                FROM eval_runs AS latest
-                WHERE latest.eval_spec_id = es.id
+                FROM check_runs AS latest
+                WHERE latest.check_spec_id = es.id
                 ORDER BY latest.created_at DESC, latest.id DESC
                 LIMIT 1
               )
@@ -1608,7 +1608,7 @@ def _latest_failed_eval_run_for_proposal(db_path: Path, proposal_id: str) -> Opt
     for row in rows:
         if str(row["status"]) == "failed":
             payload = dict(row)
-            payload["eval_spec_id"] = str(row["linked_eval_spec_id"])
+            payload["check_spec_id"] = str(row["linked_check_spec_id"])
             return payload
     return None
 
@@ -1683,21 +1683,21 @@ def _profile_root_path(db_path: Path, profile_id: str) -> Optional[str]:
     return None
 
 
-def _generate_missing_eval_specs(
+def _generate_missing_check_specs(
     db_path: Path,
     proposal_id: str,
 ) -> tuple[tuple[str, ...], tuple[str, ...], Optional[str]]:
-    if _eval_specs_for_proposal(db_path, proposal_id):
+    if _check_specs_for_proposal(db_path, proposal_id):
         return (), (), None
     try:
-        generated = generate_evals_for_proposal(db_path=db_path, proposal_id=proposal_id)
-    except EvalError as exc:
-        if str(exc).startswith("no_eval_spec_changes:"):
+        generated = generate_checks_for_proposal(db_path=db_path, proposal_id=proposal_id)
+    except CheckError as exc:
+        if str(exc).startswith("no_check_spec_changes:"):
             return (), (), None
-        return (), (), f"eval_generation_failed:{exc}"
+        return (), (), f"check_generation_failed:{exc}"
     except StorageError as exc:
-        return (), (), f"eval_generation_failed:{exc}"
-    return generated.eval_spec_ids, generated.existing_eval_spec_ids, None
+        return (), (), f"check_generation_failed:{exc}"
+    return generated.check_spec_ids, generated.existing_check_spec_ids, None
 
 
 def _decision(
@@ -1706,9 +1706,9 @@ def _decision(
     state_after: str,
     action: str,
     reason: str,
-    required_eval_level: Optional[str] = None,
-    eval_spec_ids: tuple[str, ...] = (),
-    eval_run_ids: tuple[str, ...] = (),
+    required_check_level: Optional[str] = None,
+    check_spec_ids: tuple[str, ...] = (),
+    check_run_ids: tuple[str, ...] = (),
     applied_skill_ids: tuple[str, ...] = (),
     applied_context_rule_ids: tuple[str, ...] = (),
     patch_transaction_ids: tuple[str, ...] = (),
@@ -1722,9 +1722,9 @@ def _decision(
         state_after=state_after,
         action=action,
         reason=reason,
-        required_eval_level=required_eval_level,
-        eval_spec_ids=eval_spec_ids,
-        eval_run_ids=eval_run_ids,
+        required_check_level=required_check_level,
+        check_spec_ids=check_spec_ids,
+        check_run_ids=check_run_ids,
         applied_skill_ids=applied_skill_ids,
         applied_context_rule_ids=applied_context_rule_ids,
         patch_transaction_ids=patch_transaction_ids,

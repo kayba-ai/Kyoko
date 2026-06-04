@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 // Issues are first-class EVIDENCE (read/propose side): a tracked problem with a
 // category/severity, links to affected canonical entities, and optional backlinks to the
 // proposals that address it. This dashboard only VIEWS them — creating or resolving an
-// issue never changes agent behavior or bypasses the eval/replay gate.
+// issue never changes agent behavior or bypasses the check/replay gate.
 
 function severityTone(severity: string | null | undefined): "danger" | "warn" | "neutral" {
   if (severity === "high") return "danger";

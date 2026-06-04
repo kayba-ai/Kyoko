@@ -11,9 +11,9 @@ from pathlib import Path
 from typing import Any, Optional, Sequence
 from urllib import error, parse, request
 
-from .evals import (
-    EvalError,
-    EvalRunReport,
+from .checks import (
+    CheckError,
+    CheckRunReport,
     ReplayCompletionReport,
     _artifact_ref,
     _merge_replay_artifacts,
@@ -21,7 +21,7 @@ from .evals import (
     complete_replay_from_server_response,
     create_replay_run,
     mark_replay_errored,
-    run_eval,
+    run_check,
 )
 from .storage import initialize_database
 
@@ -48,28 +48,28 @@ class ReplayServerHealthReport:
 class ReplayServerRunReport:
     replay_run_id: str
     profile_id: str
-    eval_spec_id: str
+    check_spec_id: str
     server_url: str
     replay_path: str
     request: dict[str, Any]
     response: dict[str, Any]
     health: Optional[ReplayServerHealthReport]
     completion: ReplayCompletionReport
-    eval_run: Optional[EvalRunReport]
+    check_run: Optional[CheckRunReport]
 
 
 @dataclass(frozen=True)
 class ManagedReplayServerRunReport:
     replay_run_id: str
     profile_id: str
-    eval_spec_id: str
+    check_spec_id: str
     server_url: str
     replay_path: str
     request: dict[str, Any]
     response: dict[str, Any]
     health: ReplayServerHealthReport
     completion: ReplayCompletionReport
-    eval_run: Optional[EvalRunReport]
+    check_run: Optional[CheckRunReport]
     command: tuple[str, ...]
     stdout_path: Path
     stderr_path: Path
@@ -348,7 +348,7 @@ def stop_replay_server_process(
 def run_managed_replay_server(
     *,
     db_path: Path,
-    eval_spec_id: str,
+    check_spec_id: str,
     command: Sequence[str],
     server_url: str,
     output_dir: Path,
@@ -361,7 +361,7 @@ def run_managed_replay_server(
     startup_timeout_seconds: int = 15,
     trace_endpoint: Optional[str] = None,
     cwd: Optional[Path] = None,
-    run_eval_after: bool = False,
+    run_check_after: bool = False,
     allow_remote_server: bool = False,
 ) -> ManagedReplayServerRunReport:
     initialize_database(db_path)
@@ -403,7 +403,7 @@ def run_managed_replay_server(
         )
         report = run_replay_server(
             db_path=db_path,
-            eval_spec_id=eval_spec_id,
+            check_spec_id=check_spec_id,
             server_url=normalized_server_url,
             health_path=health_path,
             replay_path=replay_path,
@@ -413,7 +413,7 @@ def run_managed_replay_server(
             timeout_seconds=timeout_seconds,
             trace_endpoint=trace_endpoint,
             check_health=True,
-            run_eval_after=run_eval_after,
+            run_check_after=run_check_after,
             allow_remote_server=allow_remote_server,
         )
     finally:
@@ -434,14 +434,14 @@ def run_managed_replay_server(
     return ManagedReplayServerRunReport(
         replay_run_id=report.replay_run_id,
         profile_id=report.profile_id,
-        eval_spec_id=report.eval_spec_id,
+        check_spec_id=report.check_spec_id,
         server_url=report.server_url,
         replay_path=report.replay_path,
         request=report.request,
         response=report.response,
         health=health,
         completion=report.completion,
-        eval_run=report.eval_run,
+        check_run=report.check_run,
         command=tuple(command),
         stdout_path=stdout_path,
         stderr_path=stderr_path,
@@ -452,7 +452,7 @@ def run_managed_replay_server(
 def run_replay_server(
     *,
     db_path: Path,
-    eval_spec_id: str,
+    check_spec_id: str,
     server_url: str,
     health_path: str = DEFAULT_HEALTH_PATH,
     replay_path: str = DEFAULT_REPLAY_PATH,
@@ -462,7 +462,7 @@ def run_replay_server(
     timeout_seconds: int = 120,
     trace_endpoint: Optional[str] = None,
     check_health: bool = True,
-    run_eval_after: bool = False,
+    run_check_after: bool = False,
     allow_remote_server: bool = False,
 ) -> ReplayServerRunReport:
     initialize_database(db_path)
@@ -485,7 +485,7 @@ def run_replay_server(
 
     replay = create_replay_run(
         db_path=db_path,
-        eval_spec_id=eval_spec_id,
+        check_spec_id=check_spec_id,
         mode=mode,
         side_effect_mode=side_effect_mode,
         source_run_id=source_run_id,
@@ -528,30 +528,30 @@ def run_replay_server(
                 allow_remote_server=allow_remote_server,
             ),
         )
-        eval_run = (
-            run_eval(
+        check_run = (
+            run_check(
                 db_path=db_path,
-                eval_spec_id=eval_spec_id,
+                check_spec_id=check_spec_id,
                 replay_run_id=replay.replay_run_id,
             )
-            if run_eval_after
+            if run_check_after
             else None
         )
-    except (EvalError, ReplayServerError) as exc:
+    except (CheckError, ReplayServerError) as exc:
         mark_replay_errored(db_path=db_path, replay_run_id=replay.replay_run_id, error=str(exc))
         raise
 
     return ReplayServerRunReport(
         replay_run_id=replay.replay_run_id,
         profile_id=replay.profile_id,
-        eval_spec_id=eval_spec_id,
+        check_spec_id=check_spec_id,
         server_url=normalized_server_url,
         replay_path=replay_path,
         request=server_request,
         response=response,
         health=health,
         completion=completion,
-        eval_run=eval_run,
+        check_run=check_run,
     )
 
 
@@ -563,7 +563,7 @@ def _server_replay_request(
     trace_endpoint: Optional[str],
 ) -> dict[str, Any]:
     replay_run = kyoko_request.get("replay_run", {})
-    eval_spec = kyoko_request.get("eval_spec", {})
+    check_spec = kyoko_request.get("check_spec", {})
     source_run = kyoko_request.get("source_run", {})
     replay_run_id = replay_run.get("id")
     side_effect_mode = replay_run.get("side_effect_mode")
@@ -571,7 +571,7 @@ def _server_replay_request(
         "schema_version": "kyoko.replay_server_request.v1",
         "replay_run_id": replay_run_id,
         "source_run_id": replay_run.get("source_run_id") or source_run.get("id"),
-        "eval_spec_id": eval_spec.get("id"),
+        "check_spec_id": check_spec.get("id"),
         "profile_id": replay_run.get("profile_id") or kyoko_request.get("profile_id"),
         "side_effect_mode": side_effect_mode,
         "trace_endpoint": trace_endpoint,
@@ -580,7 +580,7 @@ def _server_replay_request(
             "source_run": source_run,
             "source_spans": kyoko_request.get("source_spans", []),
             "handoffs": kyoko_request.get("handoffs", []),
-            "eval_spec": eval_spec,
+            "check_spec": check_spec,
         },
         "kyoko_request": kyoko_request,
         "metadata": {

@@ -18,15 +18,15 @@ DIRECT_COUNT_TABLES = (
     "learning_proposals",
     "skills",
     "context_delivery_rules",
-    "eval_specs",
-    "eval_runs",
+    "check_specs",
+    "check_runs",
     "replay_runs",
     "replay_adapters",
     "operator_adapters",
     "operator_runs",
     "patch_transactions",
     "harness_target_locks",
-    "eval_spec_locks",
+    "check_locks",
     "payload_blobs",
 )
 
@@ -215,8 +215,8 @@ def _routing_summary(connection: Any, profile_id: str, counts: dict[str, int]) -
             "reason": "no_runs",
             "run_id": None,
             "proposal_id": None,
-            "eval_spec_id": None,
-            "eval_run_id": None,
+            "check_spec_id": None,
+            "check_run_id": None,
             "replay_run_id": None,
         }
     if active_proposal is None:
@@ -230,8 +230,8 @@ def _routing_summary(connection: Any, profile_id: str, counts: dict[str, int]) -
                 "proposal_id": latest_applied["id"],
                 "proposal_section": latest_applied["section"],
                 "proposal_state": latest_applied["state"],
-                "eval_spec_id": None,
-                "eval_run_id": None,
+                "check_spec_id": None,
+                "check_run_id": None,
                 "replay_run_id": None,
             }
         if counts["failed_runs"] > 0 or counts["failed_spans"] > 0:
@@ -241,8 +241,8 @@ def _routing_summary(connection: Any, profile_id: str, counts: dict[str, int]) -
                 "reason": "failed_evidence_without_active_proposal",
                 "run_id": latest_failed_run["id"] if latest_failed_run is not None else None,
                 "proposal_id": None,
-                "eval_spec_id": None,
-                "eval_run_id": None,
+                "check_spec_id": None,
+                "check_run_id": None,
                 "replay_run_id": None,
             }
         return {
@@ -251,42 +251,42 @@ def _routing_summary(connection: Any, profile_id: str, counts: dict[str, int]) -
             "reason": "no_active_failures",
             "run_id": None,
             "proposal_id": None,
-            "eval_spec_id": None,
-            "eval_run_id": None,
+            "check_spec_id": None,
+            "check_run_id": None,
             "replay_run_id": None,
         }
 
     proposal_id = str(active_proposal["id"])
-    eval_spec = _latest_eval_spec_for_proposal(connection, proposal_id)
-    if eval_spec is None:
+    check_spec = _latest_check_spec_for_proposal(connection, proposal_id)
+    if check_spec is None:
         return {
-            "state": "needs_eval_generation",
-            "next_action": "generate_evals",
-            "reason": "active_proposal_without_eval_specs",
+            "state": "needs_check_generation",
+            "next_action": "generate_checks",
+            "reason": "active_proposal_without_check_specs",
             "run_id": latest_failed_run["id"] if latest_failed_run is not None else None,
             "proposal_id": proposal_id,
             "proposal_section": active_proposal["section"],
             "proposal_state": active_proposal["state"],
-            "eval_spec_id": None,
-            "eval_run_id": None,
+            "check_spec_id": None,
+            "check_run_id": None,
             "replay_run_id": None,
         }
 
-    passed_eval_run = _latest_eval_run_for_proposal(connection, proposal_id, status="passed")
-    latest_eval_run = _latest_eval_run_for_proposal(connection, proposal_id)
+    passed_check_run = _latest_check_run_for_proposal(connection, proposal_id, status="passed")
+    latest_check_run = _latest_check_run_for_proposal(connection, proposal_id)
     latest_replay_run = _latest_replay_run_for_proposal(connection, proposal_id)
-    if passed_eval_run is None:
+    if passed_check_run is None:
         return {
-            "state": "needs_replay_or_eval",
-            "next_action": "run_replay_or_eval",
-            "reason": "no_passing_eval_run",
+            "state": "needs_replay_or_check",
+            "next_action": "run_replay_or_check",
+            "reason": "no_passing_check_run",
             "run_id": latest_failed_run["id"] if latest_failed_run is not None else None,
             "proposal_id": proposal_id,
             "proposal_section": active_proposal["section"],
             "proposal_state": active_proposal["state"],
-            "eval_spec_id": eval_spec["id"],
-            "eval_run_id": latest_eval_run["id"] if latest_eval_run is not None else None,
-            "eval_run_status": latest_eval_run["status"] if latest_eval_run is not None else "not_run",
+            "check_spec_id": check_spec["id"],
+            "check_run_id": latest_check_run["id"] if latest_check_run is not None else None,
+            "check_run_status": latest_check_run["status"] if latest_check_run is not None else "not_run",
             "replay_run_id": latest_replay_run["id"] if latest_replay_run is not None else None,
             "replay_run_status": latest_replay_run["status"] if latest_replay_run is not None else "not_run",
         }
@@ -297,15 +297,15 @@ def _routing_summary(connection: Any, profile_id: str, counts: dict[str, int]) -
     routing = {
         "state": "ready_for_autonomy",
         "next_action": "run_autonomy" if mode == "autonomous" else "review_proposal",
-        "reason": "passing_eval_available",
+        "reason": "passing_check_available",
         "run_id": latest_failed_run["id"] if latest_failed_run is not None else None,
         "proposal_id": proposal_id,
         "proposal_section": section,
         "proposal_state": active_proposal["state"],
         "autonomy_mode": mode,
-        "eval_spec_id": eval_spec["id"],
-        "eval_run_id": passed_eval_run["id"],
-        "eval_run_status": passed_eval_run["status"],
+        "check_spec_id": check_spec["id"],
+        "check_run_id": passed_check_run["id"],
+        "check_run_status": passed_check_run["status"],
         "replay_run_id": latest_replay_run["id"] if latest_replay_run is not None else None,
         "replay_run_status": latest_replay_run["status"] if latest_replay_run is not None else "not_run",
     }
@@ -385,11 +385,11 @@ def _proposal_summary(row: Any) -> dict[str, Any] | None:
     }
 
 
-def _latest_eval_spec_for_proposal(connection: Any, proposal_id: str) -> dict[str, Any] | None:
+def _latest_check_spec_for_proposal(connection: Any, proposal_id: str) -> dict[str, Any] | None:
     row = connection.execute(
         """
-        SELECT id, status, trust_level, eval_type, created_at
-        FROM eval_specs
+        SELECT id, status, trust_level, check_type, created_at
+        FROM check_specs
         WHERE proposal_id = ?
         ORDER BY created_at DESC, id DESC
         LIMIT 1
@@ -402,12 +402,12 @@ def _latest_eval_spec_for_proposal(connection: Any, proposal_id: str) -> dict[st
         "id": row["id"],
         "status": row["status"],
         "trust_level": row["trust_level"],
-        "eval_type": row["eval_type"],
+        "check_type": row["check_type"],
         "created_at": row["created_at"],
     }
 
 
-def _latest_eval_run_for_proposal(
+def _latest_check_run_for_proposal(
     connection: Any,
     proposal_id: str,
     *,
@@ -420,8 +420,8 @@ def _latest_eval_run_for_proposal(
         args = (proposal_id, status)
     row = connection.execute(
         f"""
-        SELECT id, status, eval_spec_id, replay_run_id, created_at
-        FROM eval_runs
+        SELECT id, status, check_spec_id, replay_run_id, created_at
+        FROM check_runs
         WHERE {where}
         ORDER BY created_at DESC, id DESC
         LIMIT 1
@@ -433,7 +433,7 @@ def _latest_eval_run_for_proposal(
     return {
         "id": row["id"],
         "status": row["status"],
-        "eval_spec_id": row["eval_spec_id"],
+        "check_spec_id": row["check_spec_id"],
         "replay_run_id": row["replay_run_id"],
         "created_at": row["created_at"],
     }
@@ -442,7 +442,7 @@ def _latest_eval_run_for_proposal(
 def _latest_replay_run_for_proposal(connection: Any, proposal_id: str) -> dict[str, Any] | None:
     row = connection.execute(
         """
-        SELECT id, status, eval_spec_id, side_effect_mode, created_at
+        SELECT id, status, check_spec_id, side_effect_mode, created_at
         FROM replay_runs
         WHERE proposal_id = ?
         ORDER BY created_at DESC, id DESC
@@ -455,7 +455,7 @@ def _latest_replay_run_for_proposal(connection: Any, proposal_id: str) -> dict[s
     return {
         "id": row["id"],
         "status": row["status"],
-        "eval_spec_id": row["eval_spec_id"],
+        "check_spec_id": row["check_spec_id"],
         "side_effect_mode": row["side_effect_mode"],
         "created_at": row["created_at"],
     }
@@ -517,7 +517,7 @@ def _suggested_commands(
 ) -> list[dict[str, Any]]:
     state = str(routing.get("state") or "")
     proposal_id = routing.get("proposal_id")
-    eval_spec_id = routing.get("eval_spec_id")
+    check_spec_id = routing.get("check_spec_id")
     operator_adapter_id = _latest_enabled_adapter_id(connection, "operator_adapters", profile_id)
     replay_adapter_id = _latest_enabled_adapter_id(connection, "replay_adapters", profile_id)
     commands: list[dict[str, Any]] = []
@@ -577,28 +577,28 @@ def _suggested_commands(
                 mutating=True,
             )
         )
-    elif state == "needs_eval_generation" and isinstance(proposal_id, str):
+    elif state == "needs_check_generation" and isinstance(proposal_id, str):
         commands.append(
             _command(
-                "generate_evals",
-                "Generate eval specs for the active proposal",
-                ["generate-evals", "--db", str(db_path), proposal_id, "--json"],
+                "generate_checks",
+                "Generate check specs for the active proposal",
+                ["generate-checks", "--db", str(db_path), proposal_id, "--json"],
                 mutating=True,
             )
         )
-    elif state == "needs_replay_or_eval" and isinstance(eval_spec_id, str):
+    elif state == "needs_replay_or_check" and isinstance(check_spec_id, str):
         if replay_adapter_id is not None:
             commands.append(
                 _command(
                     "run_replay_adapter",
-                    "Run registered replay adapter and linked eval",
+                    "Run registered replay adapter and linked check",
                     [
                         "replay-adapter-run",
                         "--db",
                         str(db_path),
                         replay_adapter_id,
-                        eval_spec_id,
-                        "--run-eval",
+                        check_spec_id,
+                        "--run-check",
                         "--json",
                     ],
                     mutating=True,
@@ -606,11 +606,11 @@ def _suggested_commands(
             )
         commands.append(
             _command(
-                "run_eval",
-                "Run eval directly if replay evidence is not required",
-                ["run-eval", "--db", str(db_path), eval_spec_id, "--json"],
+                "run_check",
+                "Run check directly if replay evidence is not required",
+                ["run-check", "--db", str(db_path), check_spec_id, "--json"],
                 mutating=True,
-                requires=["eval spec that does not require completed replay evidence"],
+                requires=["check spec that does not require completed replay evidence"],
             )
         )
     elif state == "ready_for_autonomy" and isinstance(proposal_id, str):

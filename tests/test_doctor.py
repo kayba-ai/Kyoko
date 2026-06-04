@@ -80,13 +80,13 @@ def fake_improve_smoke_report(output_dir: Path, db_path=None) -> FakeJsonReport:
                 "operator": "mock",
                 "profile_id": "profile_framework_improve_smoke",
                 "proposal_id": "proposal_mock_span_framework_fetch_timeout_001",
-                "generated_eval_spec_ids": [
-                    "eval_proposal_mock_span_framework_fetch_timeout_001_1"
+                "generated_check_spec_ids": [
+                    "check_proposal_mock_span_framework_fetch_timeout_001_1"
                 ],
                 "replay_runs": [
                     {
                         "status": "passed",
-                        "eval_run": {"status": "passed"},
+                        "check_run": {"status": "passed"},
                     }
                 ],
                 "autonomy": {"decisions": [{"action": "applied"}]},
@@ -96,8 +96,8 @@ def fake_improve_smoke_report(output_dir: Path, db_path=None) -> FakeJsonReport:
                     "runs": 2,
                     "spans": 4,
                     "learning_proposals": 1,
-                    "eval_specs": 1,
-                    "eval_runs": 1,
+                    "check_specs": 1,
+                    "check_runs": 1,
                     "replay_runs": 1,
                     "skills": 1,
                 }
@@ -365,14 +365,14 @@ def write_retained_judge_provider_evidence(output_dir: Path) -> None:
         _insert_smoke_profile(connection)
         connection.execute(
             """
-            INSERT INTO eval_specs (
-              id, profile_id, proposal_id, name, eval_type, trust_level,
+            INSERT INTO check_specs (
+              id, profile_id, proposal_id, name, check_type, trust_level,
               side_effect_mode, target_json, definition_json, status, created_at, updated_at
             )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                "eval_judge_smoke_001",
+                "check_judge_smoke_001",
                 "profile_news_research_001",
                 None,
                 "judge smoke",
@@ -388,22 +388,22 @@ def write_retained_judge_provider_evidence(output_dir: Path) -> None:
         )
         connection.execute(
             """
-            INSERT INTO eval_runs (
-              id, profile_id, eval_spec_id, proposal_id, replay_run_id, status,
+            INSERT INTO check_runs (
+              id, profile_id, check_spec_id, proposal_id, replay_run_id, status,
               started_at, ended_at, result_json, artifact_refs_json, created_at, updated_at
             )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                "evalrun_judge_smoke_001",
+                "checkrun_judge_smoke_001",
                 "profile_news_research_001",
-                "eval_judge_smoke_001",
+                "check_judge_smoke_001",
                 None,
                 None,
                 "passed",
                 "2026-06-03T00:00:00Z",
                 "2026-06-03T00:00:01Z",
-                json.dumps({"eval_type": "judge", "judge_backend": "external_command"}),
+                json.dumps({"check_type": "judge", "judge_backend": "external_command"}),
                 json.dumps([]),
                 "2026-06-03T00:00:00Z",
                 "2026-06-03T00:00:01Z",
@@ -854,7 +854,7 @@ class DoctorTests(unittest.TestCase):
 
         self.assertTrue(report.ok)
         self.assertEqual(checks["demo_smoke"].status, "pass")
-        self.assertEqual(checks["demo_smoke"].detail["eval_status"], "passed")
+        self.assertEqual(checks["demo_smoke"].detail["check_status"], "passed")
         self.assertEqual(checks["demo_smoke"].detail["promoted_trust_level"], "L2_regression")
         self.assertEqual(
             checks["demo_smoke"].detail["applied_skill_ids"],
@@ -1293,7 +1293,7 @@ class DoctorTests(unittest.TestCase):
             return fake_improve_smoke_report(output_dir, db_path=db_path)
 
         with patch("kyoko.doctor.run_demo_setup") as demo:
-            demo.return_value.eval_status = "passed"
+            demo.return_value.check_status = "passed"
             demo.return_value.promoted_trust_level = "L2_regression"
             demo.return_value.applied_skill_ids = ("skill_demo",)
             with patch("kyoko.doctor.run_operator_smoke_matrix", return_value=fake_operator_report):
@@ -1380,7 +1380,7 @@ class DoctorTests(unittest.TestCase):
         with TemporaryDirectory() as tmpdir:
             output_dir = Path(tmpdir) / "smoke-artifacts"
             with patch("kyoko.doctor.run_demo_setup") as demo:
-                demo.return_value.eval_status = "passed"
+                demo.return_value.check_status = "passed"
                 demo.return_value.promoted_trust_level = "L2_regression"
                 demo.return_value.applied_skill_ids = ("skill_demo",)
                 with patch("kyoko.doctor.run_operator_smoke_matrix", return_value=fake_operator_report):
@@ -1652,7 +1652,7 @@ class DoctorTests(unittest.TestCase):
             return fake_improve_smoke_report(output_dir, db_path=db_path)
 
         with patch("kyoko.doctor.run_demo_setup") as demo:
-            demo.return_value.eval_status = "passed"
+            demo.return_value.check_status = "passed"
             demo.return_value.promoted_trust_level = "L2_regression"
             demo.return_value.applied_skill_ids = ("skill_demo",)
             with patch("kyoko.doctor.run_operator_smoke_matrix", return_value=fake_operator_report):
@@ -1770,7 +1770,7 @@ class DoctorTests(unittest.TestCase):
         )
 
         with patch("kyoko.doctor.run_demo_setup") as demo:
-            demo.return_value.eval_status = "passed"
+            demo.return_value.check_status = "passed"
             demo.return_value.promoted_trust_level = "L2_regression"
             demo.return_value.applied_skill_ids = ("skill_demo",)
             with patch("kyoko.doctor.run_operator_smoke_matrix", return_value=fake_operator_report):

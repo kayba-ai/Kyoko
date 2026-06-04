@@ -102,7 +102,7 @@ Register:
 
 This file is intentionally stdlib-only. Wire `run_agent_replay` to your agent,
 emit replay telemetry back into Kyoko, then return the output run id and target
-map. Keep side effects mocked or sandboxed until the eval gate is trustworthy.
+map. Keep side effects mocked or sandboxed until the check gate is trustworthy.
 """
 
 from __future__ import annotations
@@ -374,7 +374,7 @@ Register:
 
 This file is dependency-free ESM. Wire KYOKO_REPLAY_HOOK to your Node agent,
 emit replay telemetry back into Kyoko, then return the output run id and target
-map. Keep side effects mocked or sandboxed until the eval gate is trustworthy.
+map. Keep side effects mocked or sandboxed until the check gate is trustworthy.
 */
 
 import http from "node:http";

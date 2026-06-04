@@ -39,7 +39,7 @@ function StatTile({ label, value }: { label: string; value: string | number }) {
 const HEADLINE: { key: string; label: string }[] = [
   { key: "runs", label: "Runs" },
   { key: "spans", label: "Spans" },
-  { key: "eval_runs", label: "Eval runs" },
+  { key: "check_runs", label: "Check runs" },
   { key: "replay_runs", label: "Replay runs" },
   { key: "learning_proposals", label: "Proposals" },
   { key: "annotations", label: "Annotations" },
@@ -113,7 +113,7 @@ export function OverviewPage() {
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <SubCard title="Runs" data={metrics.data?.runs} />
-              <SubCard title="Evals" data={metrics.data?.evals} />
+              <SubCard title="Checks" data={metrics.data?.checks} />
               <SubCard title="Replay" data={metrics.data?.replay} />
               <SubCard title="Autonomy" data={metrics.data?.autonomy} />
             </div>

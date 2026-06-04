@@ -58,9 +58,9 @@
       ]
     },
     {
-      "type": "eval_spec",
+      "type": "check_spec",
       "name": "researcher retries fetch timeout before handoff",
-      "eval_type": "deterministic_assertion",
+      "check_type": "deterministic_assertion",
       "trust_level": "L0_generated",
       "side_effect_mode": "network_mocked",
       "definition": {
@@ -90,10 +90,10 @@
   ],
   "gate_expectations": {
     "requires_human_review": false,
-    "requires_eval_level": "L1_repeated",
+    "requires_check_level": "L1_repeated",
     "requires_replay": true,
     "allowed_autonomy_section": "context",
-    "notes": "Generated eval must be repeated before autonomous context apply."
+    "notes": "Generated check must be repeated before autonomous context apply."
   },
   "created_at": "2026-05-31T12:00:00Z"
 }

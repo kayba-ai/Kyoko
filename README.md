@@ -2,7 +2,7 @@
 
 Kyoko is a local, self-hosted optimization loop for agentic workflows. It is
 designed as a single-player product: one developer, one local workflow profile,
-and an end-to-end loop from telemetry to issues, insights, evals, replay,
+and an end-to-end loop from telemetry to issues, insights, checks, replay,
 context updates, and harness improvements.
 
 Current status: planning docs, pre-build gates, the local runtime slice, the
@@ -60,7 +60,7 @@ ships in `kyoko/sdk.py`).
 - [First-run demo and install path](docs/specs/0007-first-run-demo.md)
 - [Hermes operator contract](docs/specs/0008-hermes-operator-contract.md)
 - [OpenClaw operator contract](docs/specs/0009-openclaw-operator-contract.md)
-- [Evals and replay contract](docs/specs/0010-evals-replay-contract.md)
+- [Checks and replay contract](docs/specs/0010-checks-replay-contract.md)
 - [Human locks spec](docs/specs/0011-human-locks.md)
 - [Issue model spec](docs/specs/0012-issue-model.md)
 - [Event envelope spec](docs/specs/0013-event-envelope.md)
@@ -160,18 +160,18 @@ ships in `kyoko/sdk.py`).
 - [Issue detail CLI JSON contract golden](docs/fixtures/cli-json/issue-detail.contract.golden.json)
 - [Improve CLI JSON contract golden](docs/fixtures/cli-json/improve-existing-proposal.contract.golden.json)
 - [Autonomy events CLI JSON contract golden](docs/fixtures/cli-json/autonomy-events.contract.golden.json)
-- [Eval capabilities CLI JSON contract golden](docs/fixtures/cli-json/eval-capabilities.contract.golden.json)
-- [Generate evals CLI JSON contract golden](docs/fixtures/cli-json/generate-evals.contract.golden.json)
-- [Eval list CLI JSON contract golden](docs/fixtures/cli-json/evals.contract.golden.json)
-- [Eval assertion presets CLI JSON contract golden](docs/fixtures/cli-json/eval-assertion-presets.contract.golden.json)
-- [Run eval CLI JSON contract golden](docs/fixtures/cli-json/run-eval.contract.golden.json)
+- [Check capabilities CLI JSON contract golden](docs/fixtures/cli-json/check-capabilities.contract.golden.json)
+- [Generate checks CLI JSON contract golden](docs/fixtures/cli-json/generate-checks.contract.golden.json)
+- [Check list CLI JSON contract golden](docs/fixtures/cli-json/checks.contract.golden.json)
+- [Check assertion presets CLI JSON contract golden](docs/fixtures/cli-json/check-assertion-presets.contract.golden.json)
+- [Run check CLI JSON contract golden](docs/fixtures/cli-json/run-check.contract.golden.json)
 - [Judge command CLI JSON contract golden](docs/fixtures/cli-json/judge-command.contract.golden.json)
 - [Judge smoke CLI JSON contract golden](docs/fixtures/cli-json/judge-smoke.contract.golden.json)
-- [Eval detail CLI JSON contract golden](docs/fixtures/cli-json/eval-detail.contract.golden.json)
-- [Eval spec lock CLI JSON contract golden](docs/fixtures/cli-json/eval-spec-lock.contract.golden.json)
-- [Eval spec locks CLI JSON contract golden](docs/fixtures/cli-json/eval-spec-locks.contract.golden.json)
-- [Eval spec unlock CLI JSON contract golden](docs/fixtures/cli-json/eval-spec-unlock.contract.golden.json)
-- [Eval spec approve CLI JSON contract golden](docs/fixtures/cli-json/eval-spec-approve.contract.golden.json)
+- [Check detail CLI JSON contract golden](docs/fixtures/cli-json/check-detail.contract.golden.json)
+- [Check spec lock CLI JSON contract golden](docs/fixtures/cli-json/check-lock.contract.golden.json)
+- [Check spec locks CLI JSON contract golden](docs/fixtures/cli-json/check-locks.contract.golden.json)
+- [Check spec unlock CLI JSON contract golden](docs/fixtures/cli-json/check-unlock.contract.golden.json)
+- [Check spec approve CLI JSON contract golden](docs/fixtures/cli-json/check-approve.contract.golden.json)
 - [Replay detail CLI JSON contract golden](docs/fixtures/cli-json/replay-detail.contract.golden.json)
 - [Operator smoke matrix CLI JSON contract golden](docs/fixtures/cli-json/operator-smoke-prepare-matrix.contract.golden.json)
 - [Operator smoke command CLI JSON contract golden](docs/fixtures/cli-json/operator-smoke-command.contract.golden.json)
@@ -250,7 +250,7 @@ python3 -m kyoko project-bootstrap --project-dir . --profile-name news-research 
 
 Run the bundled first-run demo. This initializes a local SQLite database,
 ingests the Hermes/news-research fixture, persists the current issue/insight
-proposal, generates the eval, runs a mocked replay adapter, evaluates the
+proposal, generates the check, runs a mocked replay adapter, evaluates the
 before/after result, and applies the resulting context skill:
 
 ```bash
@@ -308,7 +308,7 @@ database, operator prompts/evidence, judge request/handoff files, native ACE
 before/after/handoff files, generated source adapter output, replay-server logs,
 generated improve smoke artifacts, and isolated MCP config homes are retained
 for inspection instead of being discarded with temporary directories.
-With `--smoke-demo`, it runs the bundled telemetry to proposal to eval/replay to
+With `--smoke-demo`, it runs the bundled telemetry to proposal to check/replay to
 context-apply loop against a temporary database. With
 `--operator-smoke-prepare`, it runs the all-preset operator prepare-only smoke
 against a temporary demo database without invoking live model CLIs. With
@@ -321,7 +321,7 @@ replay-server templates, runs the source adapter smoke, and verifies the
 generated replay server with a hook-backed bounded `/replay` request against
 temporary files. It does not invoke live model CLIs.
 With `--improve-smoke`, it generates source/replay adapters and hooks, runs the
-high-level `improve` loop through replay/eval/autonomy apply, and still avoids
+high-level `improve` loop through replay/check/autonomy apply, and still avoids
 live model CLIs.
 With `--opentelemetry-smoke`, it imports `opentelemetry-sdk` from the selected
 Python executable, emits OTLP/HTTP-style JSON through the SDK tracer/provider
@@ -345,20 +345,20 @@ The dashboard Integrations panel exposes the same safe doctor bundle through
 can run the optional dashboard browser smoke, and retains artifacts under the
 selected smoke output directory.
 
-Use `--setup-only` to create the fixture/proposal/eval/adapter without running
-replay, and `--no-apply` to run replay/eval without applying the context skill.
+Use `--setup-only` to create the fixture/proposal/check/adapter without running
+replay, and `--no-apply` to run replay/check without applying the context skill.
 The local dashboard exposes the same flow through a `Run demo` button and
 `POST /api/demo`.
 
 For coding agents and local operator workflows, `kyoko improve` runs the normal
 improvement pipeline in one command. It can either start from an existing
-proposal or run an operator agent, then generate eval specs, run a registered
-replay adapter for each eval, run the evals, and finally call the same
+proposal or run an operator agent, then generate check specs, run a registered
+replay adapter for each check, run the checks, and finally call the same
 policy-gated autonomy evaluator used by the dashboard:
 
 ```bash
 python3 -m kyoko improve --db /tmp/kyoko.db --proposal-id proposal_context_timeout_001 --replay-adapter fixture_replay --json
-python3 -m kyoko improve --db /tmp/kyoko.db --proposal-id proposal_harness_generated_eval_001 \
+python3 -m kyoko improve --db /tmp/kyoko.db --proposal-id proposal_harness_generated_check_001 \
   --replay-adapter fixture_replay --harness-workspace-root /tmp/kyoko-workspace --json
 python3 -m kyoko improve --db /tmp/kyoko.db --operator codex --replay-adapter local_http_replay --json
 python3 -m kyoko improve --db /tmp/kyoko.db --operator command --command "codex exec ..." --replay-adapter fixture_replay --json
@@ -366,17 +366,17 @@ python3 -m kyoko improve --db /tmp/kyoko.db --source-candidate-id openclaw_main 
 ```
 
 `improve` does not bypass safety. Operator output is still stored as a
-`LearningProposal`, eval/replay use registered Kyoko adapters, and final writes
+`LearningProposal`, check/replay use registered Kyoko adapters, and final writes
 only happen if the profile autonomy policy allows them. When
 `--replay-adapter` is omitted, Kyoko uses the latest enabled replay adapter for
-the resolved profile; if none is registered, the loop still generates evals but
-cannot collect replay/eval evidence for the autonomy gate. When
+the resolved profile; if none is registered, the loop still generates checks but
+cannot collect replay/check evidence for the autonomy gate. When
 `--source-candidate-id` is provided, Kyoko explicitly imports the selected
 local source candidate before running analysis, then scopes the loop to the
 imported profile unless `--profile-id` is supplied. If an operator proposal
-contains context or harness changes but no explicit eval spec, Kyoko creates a
+contains context or harness changes but no explicit check spec, Kyoko creates a
 conservative L0 deterministic gate from the cited failure evidence instead of
-applying without an eval. When harness autonomy and repo patch writes are
+applying without an check. When harness autonomy and repo patch writes are
 enabled, `improve` can apply eligible generated-file or strict unified-diff
 harness patches through the same rollback-capable patch transaction path.
 `--harness-workspace-root` explicitly selects the target workspace; when it is
@@ -385,7 +385,7 @@ fixture completion cannot redirect the patch target.
 
 Kyoko keeps the operator's `confidence` value for audit, but it also computes a
 separate `kyoko_confidence` score from resolved evidence refs, target coverage,
-eval/replay results, duplicate proposal history, and validation state. Proposal
+check/replay results, duplicate proposal history, and validation state. Proposal
 lists, proposal detail, and the dashboard show the Kyoko score so confidence is
 not just whatever the operator claimed.
 
@@ -415,14 +415,14 @@ Kyoko runs a single implicit workflow profile (SCOPE Decision 1); there is no
 profile picker. Commands still accept an optional `--profile-id` that defaults
 to that implicit profile. `profile-next --json` (with no `--run`) returns the
 routing guidance for that profile: the next local action, such as analyze,
-generate evals, run replay/eval, review proposal, run autonomy, or monitor.
+generate checks, run replay/check, review proposal, run autonomy, or monitor.
 Routing also includes structured `suggested_commands` argument vectors with
 mutating/prerequisite metadata, so operator agents can execute the next local
 Kyoko command without scraping human text.
 `profile-next` reads that routing state and either returns a dry-run plan or,
 with `--run`, executes the next local Kyoko-owned step when it is safe to do so,
 such as running a registered operator adapter, preparing redacted operator
-evidence/prompt artifacts, eval generation, registered replay/eval execution,
+evidence/prompt artifacts, check generation, registered replay/check execution,
 or autonomy. It returns `blocked` for steps that still require source import,
 human review, repo patch permission, or an existing harness workspace root. Its
 JSON also exposes top-level `suggested_commands` from the current post-step
@@ -432,7 +432,7 @@ payloads. For analysis steps,
 when neither `--operator-adapter` nor `--operator-target` is supplied, Kyoko uses
 the latest enabled profile operator adapter. Supplying `--operator-target` keeps
 the step prompt-only and targets the prepared operator artifacts. When no
-`--replay-adapter` is supplied for a replay/eval next step, Kyoko uses the same
+`--replay-adapter` is supplied for a replay/check next step, Kyoko uses the same
 latest-enabled profile adapter ordering exposed in routing suggested commands.
 For autonomous harness proposals, routing marks whether the profile root can be
 used as `--harness-workspace-root`; when it is available, the suggested
@@ -443,7 +443,7 @@ state locations, returns candidate metadata, and prints import-ready commands
 for the selected Kyoko database/profile. `import-discovered-source` is the
 explicit follow-up action that imports one selected candidate by id. The
 dashboard `Integrations` panel can also run `Improve` on a ready discovered
-source, which imports the candidate and creates the first proposal/eval without
+source, which imports the candidate and creates the first proposal/check without
 applying autonomy from that UI action.
 
 Large payloads and raw artifacts should live in the content-addressed payload
@@ -477,7 +477,7 @@ the age cutoff for every category; per-category overrides
 `--operator-older-than-days` are also accepted. It is dry-run by default and only
 deletes when `--apply` is passed, and it never auto-deletes. Pruning is
 conservative: runs and replay rows referenced by applied skills, active replay
-rows, eval specs, or proposals (learning/replay artifacts) are protected —
+rows, check specs, or proposals (learning/replay artifacts) are protected —
 skipped and reported rather than deleted.
 
 Source adapters may provide inline payload siblings instead of pre-registering
@@ -505,7 +505,7 @@ before anything leaves the machine.
 
 `load-smoke` seeds deterministic local telemetry, expired payload blobs, and
 then measures concurrent dashboard-style read paths including status, runs, run
-detail, proposals, skills, context rules, eval/replay lists, evidence summary,
+detail, proposals, skills, context rules, check/replay lists, evidence summary,
 storage report, and retention dry-run. By default it uses a temporary database;
 pass `--use-db` to seed the selected `--db`. The same action is exposed as
 `POST /api/load-smoke` and as `Load smoke` in the dashboard Storage panel.
@@ -573,7 +573,7 @@ false`. The replay smoke starts a generated replay server, posts a bounded
 `/replay` request, and verifies the replay response.
 The installed framework improve smoke runs the same framework source adapter,
 registers a generated managed replay server, then runs `improve` through
-analysis, eval generation, replay/eval, and autonomous context apply.
+analysis, check generation, replay/check, and autonomous context apply.
 Retained local evidence on 2026-06-03 passed source, replay, and improve
 smokes for LangGraph `0.6.11`, Pydantic AI `1.105.0`, OpenAI Agents `0.17.4`,
 and CrewAI `1.14.6` under `.kyoko/smoke/framework-*-source-real`,
@@ -598,7 +598,7 @@ surface passed under `.kyoko/smoke/doctor-opentelemetry-real`.
 
 Run a no-live-model end-to-end improvement smoke that generates a source
 adapter, ingests failed framework-style telemetry, registers a managed replay
-server, and runs `improve` through replay/eval/autonomy apply:
+server, and runs `improve` through replay/check/autonomy apply:
 
 ```bash
 python3 -m kyoko integration-smoke improve --db /tmp/kyoko.db --output-dir /tmp/kyoko-improve-smoke --json
@@ -831,9 +831,9 @@ python3 -m kyoko proposal-detail --db /tmp/kyoko.db proposal_context_timeout_001
 ```
 
 `proposal-detail` includes an `evidence_chain` summary with stable stages for
-the observed issue, proposed fix, eval gate, replay, and autonomy decision. The
-payload also includes compact `eval_guidance` with gateable eval types,
-informational eval types, safe replay side-effect modes, assertion presets, and
+the observed issue, proposed fix, check gate, replay, and autonomy decision. The
+payload also includes compact `check_guidance` with gateable check types,
+informational check types, safe replay side-effect modes, assertion presets, and
 recorded-judge-only status. The dashboard renders the same chain and guidance
 in proposal details so the before/after proof and next gate choices are visible
 without opening raw artifacts first.
@@ -876,18 +876,18 @@ python3 -m kyoko skill-lock --db /tmp/kyoko.db skill_proposal_context_timeout_00
 python3 -m kyoko skill-unlock --db /tmp/kyoko.db skill_proposal_context_timeout_001_1 --json
 python3 -m kyoko context-rule-lock --db /tmp/kyoko.db context_rule_researcher_timeout --json
 python3 -m kyoko context-rule-unlock --db /tmp/kyoko.db context_rule_researcher_timeout --json
-python3 -m kyoko harness-target-lock --db /tmp/kyoko.db evals/generated_timeout_eval.py --reason "manual owner review" --json
+python3 -m kyoko harness-target-lock --db /tmp/kyoko.db checks/generated_timeout_check.py --reason "manual owner review" --json
 python3 -m kyoko harness-target-locks --db /tmp/kyoko.db --json
-python3 -m kyoko harness-target-unlock --db /tmp/kyoko.db evals/generated_timeout_eval.py --json
+python3 -m kyoko harness-target-unlock --db /tmp/kyoko.db checks/generated_timeout_check.py --json
 ```
 
 A human lock is just boolean state plus an optional reason — there is no
 lock/unlock event ledger. Human-locked skills and context delivery rules remain
 active for delivery, but Kyoko blocks later proposals that try to write the same
-locked id. Human-locked eval specs can still run, but Kyoko will not auto-promote
+locked id. Human-locked check specs can still run, but Kyoko will not auto-promote
 their trust level. Human-locked harness target paths block both harness
 preparation and prepared patch application for the same normalized path. The
-dashboard exposes simple per-entity skill, context-rule, eval-spec, and
+dashboard exposes simple per-entity skill, context-rule, check-spec, and
 harness-target lock/unlock toggles. Set the dashboard `Lock Actor` field to
 include an `actor_agent_identity_id` in the lock/unlock request. A server
 default can also be supplied with `kyoko serve
@@ -907,21 +907,21 @@ python3 -m kyoko policy-set --db /tmp/kyoko.db --context-mode autonomous --harne
 Run the local autonomy gate evaluator. Proposal lifecycle states are
 `pending → applied → rolled_back` (plus an internal `failed`); the autonomy gate
 holds a proposal in `pending` until its evidence requirements are met. In
-`context_mode=autonomous`, this will generate missing eval specs for a context
-proposal, keep the proposal `pending` until the required eval/replay evidence
-exists, and apply only after the gate passes. Harness autonomy follows the same missing-eval fallback before
+`context_mode=autonomous`, this will generate missing check specs for a context
+proposal, keep the proposal `pending` until the required check/replay evidence
+exists, and apply only after the gate passes. Harness autonomy follows the same missing-check fallback before
 patch preparation and apply eligibility checks. When `rollback_on_regression`
 is enabled, later `run-autonomy` calls roll back applied context skillbook and
-context delivery rule changes if the latest proposal-linked eval run fails.
+context delivery rule changes if the latest proposal-linked check run fails.
 Skill and rule rollbacks use latest-revision before/after snapshots and respect
 human locks. In
 `harness_mode=autonomous`, Kyoko prepares harness
-patch transactions, waits for the required eval/replay evidence, and may apply
+patch transactions, waits for the required check/replay evidence, and may apply
 eligible `generated_file` or strict `unified_diff` transactions when repository
 patch writes are enabled. Use `--harness-workspace-root` to provide the target
 workspace explicitly; if omitted, Kyoko falls back to the profile `root_path`.
 The same regression policy rolls back applied harness patch transactions if the
-latest proposal-linked eval run fails:
+latest proposal-linked check run fails:
 
 ```bash
 python3 -m kyoko run-autonomy --db /tmp/kyoko.db --harness-workspace-root /tmp/kyoko-workspace --json
@@ -943,63 +943,63 @@ pointing at a registered payload blob:
 
 ```bash
 python3 -m kyoko propose --db /tmp/kyoko.db /tmp/kyoko-assets/learning-proposals/valid-harness-proposal.json
-python3 -m kyoko prepare-harness --db /tmp/kyoko.db proposal_harness_timeout_eval_001 --json
+python3 -m kyoko prepare-harness --db /tmp/kyoko.db proposal_harness_timeout_check_001 --json
 python3 -m kyoko harness-patches --db /tmp/kyoko.db --json
 python3 -m kyoko propose --db /tmp/kyoko.db /tmp/kyoko-assets/learning-proposals/valid-harness-generated-file-proposal.json
-python3 -m kyoko prepare-harness --db /tmp/kyoko.db proposal_harness_generated_eval_001 --json
+python3 -m kyoko prepare-harness --db /tmp/kyoko.db proposal_harness_generated_check_001 --json
 python3 -m kyoko policy-set --db /tmp/kyoko.db --repo-patch on --json
-python3 -m kyoko apply-harness --db /tmp/kyoko.db patch_proposal_harness_generated_eval_001_1 --workspace-root /tmp/kyoko-workspace --json
-python3 -m kyoko rollback-harness --db /tmp/kyoko.db patch_proposal_harness_generated_eval_001_1 --workspace-root /tmp/kyoko-workspace --json
+python3 -m kyoko apply-harness --db /tmp/kyoko.db patch_proposal_harness_generated_check_001_1 --workspace-root /tmp/kyoko-workspace --json
+python3 -m kyoko rollback-harness --db /tmp/kyoko.db patch_proposal_harness_generated_check_001_1 --workspace-root /tmp/kyoko-workspace --json
 python3 -m kyoko blob-put --db /tmp/kyoko.db /tmp/harness.patch --kind patch_diff --media-type text/x-diff --json
 ```
 
-Create generated eval specs, record a bounded dry-run replay request, and run
-the deterministic baseline eval:
+Create generated check specs, record a bounded dry-run replay request, and run
+the deterministic baseline check:
 
 ```bash
-python3 -m kyoko generate-evals --db /tmp/kyoko.db proposal_context_timeout_001 --json
-python3 -m kyoko replay --db /tmp/kyoko.db eval_proposal_context_timeout_001_1 --json
-python3 -m kyoko complete-replay --db /tmp/kyoko.db replay_eval_proposal_context_timeout_001_1_001 /tmp/kyoko-assets/replay-results/researcher-fetch-timeout-success.json --json
-python3 -m kyoko run-eval --db /tmp/kyoko.db eval_proposal_context_timeout_001_1 --json
-python3 -m kyoko judge-command --db /tmp/kyoko.db eval_proposal_judge_001_1 --command "python /path/to/provider-judge.py" --output-dir /tmp/kyoko-judge --json
+python3 -m kyoko generate-checks --db /tmp/kyoko.db proposal_context_timeout_001 --json
+python3 -m kyoko replay --db /tmp/kyoko.db check_proposal_context_timeout_001_1 --json
+python3 -m kyoko complete-replay --db /tmp/kyoko.db replay_check_proposal_context_timeout_001_1_001 /tmp/kyoko-assets/replay-results/researcher-fetch-timeout-success.json --json
+python3 -m kyoko run-check --db /tmp/kyoko.db check_proposal_context_timeout_001_1 --json
+python3 -m kyoko judge-command --db /tmp/kyoko.db check_proposal_judge_001_1 --command "python /path/to/provider-judge.py" --output-dir /tmp/kyoko-judge --json
 python3 -m kyoko judge-smoke --prepare-only --provider-backed --output-dir .kyoko/smoke/judge-provider-prepare --json
 python3 -m kyoko judge-smoke --command "python /path/to/provider-judge.py" --provider-backed --output-dir .kyoko/smoke/judge-provider-live --json
-python3 -m kyoko evals --db /tmp/kyoko.db --json
-python3 -m kyoko eval-capabilities --json
-python3 -m kyoko eval-assertion-presets --json
-python3 -m kyoko eval-spec-lock --db /tmp/kyoko.db eval_proposal_context_timeout_001_1 --reason "manual baseline review" --json
-python3 -m kyoko eval-spec-locks --db /tmp/kyoko.db --json
-python3 -m kyoko eval-spec-unlock --db /tmp/kyoko.db eval_proposal_context_timeout_001_1 --json
-python3 -m kyoko eval-spec-approve --db /tmp/kyoko.db eval_proposal_context_timeout_001_1 --reason "reviewed replay evidence" --json
-python3 -m kyoko eval-detail --db /tmp/kyoko.db eval_proposal_context_timeout_001_1 --json
-python3 -m kyoko replay-detail --db /tmp/kyoko.db replay_eval_proposal_context_timeout_001_1_001 --json
+python3 -m kyoko checks --db /tmp/kyoko.db --json
+python3 -m kyoko check-capabilities --json
+python3 -m kyoko check-assertion-presets --json
+python3 -m kyoko check-lock --db /tmp/kyoko.db check_proposal_context_timeout_001_1 --reason "manual baseline review" --json
+python3 -m kyoko check-locks --db /tmp/kyoko.db --json
+python3 -m kyoko check-unlock --db /tmp/kyoko.db check_proposal_context_timeout_001_1 --json
+python3 -m kyoko check-approve --db /tmp/kyoko.db check_proposal_context_timeout_001_1 --reason "reviewed replay evidence" --json
+python3 -m kyoko check-detail --db /tmp/kyoko.db check_proposal_context_timeout_001_1 --json
+python3 -m kyoko replay-detail --db /tmp/kyoko.db replay_check_proposal_context_timeout_001_1_001 --json
 ```
 
 The first replay implementation is intentionally conservative. It can record a
 bounded dry-run replay, ingest a controlled replay result fixture, and compare
-the original failed evidence to the replay output. Deterministic evals support
+the original failed evidence to the replay output. Deterministic checks support
 target field checks plus replay trace-shape checks such as output run status,
 no failed spans, minimum span count, and minimum handoff count. Live replay is
-still blocked until side-effect controls are implemented. `smoke_run` evals can
+still blocked until side-effect controls are implemented. `smoke_run` checks can
 check already-recorded source runs or completed replay output runs for status,
 failed spans, span count, and handoff count, but they are informational only:
-they do not auto-promote trust and cannot satisfy autonomy gates. `eval-spec-approve`
+they do not auto-promote trust and cannot satisfy autonomy gates. `check-approve`
 is the explicit human path to `L3_human_approved`; Kyoko never auto-promotes an
-eval to that level, and human-locked eval specs must be unlocked before
+check to that level, and human-locked check specs must be unlocked before
 approval.
-`run-eval` never invokes a live judge provider. To use a model-backed or
+`run-check` never invokes a live judge provider. To use a model-backed or
 provider-backed judge, run `judge-command` explicitly. Kyoko writes a redacted
 `judge-request.json`, passes it on stdin and through `KYOKO_JUDGE_REQUEST_PATH`,
 expects one delimited `kyoko.judge_result.v1` block, persists the returned
-verdict as the eval spec's recorded judgment, runs the normal non-gateable judge
-eval, and attaches request/result/raw-output artifact refs to the eval run. The
+verdict as the check spec's recorded judgment, runs the normal non-gateable judge
+check, and attaches request/result/raw-output artifact refs to the check run. The
 same explicit handoff is available through `POST /api/judge-command`, the
 dashboard's judge controls, and the `kyoko_run_judge_command` MCP tool.
 Use judge output as review evidence for subjective quality, rubric scoring,
 or cases where deterministic assertions cannot yet express the concern. Do not
-treat it as an autonomy gate in v0: Kyoko keeps judge evals informational even
+treat it as an autonomy gate in v0: Kyoko keeps judge checks informational even
 when the external command uses a strong provider model.
-`judge-smoke --prepare-only` creates a bundled demo database, a judge eval, the
+`judge-smoke --prepare-only` creates a bundled demo database, a judge check, the
 redacted request, and `judge-command.handoff.json` without invoking the command.
 Run it without `--prepare-only` and with `--provider-backed` to retain explicit
 provider-backed judge evidence under `.kyoko/smoke/...`.
@@ -1009,7 +1009,7 @@ Run an external replay command. The command receives
 block:
 
 ```bash
-python3 -m kyoko replay-command --db /tmp/kyoko.db eval_proposal_context_timeout_001_1 --command "python3 -m kyoko.fixture_replay" --output-dir /tmp/kyoko-replay --run-eval --json
+python3 -m kyoko replay-command --db /tmp/kyoko.db check_proposal_context_timeout_001_1 --command "python3 -m kyoko.fixture_replay" --output-dir /tmp/kyoko-replay --run-check --json
 ```
 
 Required replay-command stdout contract:
@@ -1025,7 +1025,7 @@ Register a replay adapter once and run it by name:
 ```bash
 python3 -m kyoko replay-adapter-register --db /tmp/kyoko.db fixture_replay --name "Fixture replay" --command "python3 -m kyoko.fixture_replay" --output-dir /tmp/kyoko-replay --json
 python3 -m kyoko replay-adapters --db /tmp/kyoko.db --json
-python3 -m kyoko replay-adapter-run --db /tmp/kyoko.db fixture_replay eval_proposal_context_timeout_001_1 --run-eval --json
+python3 -m kyoko replay-adapter-run --db /tmp/kyoko.db fixture_replay check_proposal_context_timeout_001_1 --run-check --json
 ```
 
 Workshop-style HTTP replay servers are supported as first-class replay
@@ -1037,7 +1037,7 @@ python3 -m kyoko integration-smoke replay-server --command "python3 scripts/kyok
 python3 -m kyoko integration-smoke replay-server --command "python3 scripts/kyoko_replay_server.py --port 61200" --server-url http://127.0.0.1:61200 --hook /absolute/path/to/replay_hook.py:replay --run-replay --json
 KYOKO_REPLAY_HOOK=/absolute/path/to/replay_hook.py:replay python3 scripts/kyoko_replay_server.py --port 61200
 python3 -m kyoko replay-server-health http://127.0.0.1:61200 --json
-python3 -m kyoko replay-server-run --db /tmp/kyoko.db http://127.0.0.1:61200 eval_proposal_context_timeout_001_1 --run-eval --json
+python3 -m kyoko replay-server-run --db /tmp/kyoko.db http://127.0.0.1:61200 check_proposal_context_timeout_001_1 --run-check --json
 python3 -m kyoko replay-adapter-register --db /tmp/kyoko.db local_http_replay --name "Local HTTP replay" --server-url http://127.0.0.1:61200 --json
 python3 -m kyoko replay-adapter-register --db /tmp/kyoko.db managed_http_replay --name "Managed HTTP replay" --command "python3 -m kyoko.fixture_replay_server --port 61200" --server-url http://127.0.0.1:61200 --startup-timeout 15 --json
 python3 -m kyoko replay-server-start --db /tmp/kyoko.db managed_http_replay --json
@@ -1047,7 +1047,7 @@ python3 -m kyoko replay-server-stop --db /tmp/kyoko.db managed_http_replay --jso
 ```
 
 HTTP replay server URLs are loopback-only by default (`127.0.0.1`,
-`localhost`, or `::1`) because Kyoko sends replay/eval context to that endpoint.
+`localhost`, or `::1`) because Kyoko sends replay/check context to that endpoint.
 Use `--allow-remote-server` on `replay-server-health`,
 `replay-server-run`, or `replay-adapter-register` only after deliberately
 trusting the remote replay service and its network path. Registered replay
@@ -1058,7 +1058,7 @@ replay side-effect mode is supported before posting `/replay`. Older servers
 that omit those fields are still checked at replay completion. The replay
 request body sent to the server is redacted with the profile evidence policy
 before the POST, so default local replay handoff hides payload refs and
-secret-shaped values while keeping replay ids, eval ids, and trace shape.
+secret-shaped values while keeping replay ids, check ids, and trace shape.
 
 Generated replay servers are dependency-free: Python framework labels produce
 stdlib-only `.py` servers, and TypeScript framework labels produce Node ESM
@@ -1074,7 +1074,7 @@ templates support `generic-python`, `langgraph-python`,
 `/health`, captures bounded stdout/stderr logs, and stops the process. Pass
 `--hook module_or_path:function --run-replay` to also POST a generated bounded
 request to `/replay` and fail if the hook response does not pass. Use
-`replay-server-run` for the full Kyoko replay/eval path against a real eval
+`replay-server-run` for the full Kyoko replay/check path against a real check
 spec. The same smoke action is available in the dashboard `Integrations` panel
 and JSON API.
 
@@ -1105,7 +1105,7 @@ KYOKO_REPLAY_HOOK=examples/replay-hooks/ai_sdk_replay_hook.mjs:replay node /tmp/
 
 The examples return `output_run_id`, `target_map`, and Kyoko `source_events`
 for the replay output run. Tests run them through generated replay servers and
-the bundled eval/replay fixture, promoting the eval to `L2_regression`.
+the bundled check/replay fixture, promoting the check to `L2_regression`.
 
 Deliver learned context to an agent or export ACE Skillbook v2 JSON:
 
@@ -1169,7 +1169,7 @@ provider-backed ACE-compatible evidence exists under
 
 This is the native ACE safety boundary: ACE can mutate a temporary cloned
 Skillbook, but Kyoko converts the delta into `native_ace` LearningProposals and
-still owns evidence validation, eval/replay gates, autonomy policy, and final
+still owns evidence validation, check/replay gates, autonomy policy, and final
 writes. `ace-native-run` makes that boundary executable for provider-backed ACE
 wrappers: Kyoko writes `before.skillbook.json`, provides `KYOKO_ACE_BEFORE_PATH`,
 `KYOKO_ACE_AFTER_PATH`, `KYOKO_ACE_OUTPUT_DIR`, `KYOKO_ACE_DB_PATH`, and
@@ -1220,7 +1220,7 @@ no redaction policy table, no `redaction-policy`/`redaction-policy-set` or
 panel. Before any evidence leaves the machine — through operator prompts, MCP, or
 the API — Kyoko scrubs payload/artifact refs and redacts common secret keys and
 token-shaped values. Generated evidence bundles and operator prompts also include
-Kyoko's eval capability summary, including executable/gateable eval
+Kyoko's check capability summary, including executable/gateable check
 types, safe replay side-effect modes, deterministic assertions, and assertion
 presets, so operator agents can propose supported gates without separate
 discovery calls.
@@ -1291,11 +1291,11 @@ END_KYOKO_LEARNING_PROPOSAL_JSON
 
 Run the agent-facing MCP server over stdio, or generate a config block for an
 MCP-capable operator agent. The first MCP surface is intentionally
-read/propose/eval-request oriented with local readiness checks; it does not
+read/propose/check-request oriented with local readiness checks; it does not
 expose direct apply or harness write tools. Storage and retention MCP cleanup
 tools are dry-run only; explicit rollback tools are state-changing and should
 be treated as privileged by MCP clients.
-The `kyoko_run_improve` MCP tool provides the high-level import/analyze/eval
+The `kyoko_run_improve` MCP tool provides the high-level import/analyze/check
 orchestration path for coding agents, but it always disables autonomy/apply so
 the MCP path cannot mutate the skillbook or harness directly.
 
@@ -1364,14 +1364,14 @@ Implemented MCP tools:
 - `kyoko_list_context_rules`
 - `kyoko_list_context_rule_revisions`
 - `kyoko_rollback_context_rule_revision`
-- `kyoko_list_evals`
-- `kyoko_get_eval_capabilities`
-- `kyoko_list_eval_assertion_presets`
-- `kyoko_list_eval_spec_locks`
-- `kyoko_get_eval_detail`
+- `kyoko_list_checks`
+- `kyoko_get_check_capabilities`
+- `kyoko_list_check_assertion_presets`
+- `kyoko_list_check_locks`
+- `kyoko_get_check_detail`
 - `kyoko_get_replay_detail`
-- `kyoko_generate_evals`
-- `kyoko_run_eval`
+- `kyoko_generate_checks`
+- `kyoko_run_check`
 - `kyoko_list_replay_adapters`
 - `kyoko_run_replay_adapter`
 - `kyoko_run_improve`
@@ -1437,7 +1437,7 @@ MCP-communication log, and annotations all stream in real time. Pages: **Overvie
 sliceable payload viewer with FTS5-backed run search, live tail, and run/span
 annotations), **Issues** (the first-class Issue evidence entity — list, detail, and
 create), **Agent ↔ Kyoko** (the live MCP JSON-RPC log), **Proposals**, **Autonomy**
-(policy + timeline, read-only), **Evals & Replay**, and **Settings** (storage plus
+(policy + timeline, read-only), **Checks & Replay**, and **Settings** (storage plus
 the static redaction/retention posture and manual prune controls, read-only).
 Client→server actions (creating/deleting annotations, creating issues, ingesting
 live events) are plain `application/json` POSTs through the same loopback CSRF
@@ -1451,8 +1451,8 @@ status, product-loop dashboard metrics, the single implicit profile's routing
 state plus `Plan next`/`Run next` controls (there is no profile selector or
 Profiles panel — single invisible profile per `docs/SCOPE.md`),
 runs/proposals, applied skills, context delivery rules, harness patch
-transactions, eval/replay state, delivered context, detail inspection with
-assertion-level eval evidence, persisted gate-decision history, filterable
+transactions, check/replay state, delivered context, detail inspection with
+assertion-level check evidence, persisted gate-decision history, filterable
 autonomy history, replay adapter execution, managed
 replay-server start/status/logs/stop controls, a local apply action for context
 proposals, a local prepare action for harness proposals, and a one-click
@@ -1467,9 +1467,9 @@ the deterministic mock operator. `Run next` also uses the
 selected operator adapter to run the next analysis step through
 `profile-next`. Discovery-card `Improve` also uses the selected
 replay adapter when set, so a ready candidate can import source, generate
-evals, and collect replay evidence while remaining non-applying. After
+checks, and collect replay evidence while remaining non-applying. After
 source-discovery Import or Improve, the dashboard refreshes the affected
-profile/proposal/eval panels while preserving the latest discovery-card result.
+profile/proposal/check panels while preserving the latest discovery-card result.
 The policy-card actions
 render their returned autonomy/profile-next
 outcomes after refresh. Proposal-level `Improve` refreshes the dashboard and
@@ -1478,7 +1478,7 @@ including the concrete operator adapter label, replay adapter ids, and patch
 transaction ids when harness apply runs. The Operators panel shows recent
 operator runs with running, succeeded, failed, retry, and failure-kind state.
 The top status strip is backed by `GET /api/dashboard-metrics` and is limited
-to product-loop health: issues/proposals, eval pass/fail, replay result,
+to product-loop health: issues/proposals, check pass/fail, replay result,
 autonomy actions, and before/after verification.
 `dashboard-smoke` starts an isolated loopback dashboard against a bundled demo
 database, opens it in desktop and mobile Playwright browser viewports, checks

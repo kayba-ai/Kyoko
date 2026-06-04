@@ -1,6 +1,6 @@
 {
   "schema_version": "kyoko.learning_proposal.v1",
-  "id": "proposal_harness_timeout_eval_001",
+  "id": "proposal_harness_timeout_check_001",
   "profile_id": "profile_news_research_001",
   "producer": {
     "kind": "operator_agent",
@@ -11,7 +11,7 @@
   "state": "pending",
   "section": "harness",
   "title": "Add a replay-backed timeout regression harness",
-  "summary": "Create a harness plan for a deterministic timeout replay eval before allowing autonomous harness writes.",
+  "summary": "Create a harness plan for a deterministic timeout replay check before allowing autonomous harness writes.",
   "confidence": 0.72,
   "evidence_refs": [
     {
@@ -33,8 +33,8 @@
     "root_cause": "Timeout recovery is only represented as prompt guidance, so future harness changes could regress without a replay-backed check.",
     "target": {
       "entity_type": "file",
-      "entity_id": "file_evals_news_timeout_replay",
-      "path": "evals/news_research_timeout_replay.py"
+      "entity_id": "file_checks_news_timeout_replay",
+      "path": "checks/news_research_timeout_replay.py"
     }
   },
   "insight": "Before enabling autonomous harness writes, require a local replay harness that proves the timeout failure fails before the fix and passes after the fix.",
@@ -43,12 +43,12 @@
       "type": "harness_patch",
       "patch_kind": "command_plan",
       "target_paths": [
-        "evals/news_research_timeout_replay.py"
+        "checks/news_research_timeout_replay.py"
       ],
       "command_plan": [
         "Create a deterministic replay fixture for span_fetch_timeout_001.",
         "Assert the original run fails on timeout and the replay run records a recovered source fetch.",
-        "Wire the command into Kyoko eval/replay gates before autonomous harness apply."
+        "Wire the command into Kyoko check/replay gates before autonomous harness apply."
       ],
       "side_effect_mode": "sandboxed_filesystem",
       "rollback_required": true
@@ -56,7 +56,7 @@
   ],
   "gate_expectations": {
     "requires_human_review": true,
-    "requires_eval_level": "L2_regression",
+    "requires_check_level": "L2_regression",
     "requires_replay": true,
     "allowed_autonomy_section": "harness",
     "notes": "This proposal prepares a reviewable harness patch transaction only; it does not write repository files."

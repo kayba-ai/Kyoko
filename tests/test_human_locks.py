@@ -143,29 +143,29 @@ class HumanLockStateTests(unittest.TestCase):
 
             set_harness_target_lock(
                 db_path=db_path,
-                target_path="evals/generated_timeout_eval.py",
+                target_path="checks/generated_timeout_check.py",
                 locked=True,
                 reason="manual owner review",
             )
             locks = list_harness_target_locks(db_path)
             self.assertTrue(locks[0]["human_locked"])
-            self.assertEqual(locks[0]["target_path"], "evals/generated_timeout_eval.py")
+            self.assertEqual(locks[0]["target_path"], "checks/generated_timeout_check.py")
 
             with self.assertRaisesRegex(HarnessError, "human_locked_harness_target"):
                 prepare_harness_proposal(
                     db_path=db_path,
-                    proposal_id="proposal_harness_generated_eval_001",
+                    proposal_id="proposal_harness_generated_check_001",
                 )
 
             set_harness_target_lock(
                 db_path=db_path,
-                target_path="evals/generated_timeout_eval.py",
+                target_path="checks/generated_timeout_check.py",
                 locked=False,
             )
             self.assertEqual(list_harness_target_locks(db_path), [])
             prepare_harness_proposal(
                 db_path=db_path,
-                proposal_id="proposal_harness_generated_eval_001",
+                proposal_id="proposal_harness_generated_check_001",
             )
 
 

@@ -20,7 +20,7 @@ const NAV = [
   { to: "/proposals", label: "Proposals", icon: GitPullRequestArrow },
   { to: "/issues", label: "Issues", icon: CircleDot },
   { to: "/autonomy", label: "Autonomy", icon: ShieldCheck },
-  { to: "/evals", label: "Evals & Replay", icon: FlaskConical },
+  { to: "/checks", label: "Checks & Replay", icon: FlaskConical },
   { to: "/settings", label: "Settings", icon: SettingsIcon },
 ];
 

@@ -12,7 +12,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from kyoko.cli import main
-from kyoko.evals import generate_evals_for_proposal
+from kyoko.checks import generate_checks_for_proposal
 from kyoko.proposals import submit_learning_proposal
 from kyoko.replay_servers import run_replay_server
 from kyoko.replay_templates import (
@@ -89,7 +89,7 @@ class ReplayTemplateTests(unittest.TestCase):
                 proposal_path=VALID_PROPOSAL,
                 schema_path=SCHEMA,
             )
-            eval_report = generate_evals_for_proposal(
+            check_report = generate_checks_for_proposal(
                 db_path=db_path,
                 proposal_id="proposal_context_timeout_001",
             )
@@ -136,17 +136,17 @@ def replay(request):
                 _wait_for_health(port)
                 report = run_replay_server(
                     db_path=db_path,
-                    eval_spec_id=eval_report.eval_spec_ids[0],
+                    check_spec_id=check_report.check_spec_ids[0],
                     server_url=f"http://127.0.0.1:{port}",
-                    run_eval_after=True,
+                    run_check_after=True,
                 )
             finally:
                 _stop_process(process)
 
             self.assertEqual(report.completion.status, "passed")
             self.assertEqual(report.completion.output_run_id, "run_research_topic_replay_001")
-            self.assertEqual(report.eval_run.status, "passed")
-            self.assertEqual(report.eval_run.promoted_trust_level, "L2_regression")
+            self.assertEqual(report.check_run.status, "passed")
+            self.assertEqual(report.check_run.promoted_trust_level, "L2_regression")
             self.assertEqual(
                 report.response["replay"]["target_map"]["span_fetch_timeout_001"],
                 "span_fetch_retry_success_001",
@@ -197,7 +197,7 @@ def replay(request):
                 proposal_path=VALID_PROPOSAL,
                 schema_path=SCHEMA,
             )
-            eval_report = generate_evals_for_proposal(
+            check_report = generate_checks_for_proposal(
                 db_path=db_path,
                 proposal_id="proposal_context_timeout_001",
             )
@@ -249,9 +249,9 @@ export async function replay(request) {{
                 health = _wait_for_health(port)
                 replay_report = run_replay_server(
                     db_path=db_path,
-                    eval_spec_id=eval_report.eval_spec_ids[0],
+                    check_spec_id=check_report.check_spec_ids[0],
                     server_url=f"http://127.0.0.1:{port}",
-                    run_eval_after=True,
+                    run_check_after=True,
                 )
             finally:
                 _stop_process(process)
@@ -259,8 +259,8 @@ export async function replay(request) {{
             self.assertEqual(report.framework, "ai-sdk-typescript")
             self.assertEqual(health["framework"], "ai-sdk-typescript")
             self.assertEqual(replay_report.completion.status, "passed")
-            self.assertEqual(replay_report.eval_run.status, "passed")
-            self.assertEqual(replay_report.eval_run.promoted_trust_level, "L2_regression")
+            self.assertEqual(replay_report.check_run.status, "passed")
+            self.assertEqual(replay_report.check_run.promoted_trust_level, "L2_regression")
 
     def test_cli_writes_template_json(self) -> None:
         with TemporaryDirectory() as tmpdir:

@@ -562,12 +562,12 @@ def replay(request):
                 "proposal_mock_span_installed_langgraph_fetch_001",
             )
             self.assertEqual(
-                report.improve.generated_eval_spec_ids,
-                ("eval_proposal_mock_span_installed_langgraph_fetch_001_1",),
+                report.improve.generated_check_spec_ids,
+                ("check_proposal_mock_span_installed_langgraph_fetch_001_1",),
             )
             self.assertEqual(report.improve.replay_runs[0]["status"], "passed")
             self.assertEqual(report.improve.replay_runs[0]["output_run_id"], "run_installed_langgraph_replay_001")
-            self.assertEqual(report.improve.replay_runs[0]["eval_run"]["status"], "passed")
+            self.assertEqual(report.improve.replay_runs[0]["check_run"]["status"], "passed")
             self.assertEqual(report.improve.autonomy.decisions[0].action, "applied")
 
     def test_cli_framework_replay_integration_smoke_json(self) -> None:
@@ -708,11 +708,11 @@ def replay(request):
             self.assertEqual(report.source_smoke.profile_id, "profile_framework_improve_smoke")
             self.assertEqual(report.improve.proposal_id, "proposal_mock_span_framework_fetch_timeout_001")
             self.assertEqual(
-                report.improve.generated_eval_spec_ids,
-                ("eval_proposal_mock_span_framework_fetch_timeout_001_1",),
+                report.improve.generated_check_spec_ids,
+                ("check_proposal_mock_span_framework_fetch_timeout_001_1",),
             )
             self.assertEqual(report.improve.replay_runs[0]["status"], "passed")
-            self.assertEqual(report.improve.replay_runs[0]["eval_run"]["status"], "passed")
+            self.assertEqual(report.improve.replay_runs[0]["check_run"]["status"], "passed")
             self.assertEqual(report.improve.autonomy.decisions[0].action, "applied")
 
     def test_cli_improve_integration_smoke_json(self) -> None:

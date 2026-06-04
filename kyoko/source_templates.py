@@ -351,7 +351,7 @@ Or post directly to a running local Kyoko app:
 The hook should return Kyoko canonical source-event JSON or
 {"source_events": <canonical JSON>}. For AI SDK projects, the simplest path is
 to convert the telemetry/trace data you already collect into Kyoko runs and
-spans here, then let Kyoko own evals, replay, and autonomy.
+spans here, then let Kyoko own checks, replay, and autonomy.
 */
 
 import crypto from "node:crypto";

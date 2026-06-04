@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from .autonomy_runner import AutonomyRunError, run_autonomy
-from .evals import EvalError, generate_evals_for_proposal
+from .checks import CheckError, generate_checks_for_proposal
 from .operator_adapters import OperatorAdapterError, run_registered_operator_adapter
 from .operator_prompts import write_operator_prompt_artifacts
 from .profiles import list_profiles
@@ -81,23 +81,23 @@ def run_profile_next_step(
         )
 
     state = str(routing.get("state") or "")
-    if state == "needs_eval_generation":
+    if state == "needs_check_generation":
         proposal_id = _required_routing_value(routing, "proposal_id")
         try:
-            report = generate_evals_for_proposal(db_path=db_path, proposal_id=proposal_id)
-        except (EvalError, StorageError) as exc:
+            report = generate_checks_for_proposal(db_path=db_path, proposal_id=proposal_id)
+        except (CheckError, StorageError) as exc:
             raise ProfileNextError(str(exc)) from exc
         return _executed_report(
             db_path=db_path,
             profile_id=selected_profile_id,
             action=action,
             routing_before=routing,
-            reason="generated_eval_specs",
+            reason="generated_check_specs",
             result={
                 "proposal_id": report.proposal_id,
                 "profile_id": report.profile_id,
-                "eval_spec_ids": list(report.eval_spec_ids),
-                "existing_eval_spec_ids": list(report.existing_eval_spec_ids),
+                "check_spec_ids": list(report.check_spec_ids),
+                "existing_check_spec_ids": list(report.existing_check_spec_ids),
             },
         )
 
@@ -156,8 +156,8 @@ def run_profile_next_step(
             },
         )
 
-    if state == "needs_replay_or_eval":
-        eval_spec_id = _required_routing_value(routing, "eval_spec_id")
+    if state == "needs_replay_or_check":
+        check_spec_id = _required_routing_value(routing, "check_spec_id")
         adapter_id = replay_adapter_id or _default_replay_adapter_id(db_path, selected_profile_id)
         if adapter_id is None:
             return _blocked_report(
@@ -172,12 +172,12 @@ def run_profile_next_step(
             report = run_registered_replay_adapter(
                 db_path=db_path,
                 adapter_id=adapter_id,
-                eval_spec_id=eval_spec_id,
+                check_spec_id=check_spec_id,
                 output_dir=replay_output_dir,
                 timeout_seconds=replay_timeout_seconds,
-                run_eval_after=True,
+                run_check_after=True,
             )
-        except (EvalError, ReplayAdapterError, StorageError) as exc:
+        except (CheckError, ReplayAdapterError, StorageError) as exc:
             raise ProfileNextError(str(exc)) from exc
         return _executed_report(
             db_path=db_path,
@@ -425,19 +425,19 @@ def _blocked_reason_for_state(state: str, action: str) -> str:
 
 def _replay_report_payload(report: object, *, adapter_id: str) -> dict[str, Any]:
     completion = getattr(report, "completion")
-    eval_run = getattr(report, "eval_run", None)
+    check_run = getattr(report, "check_run", None)
     proposal_id = getattr(report, "proposal_id", None)
-    if proposal_id is None and eval_run is not None:
-        proposal_id = getattr(eval_run, "proposal_id", None)
+    if proposal_id is None and check_run is not None:
+        proposal_id = getattr(check_run, "proposal_id", None)
     return {
         "adapter_id": adapter_id,
         "replay_run_id": getattr(report, "replay_run_id"),
         "profile_id": getattr(report, "profile_id"),
         "proposal_id": proposal_id,
-        "eval_spec_id": getattr(report, "eval_spec_id"),
+        "check_spec_id": getattr(report, "check_spec_id"),
         "output_run_id": completion.output_run_id,
         "status": completion.status,
-        "eval_run": _eval_run_payload(eval_run) if eval_run is not None else None,
+        "check_run": _check_run_payload(check_run) if check_run is not None else None,
     }
 
 
@@ -458,14 +458,14 @@ def _operator_report_payload(report: object, *, adapter_id: str) -> dict[str, An
     }
 
 
-def _eval_run_payload(eval_run: object) -> dict[str, Any]:
+def _check_run_payload(check_run: object) -> dict[str, Any]:
     return {
-        "eval_run_id": getattr(eval_run, "eval_run_id"),
-        "profile_id": getattr(eval_run, "profile_id"),
-        "proposal_id": getattr(eval_run, "proposal_id"),
-        "eval_spec_id": getattr(eval_run, "eval_spec_id"),
-        "replay_run_id": getattr(eval_run, "replay_run_id"),
-        "status": getattr(eval_run, "status"),
-        "result": getattr(eval_run, "result"),
-        "promoted_trust_level": getattr(eval_run, "promoted_trust_level"),
+        "check_run_id": getattr(check_run, "check_run_id"),
+        "profile_id": getattr(check_run, "profile_id"),
+        "proposal_id": getattr(check_run, "proposal_id"),
+        "check_spec_id": getattr(check_run, "check_spec_id"),
+        "replay_run_id": getattr(check_run, "replay_run_id"),
+        "status": getattr(check_run, "status"),
+        "result": getattr(check_run, "result"),
+        "promoted_trust_level": getattr(check_run, "promoted_trust_level"),
     }

@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from .apply import list_skills
-from .evals import list_eval_capabilities
+from .checks import list_check_capabilities
 from .redaction import (
     RedactionError,
     get_redaction_policy,
@@ -79,8 +79,8 @@ def build_evidence_bundle(
                 selected_profile_id,
                 None,
             ),
-            "eval_specs": _profile_or_run_rows(connection, "eval_specs", selected_profile_id, None),
-            "eval_runs": _profile_or_run_rows(connection, "eval_runs", selected_profile_id, None),
+            "check_specs": _profile_or_run_rows(connection, "check_specs", selected_profile_id, None),
+            "check_runs": _profile_or_run_rows(connection, "check_runs", selected_profile_id, None),
             "replay_runs": _profile_or_run_rows(connection, "replay_runs", selected_profile_id, None),
             "replay_adapters": _profile_or_run_rows(connection, "replay_adapters", selected_profile_id, None),
             "operator_adapters": _profile_or_run_rows(connection, "operator_adapters", selected_profile_id, None),
@@ -96,7 +96,7 @@ def build_evidence_bundle(
                 for skill in list_skills(db_path)
                 if skill["profile_id"] == selected_profile_id
             ],
-            "eval_capabilities": list_eval_capabilities(),
+            "check_capabilities": list_check_capabilities(),
         }
 
     bundle["summary"] = _bundle_summary(bundle)
@@ -140,8 +140,8 @@ def _bundle_summary(bundle: dict[str, Any]) -> dict[str, Any]:
         "tasks": len(bundle["tasks"]),
         "handoffs": len(bundle["handoffs"]),
         "learning_proposals": len(bundle["learning_proposals"]),
-        "eval_specs": len(bundle["eval_specs"]),
-        "eval_runs": len(bundle["eval_runs"]),
+        "check_specs": len(bundle["check_specs"]),
+        "check_runs": len(bundle["check_runs"]),
         "replay_runs": len(bundle["replay_runs"]),
         "replay_adapters": len(bundle["replay_adapters"]),
         "operator_adapters": len(bundle["operator_adapters"]),

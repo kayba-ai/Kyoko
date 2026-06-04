@@ -12,7 +12,7 @@ from .autonomy import get_autonomy_policy
 from .blobs import prune_payload_blobs, put_blob, storage_report
 from .details import get_run_detail, list_runs
 from .evidence import build_evidence_bundle
-from .evals import list_eval_runs, list_eval_specs, list_replay_runs
+from .checks import list_check_runs, list_check_specs, list_replay_runs
 from .harness import list_harness_target_locks
 from .proposals import list_learning_proposals
 from .redaction import get_redaction_policy
@@ -469,10 +469,10 @@ def _dashboard_read_operations(
             lambda: {"chars": len(render_skillbook_prompt(db_path, profile_id=profile_id))},
         ),
         (
-            "evals",
+            "checks",
             lambda: {
-                "eval_specs": len(list_eval_specs(db_path)),
-                "eval_runs": len(list_eval_runs(db_path)),
+                "check_specs": len(list_check_specs(db_path)),
+                "check_runs": len(list_check_runs(db_path)),
                 "replay_runs": len(list_replay_runs(db_path)),
             },
         ),

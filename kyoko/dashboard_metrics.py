@@ -34,7 +34,7 @@ def get_dashboard_metrics(*, db_path: Path, profile_id: Optional[str] = None) ->
             "latest_failed": _latest_failed_run(connection, selected_profile_id),
         }
         issues = _issue_metrics(connection, selected_profile_id)
-        evals = _eval_metrics(connection, selected_profile_id)
+        checks = _check_metrics(connection, selected_profile_id)
         replay = _replay_metrics(connection, selected_profile_id)
         autonomy = _autonomy_metrics(connection, selected_profile_id)
         before_after = {
@@ -60,10 +60,10 @@ def get_dashboard_metrics(*, db_path: Path, profile_id: Optional[str] = None) ->
             "detail": _status_detail(issues["by_state"]),
         },
         {
-            "id": "evals",
-            "label": "Eval Pass/Fail",
-            "value": f"{evals['passed']}/{evals['failed']}",
-            "detail": f"{evals['specs']} specs, latest {evals['latest_status']}",
+            "id": "checks",
+            "label": "Check Pass/Fail",
+            "value": f"{checks['passed']}/{checks['failed']}",
+            "detail": f"{checks['specs']} specs, latest {checks['latest_status']}",
         },
         {
             "id": "replay",
@@ -92,7 +92,7 @@ def get_dashboard_metrics(*, db_path: Path, profile_id: Optional[str] = None) ->
         "cards": cards,
         "runs": runs,
         "issues": issues,
-        "evals": evals,
+        "checks": checks,
         "replay": replay,
         "autonomy": autonomy,
         "before_after": before_after,
@@ -107,7 +107,7 @@ def _empty_metrics() -> dict[str, Any]:
         "cards": [],
         "runs": {"total": 0, "failed": 0, "failed_spans": 0, "latest": None, "latest_failed": None},
         "issues": {"total": 0, "active": 0, "by_state": {}, "by_section": {}},
-        "evals": {"specs": 0, "runs": 0, "passed": 0, "failed": 0, "latest_status": "none"},
+        "checks": {"specs": 0, "runs": 0, "passed": 0, "failed": 0, "latest_status": "none"},
         "replay": {
             "total": 0,
             "passed": 0,
@@ -214,11 +214,11 @@ def _issue_metrics(connection: Any, profile_id: str) -> dict[str, Any]:
     }
 
 
-def _eval_metrics(connection: Any, profile_id: str) -> dict[str, Any]:
-    by_status = _group_counts(connection, "eval_runs", profile_id, "status")
-    latest = _latest_status(connection, "eval_runs", profile_id)
+def _check_metrics(connection: Any, profile_id: str) -> dict[str, Any]:
+    by_status = _group_counts(connection, "check_runs", profile_id, "status")
+    latest = _latest_status(connection, "check_runs", profile_id)
     return {
-        "specs": _count(connection, "eval_specs", profile_id),
+        "specs": _count(connection, "check_specs", profile_id),
         "runs": sum(by_status.values()),
         "passed": by_status.get("passed", 0),
         "failed": by_status.get("failed", 0),
@@ -232,7 +232,7 @@ def _replay_metrics(connection: Any, profile_id: str) -> dict[str, Any]:
     latest = _latest_status(connection, "replay_runs", profile_id)
     latest_passed = connection.execute(
         """
-        SELECT id, status, output_ref, source_run_id, eval_spec_id, proposal_id, side_effect_mode
+        SELECT id, status, output_ref, source_run_id, check_spec_id, proposal_id, side_effect_mode
         FROM replay_runs
         WHERE profile_id = ? AND status = 'passed'
         ORDER BY COALESCE(ended_at, started_at) DESC, id DESC

@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 
-SCHEMA_VERSION = 24
+SCHEMA_VERSION = 25
 
 
 class StorageError(Exception):
@@ -356,15 +356,15 @@ CREATE TABLE IF NOT EXISTS autonomy_policies (
   context_mode TEXT NOT NULL,
   harness_mode TEXT NOT NULL,
   allow_skillbook_write INTEGER NOT NULL,
-  allow_eval_write INTEGER NOT NULL,
+  allow_check_write INTEGER NOT NULL,
   allow_profile_config_write INTEGER NOT NULL,
   allow_repo_patch INTEGER NOT NULL,
   allow_replay_server_patch INTEGER NOT NULL,
   allowed_paths_json TEXT NOT NULL,
   protected_paths_json TEXT NOT NULL,
   dirty_worktree_policy TEXT NOT NULL,
-  required_eval_level_context TEXT NOT NULL,
-  required_eval_level_harness TEXT NOT NULL,
+  required_check_level_context TEXT NOT NULL,
+  required_check_level_harness TEXT NOT NULL,
   rollback_on_regression INTEGER NOT NULL,
   updated_at TEXT NOT NULL,
   FOREIGN KEY (profile_id) REFERENCES profiles(id)
@@ -398,12 +398,12 @@ CREATE TABLE IF NOT EXISTS payload_blobs (
   FOREIGN KEY (profile_id) REFERENCES profiles(id)
 );
 
-CREATE TABLE IF NOT EXISTS eval_specs (
+CREATE TABLE IF NOT EXISTS check_specs (
   id TEXT PRIMARY KEY,
   profile_id TEXT NOT NULL,
   proposal_id TEXT,
   name TEXT NOT NULL,
-  eval_type TEXT NOT NULL,
+  check_type TEXT NOT NULL,
   trust_level TEXT NOT NULL,
   side_effect_mode TEXT NOT NULL,
   target_json TEXT NOT NULL,
@@ -415,23 +415,23 @@ CREATE TABLE IF NOT EXISTS eval_specs (
   FOREIGN KEY (proposal_id) REFERENCES learning_proposals(id)
 );
 
-CREATE TABLE IF NOT EXISTS eval_spec_locks (
+CREATE TABLE IF NOT EXISTS check_locks (
   profile_id TEXT NOT NULL,
-  eval_spec_id TEXT NOT NULL,
+  check_spec_id TEXT NOT NULL,
   human_locked INTEGER NOT NULL,
   reason TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
-  PRIMARY KEY (profile_id, eval_spec_id),
+  PRIMARY KEY (profile_id, check_spec_id),
   FOREIGN KEY (profile_id) REFERENCES profiles(id),
-  FOREIGN KEY (eval_spec_id) REFERENCES eval_specs(id)
+  FOREIGN KEY (check_spec_id) REFERENCES check_specs(id)
 );
 
 CREATE TABLE IF NOT EXISTS replay_runs (
   id TEXT PRIMARY KEY,
   profile_id TEXT NOT NULL,
   proposal_id TEXT,
-  eval_spec_id TEXT,
+  check_spec_id TEXT,
   source_run_id TEXT,
   task_attempt_id TEXT,
   mode TEXT NOT NULL,
@@ -447,15 +447,15 @@ CREATE TABLE IF NOT EXISTS replay_runs (
   updated_at TEXT NOT NULL,
   FOREIGN KEY (profile_id) REFERENCES profiles(id),
   FOREIGN KEY (proposal_id) REFERENCES learning_proposals(id),
-  FOREIGN KEY (eval_spec_id) REFERENCES eval_specs(id),
+  FOREIGN KEY (check_spec_id) REFERENCES check_specs(id),
   FOREIGN KEY (source_run_id) REFERENCES runs(id),
   FOREIGN KEY (task_attempt_id) REFERENCES task_attempts(id)
 );
 
-CREATE TABLE IF NOT EXISTS eval_runs (
+CREATE TABLE IF NOT EXISTS check_runs (
   id TEXT PRIMARY KEY,
   profile_id TEXT NOT NULL,
-  eval_spec_id TEXT NOT NULL,
+  check_spec_id TEXT NOT NULL,
   proposal_id TEXT,
   replay_run_id TEXT,
   status TEXT NOT NULL,
@@ -466,7 +466,7 @@ CREATE TABLE IF NOT EXISTS eval_runs (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   FOREIGN KEY (profile_id) REFERENCES profiles(id),
-  FOREIGN KEY (eval_spec_id) REFERENCES eval_specs(id),
+  FOREIGN KEY (check_spec_id) REFERENCES check_specs(id),
   FOREIGN KEY (proposal_id) REFERENCES learning_proposals(id),
   FOREIGN KEY (replay_run_id) REFERENCES replay_runs(id)
 );
@@ -611,10 +611,10 @@ CREATE INDEX IF NOT EXISTS idx_payload_blobs_profile_id ON payload_blobs(profile
 CREATE INDEX IF NOT EXISTS idx_payload_blobs_sha256 ON payload_blobs(sha256);
 CREATE INDEX IF NOT EXISTS idx_payload_blobs_retained_until ON payload_blobs(retained_until);
 CREATE INDEX IF NOT EXISTS idx_harness_target_locks_profile_id ON harness_target_locks(profile_id);
-CREATE INDEX IF NOT EXISTS idx_eval_specs_profile_id ON eval_specs(profile_id);
-CREATE INDEX IF NOT EXISTS idx_eval_spec_locks_profile_id ON eval_spec_locks(profile_id);
-CREATE INDEX IF NOT EXISTS idx_eval_runs_eval_spec_id ON eval_runs(eval_spec_id);
-CREATE INDEX IF NOT EXISTS idx_replay_runs_eval_spec_id ON replay_runs(eval_spec_id);
+CREATE INDEX IF NOT EXISTS idx_check_specs_profile_id ON check_specs(profile_id);
+CREATE INDEX IF NOT EXISTS idx_check_locks_profile_id ON check_locks(profile_id);
+CREATE INDEX IF NOT EXISTS idx_check_runs_check_spec_id ON check_runs(check_spec_id);
+CREATE INDEX IF NOT EXISTS idx_replay_runs_check_spec_id ON replay_runs(check_spec_id);
 CREATE INDEX IF NOT EXISTS idx_replay_adapters_profile_id ON replay_adapters(profile_id);
 CREATE INDEX IF NOT EXISTS idx_operator_adapters_profile_id ON operator_adapters(profile_id);
 CREATE INDEX IF NOT EXISTS idx_operator_runs_profile_id ON operator_runs(profile_id);
@@ -875,9 +875,9 @@ STATUS_TABLES = [
     "autonomy_policies",
     "harness_target_locks",
     "payload_blobs",
-    "eval_specs",
-    "eval_spec_locks",
-    "eval_runs",
+    "check_specs",
+    "check_locks",
+    "check_runs",
     "replay_runs",
     "replay_adapters",
     "operator_adapters",
@@ -907,6 +907,32 @@ def initialize_database(db_path: Path) -> None:
         existing_version = max((existing_user_version, *existing_versions))
         if existing_version > SCHEMA_VERSION:
             raise StorageError(f"database_schema_too_new:{existing_version}:supported:{SCHEMA_VERSION}")
+        # v25: the apply-check `eval` concept is renamed to `check`. Rename the
+        # tables/columns IN PLACE (preserving rows) BEFORE executescript, so the
+        # `CREATE TABLE IF NOT EXISTS check_*` statements below become no-ops on a
+        # migrated DB instead of creating empty check_* tables beside populated
+        # eval_* ones. Fresh DBs have no eval_* tables, so every step is a no-op.
+        _rename_table_if_needed(connection, "eval_specs", "check_specs")
+        _rename_table_if_needed(connection, "eval_spec_locks", "check_locks")
+        _rename_table_if_needed(connection, "eval_runs", "check_runs")
+        _rename_column_if_needed(connection, "check_specs", "eval_type", "check_type")
+        _rename_column_if_needed(connection, "check_locks", "eval_spec_id", "check_spec_id")
+        _rename_column_if_needed(connection, "check_runs", "eval_spec_id", "check_spec_id")
+        _rename_column_if_needed(connection, "replay_runs", "eval_spec_id", "check_spec_id")
+        _rename_column_if_needed(connection, "autonomy_policies", "allow_eval_write", "allow_check_write")
+        _rename_column_if_needed(
+            connection, "autonomy_policies", "required_eval_level_context", "required_check_level_context"
+        )
+        _rename_column_if_needed(
+            connection, "autonomy_policies", "required_eval_level_harness", "required_check_level_harness"
+        )
+        for _old_index in (
+            "idx_eval_specs_profile_id",
+            "idx_eval_spec_locks_profile_id",
+            "idx_eval_runs_eval_spec_id",
+            "idx_replay_runs_eval_spec_id",
+        ):
+            connection.execute(f"DROP INDEX IF EXISTS {_old_index}")
         connection.executescript(SCHEMA_SQL)
         _ensure_column(connection, "skills", "human_lock_reason", "human_lock_reason TEXT")
         _ensure_column(
@@ -1425,6 +1451,33 @@ def _ensure_column(connection: sqlite3.Connection, table: str, column: str, defi
         connection.execute(f"ALTER TABLE {table} ADD COLUMN {definition}")
 
 
+def _table_exists(connection: sqlite3.Connection, table: str) -> bool:
+    row = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
+    ).fetchone()
+    return row is not None
+
+
+def _rename_table_if_needed(connection: sqlite3.Connection, old: str, new: str) -> None:
+    """Rename old->new only when old exists and new does not (idempotent)."""
+    if _table_exists(connection, old) and not _table_exists(connection, new):
+        connection.execute(f"ALTER TABLE {old} RENAME TO {new}")
+
+
+def _rename_column_if_needed(
+    connection: sqlite3.Connection, table: str, old: str, new: str
+) -> None:
+    """Rename a column old->new when the table exists with old and not new."""
+    if not _table_exists(connection, table):
+        return
+    columns = {
+        str(row["name"])
+        for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
+    }
+    if old in columns and new not in columns:
+        connection.execute(f"ALTER TABLE {table} RENAME COLUMN {old} TO {new}")
+
+
 def _database_user_version(connection: sqlite3.Connection) -> int:
     try:
         row = connection.execute("PRAGMA user_version").fetchone()
@@ -1451,15 +1504,15 @@ def _ensure_default_autonomy_policy(connection: sqlite3.Connection, profile_id: 
           context_mode,
           harness_mode,
           allow_skillbook_write,
-          allow_eval_write,
+          allow_check_write,
           allow_profile_config_write,
           allow_repo_patch,
           allow_replay_server_patch,
           allowed_paths_json,
           protected_paths_json,
           dirty_worktree_policy,
-          required_eval_level_context,
-          required_eval_level_harness,
+          required_check_level_context,
+          required_check_level_harness,
           rollback_on_regression,
           updated_at
         )
@@ -1474,7 +1527,7 @@ def _ensure_default_autonomy_policy(connection: sqlite3.Connection, profile_id: 
             0,
             0,
             0,
-            json.dumps(["agents/**", "prompts/**", "evals/**", "tests/**", ".kyoko/**"]),
+            json.dumps(["agents/**", "prompts/**", "checks/**", "tests/**", ".kyoko/**"]),
             json.dumps(
                 [
                     ".env",

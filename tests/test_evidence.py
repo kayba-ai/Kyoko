@@ -26,12 +26,12 @@ class EvidenceTests(unittest.TestCase):
             self.assertEqual(bundle["spans"][1]["attributes_json"]["error_type"], "timeout")
             self.assertEqual(bundle["handoffs"][0]["id"], "handoff_research_to_writer_001")
             self.assertEqual(
-                bundle["eval_capabilities"]["gateable_eval_types"],
+                bundle["check_capabilities"]["gateable_check_types"],
                 ["deterministic_assertion", "regression_replay"],
             )
             preset_names = {
                 preset["name"]
-                for preset in bundle["eval_capabilities"]["assertion_presets"]
+                for preset in bundle["check_capabilities"]["assertion_presets"]
             }
             self.assertIn("replay_success_shape", preset_names)
             self.assertIn("replay_handoff_present", preset_names)

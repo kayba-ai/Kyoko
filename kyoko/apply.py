@@ -587,7 +587,7 @@ def _validate_apply_allowed(
         if not isinstance(change, dict):
             raise ApplyError("invalid_change")
         change_type = change.get("type")
-        if change_type not in {"skillbook_update", "context_delivery_rule", "eval_spec"}:
+        if change_type not in {"skillbook_update", "context_delivery_rule", "check_spec"}:
             raise ApplyError(f"unsupported_context_apply_change:{change_type}")
         if change_type == "skillbook_update" and change.get("section") != "context":
             raise ApplyError("skillbook_update_section_mismatch")

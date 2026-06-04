@@ -28,7 +28,7 @@ from .bundled_assets import (
     load_bundled_json,
 )
 from .demo import DemoError, run_demo_setup
-from .evals import EvalError, list_eval_runs
+from .checks import CheckError, list_check_runs
 from .improve_smoke import ImproveSmokeError, run_generated_improve_smoke
 from .integration_smoke import (
     IntegrationSmokeError,
@@ -646,14 +646,14 @@ def _retained_judge_provider_evidence(smoke_evidence_dir: Path) -> Optional[dict
         if str(judgment.get("verdict", "")).lower() not in {"pass", "passed", "accept", "accepted"}:
             continue
         db_path = _handoff_db_path(handoff, candidate)
-        eval_runs = _safe_eval_runs(db_path)
+        check_runs = _safe_check_runs(db_path)
         passed_judge_run = next(
             (
                 run
-                for run in eval_runs
+                for run in check_runs
                 if run.get("status") == "passed"
                 and isinstance(run.get("result"), dict)
-                and run["result"].get("eval_type") == "judge"
+                and run["result"].get("check_type") == "judge"
             ),
             None,
         )
@@ -664,8 +664,8 @@ def _retained_judge_provider_evidence(smoke_evidence_dir: Path) -> Optional[dict
             candidate,
             {
                 "db_path": str(db_path),
-                "eval_run_id": str(passed_judge_run.get("id")),
-                "eval_spec_id": str(passed_judge_run.get("eval_spec_id")),
+                "check_run_id": str(passed_judge_run.get("id")),
+                "check_spec_id": str(passed_judge_run.get("check_spec_id")),
                 "judge": str(judgment.get("judge")),
                 "score": judgment.get("score"),
             },
@@ -829,11 +829,11 @@ def _safe_learning_proposals(db_path: Path) -> list[dict[str, Any]]:
         return []
 
 
-def _safe_eval_runs(db_path: Path) -> list[dict[str, Any]]:
+def _safe_check_runs(db_path: Path) -> list[dict[str, Any]]:
     if not db_path.exists():
         return []
     try:
-        return list_eval_runs(db_path)
+        return list_check_runs(db_path)
     except Exception:
         return []
 
@@ -1374,7 +1374,7 @@ def _run_demo_smoke_check(
             "output_dir": str(output_dir) if output_dir is not None else None,
             "temporary": temporary,
             "artifacts_retained": not temporary,
-            "eval_status": report.eval_status,
+            "check_status": report.check_status,
             "promoted_trust_level": report.promoted_trust_level,
             "applied_skill_ids": list(report.applied_skill_ids),
         },
@@ -1456,7 +1456,7 @@ def _run_judge_smoke_prepare_check(*, output_dir: Path, temporary: bool) -> Doct
             prepare_only=True,
             provider_backed=True,
         )
-    except (JudgeSmokeError, EvalError, StorageError) as exc:
+    except (JudgeSmokeError, CheckError, StorageError) as exc:
         return DoctorCheck(
             id="judge_smoke_prepare",
             status="fail",
@@ -1897,7 +1897,7 @@ def _run_improve_smoke_check(*, root: Path, temporary: bool) -> DoctorCheck:
         },
         "improve": {
             "operator": improve.get("operator"),
-            "generated_eval_spec_ids": improve.get("generated_eval_spec_ids"),
+            "generated_check_spec_ids": improve.get("generated_check_spec_ids"),
             "replay_run_count": len(replay_runs),
             "replay_statuses": [
                 replay.get("status")
@@ -1922,7 +1922,7 @@ def _run_improve_smoke_check(*, root: Path, temporary: bool) -> DoctorCheck:
         id="improve_smoke",
         status="pass" if passed else "fail",
         message=(
-            "Generated improve smoke passed through replay/eval/autonomy apply."
+            "Generated improve smoke passed through replay/check/autonomy apply."
             if passed
             else "Generated improve smoke completed but did not pass."
         ),

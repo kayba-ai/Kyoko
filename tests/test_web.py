@@ -167,9 +167,9 @@ class WebTests(unittest.TestCase):
                 context_rules = server.get_json("/api/context-rules")
                 context_rule_revisions = server.get_json("/api/context-rule-revisions")
                 context = server.get_json("/api/context")
-                evals = server.get_json("/api/evals")
-                eval_assertion_presets = server.get_json("/api/eval-assertion-presets")
-                eval_capabilities = server.get_json("/api/eval-capabilities")
+                checks = server.get_json("/api/checks")
+                check_assertion_presets = server.get_json("/api/check-assertion-presets")
+                check_capabilities = server.get_json("/api/check-capabilities")
                 replay_adapters = server.get_json("/api/replay-adapters")
                 operator_adapters = server.get_json("/api/operator-adapters")
                 operator_runs = server.get_json("/api/operator-runs")
@@ -206,20 +206,20 @@ class WebTests(unittest.TestCase):
             self.assertEqual(context_rules["context_delivery_rules"], [])
             self.assertEqual(context_rule_revisions["context_delivery_rule_revisions"], [])
             self.assertEqual(context["context"], "")
-            self.assertEqual(evals["eval_specs"], [])
-            self.assertEqual(evals["eval_runs"], [])
-            self.assertEqual(evals["replay_runs"], [])
+            self.assertEqual(checks["check_specs"], [])
+            self.assertEqual(checks["check_runs"], [])
+            self.assertEqual(checks["replay_runs"], [])
             self.assertEqual(
-                [preset["name"] for preset in eval_assertion_presets["assertion_presets"]],
+                [preset["name"] for preset in check_assertion_presets["assertion_presets"]],
                 ["replay_success_shape", "replay_handoff_present"],
             )
             self.assertEqual(
-                eval_capabilities["gateable_eval_types"],
+                check_capabilities["gateable_check_types"],
                 ["deterministic_assertion", "regression_replay"],
             )
-            self.assertFalse(eval_capabilities["judge"]["invokes_model"])
-            self.assertIn("mcp:kyoko_run_judge_command", eval_capabilities["judge"]["handoff_surfaces"])
-            self.assertIn("rubric_scoring", eval_capabilities["judge"]["recommended_use"])
+            self.assertFalse(check_capabilities["judge"]["invokes_model"])
+            self.assertIn("mcp:kyoko_run_judge_command", check_capabilities["judge"]["handoff_surfaces"])
+            self.assertIn("rubric_scoring", check_capabilities["judge"]["recommended_use"])
             self.assertEqual(replay_adapters["replay_adapters"], [])
             self.assertEqual(operator_adapters["operator_adapters"], [])
             self.assertEqual(operator_runs["operator_runs"], [])
@@ -375,21 +375,21 @@ class WebTests(unittest.TestCase):
                 status = server.get_json("/api/status")
                 proposals = server.get_json("/api/proposals")
                 skills = server.get_json("/api/skills")
-                evals = server.get_json("/api/evals")
+                checks = server.get_json("/api/checks")
 
             self.assertEqual(demo["profile_id"], "profile_news_research_001")
-            self.assertEqual(demo["eval_status"], "passed")
+            self.assertEqual(demo["check_status"], "passed")
             self.assertEqual(demo["promoted_trust_level"], "L2_regression")
             self.assertEqual(demo["applied_skill_ids"], ["skill_proposal_context_timeout_001_1"])
             self.assertEqual(status["counts"]["profiles"], 1)
             self.assertEqual(status["counts"]["learning_proposals"], 1)
             self.assertEqual(status["counts"]["skills"], 1)
-            self.assertEqual(status["counts"]["eval_runs"], 1)
+            self.assertEqual(status["counts"]["check_runs"], 1)
             self.assertEqual(proposals["proposals"][0]["id"], "proposal_context_timeout_001")
             self.assertEqual(skills["skills"][0]["id"], "skill_proposal_context_timeout_001_1")
-            self.assertEqual(evals["eval_runs"][0]["status"], "passed")
+            self.assertEqual(checks["check_runs"][0]["status"], "passed")
 
-    def test_profile_next_endpoint_plans_and_runs_eval_generation(self) -> None:
+    def test_profile_next_endpoint_plans_and_runs_check_generation(self) -> None:
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
             ingest_source_fixture(db_path, FIXTURE)
@@ -405,14 +405,14 @@ class WebTests(unittest.TestCase):
                     "/api/profile-next",
                     {"profile_id": "profile_news_research_001", "run": True},
                 )
-                evals = server.get_json("/api/evals")
+                checks = server.get_json("/api/checks")
 
             self.assertEqual(dry_run["status"], "planned")
-            self.assertEqual(dry_run["action"], "generate_evals")
+            self.assertEqual(dry_run["action"], "generate_checks")
             self.assertEqual(executed["status"], "executed")
-            self.assertEqual(executed["reason"], "generated_eval_specs")
-            self.assertEqual(executed["routing_after"]["state"], "needs_replay_or_eval")
-            self.assertEqual(evals["eval_specs"][0]["id"], "eval_proposal_context_timeout_001_1")
+            self.assertEqual(executed["reason"], "generated_check_specs")
+            self.assertEqual(executed["routing_after"]["state"], "needs_replay_or_check")
+            self.assertEqual(checks["check_specs"][0]["id"], "check_proposal_context_timeout_001_1")
 
     def test_profile_next_endpoint_runs_selected_replay_adapter(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -435,7 +435,7 @@ class WebTests(unittest.TestCase):
 
             with RunningServer(db_path) as server:
                 server.post_json(
-                    "/api/evals/generate",
+                    "/api/checks/generate",
                     {"proposal_id": "proposal_context_timeout_001"},
                 )
                 executed = server.post_json(
@@ -451,7 +451,7 @@ class WebTests(unittest.TestCase):
             self.assertEqual(executed["reason"], "ran_replay_adapter")
             self.assertEqual(executed["result"]["adapter_id"], "selected_replay")
             self.assertEqual(executed["result"]["status"], "passed")
-            self.assertEqual(executed["result"]["eval_run"]["status"], "passed")
+            self.assertEqual(executed["result"]["check_run"]["status"], "passed")
 
     def test_profile_next_endpoint_prepares_operator_prompt_for_analysis(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -535,7 +535,7 @@ class WebTests(unittest.TestCase):
             self.assertEqual(executed["reason"], "ran_operator_adapter")
             self.assertEqual(executed["result"]["adapter_id"], "fixture_operator")
             self.assertEqual(executed["result"]["proposal_id"], "proposal_command_span_fetch_timeout_001")
-            self.assertEqual(executed["routing_after"]["state"], "needs_eval_generation")
+            self.assertEqual(executed["routing_after"]["state"], "needs_check_generation")
 
     def test_profile_next_endpoint_ignores_all_profiles_and_runs_single(self) -> None:
         # Single implicit profile (SCOPE Decision 1): no multi-profile batch mode.
@@ -855,9 +855,9 @@ class WebTests(unittest.TestCase):
             self.assertEqual(detail["target"]["ref"]["entity_id"], "agent_researcher_001")
             self.assertEqual(detail["autonomy_gate"]["action"], "awaiting_human_review")
             self.assertEqual(len(detail["evidence"]), 2)
-            self.assertEqual(detail["eval_guidance"]["gateable_eval_types"], ["deterministic_assertion", "regression_replay"])
+            self.assertEqual(detail["check_guidance"]["gateable_check_types"], ["deterministic_assertion", "regression_replay"])
             self.assertEqual(
-                [preset["name"] for preset in detail["eval_guidance"]["assertion_presets"]],
+                [preset["name"] for preset in detail["check_guidance"]["assertion_presets"]],
                 ["replay_success_shape", "replay_handoff_present"],
             )
             self.assertIn("evidence_chain", detail)
@@ -903,40 +903,40 @@ class WebTests(unittest.TestCase):
                 )
                 gated_events = server.get_json("/api/autonomy-events?kind=autonomy_gated")
                 proposals = server.get_json("/api/proposals")
-                evals = server.get_json("/api/evals")
+                checks = server.get_json("/api/checks")
                 lock = server.post_json(
-                    "/api/eval-specs/lock",
+                    "/api/check-specs/lock",
                     {
-                        "eval_spec_id": "eval_proposal_context_timeout_001_1",
+                        "check_spec_id": "check_proposal_context_timeout_001_1",
                         "locked": True,
-                        "reason": "manual eval review",
+                        "reason": "manual check review",
                         "actor_agent_identity_id": "agent_researcher_001",
                     },
                 )
-                locks = server.get_json("/api/eval-spec-locks")
+                locks = server.get_json("/api/check-locks")
                 detail = server.get_json("/api/proposal-detail?id=proposal_context_timeout_001")
                 unlock = server.post_json(
-                    "/api/eval-specs/lock",
+                    "/api/check-specs/lock",
                     {
-                        "eval_spec_id": "eval_proposal_context_timeout_001_1",
+                        "check_spec_id": "check_proposal_context_timeout_001_1",
                         "locked": False,
                         "actor_agent_identity_id": "agent_researcher_001",
                     },
                 )
                 approval = server.post_json(
-                    "/api/eval-specs/approve",
+                    "/api/check-specs/approve",
                     {
-                        "eval_spec_id": "eval_proposal_context_timeout_001_1",
+                        "check_spec_id": "check_proposal_context_timeout_001_1",
                         "reason": "human gate approval",
                         "actor_agent_identity_id": "agent_researcher_001",
                     },
                 )
-                active_locks_after_unlock = server.get_json("/api/eval-spec-locks")
-                evals_after_approval = server.get_json("/api/evals")
+                active_locks_after_unlock = server.get_json("/api/check-locks")
+                checks_after_approval = server.get_json("/api/checks")
 
             self.assertEqual(policy["policy"]["context_mode"], "autonomous")
             self.assertEqual(autonomy["decisions"][0]["action"], "gated")
-            self.assertEqual(autonomy["decisions"][0]["reason"], "missing_eval_run")
+            self.assertEqual(autonomy["decisions"][0]["reason"], "missing_check_run")
             self.assertEqual(
                 {event["kind"] for event in autonomy_events["autonomy_events"]},
                 {"autonomy_gated", "autonomy_decision"},
@@ -945,27 +945,27 @@ class WebTests(unittest.TestCase):
             self.assertEqual(decision_events["autonomy_events"][0]["kind"], "autonomy_decision")
             self.assertEqual(
                 decision_events["autonomy_events"][0]["metadata"]["reason"],
-                "missing_eval_run",
+                "missing_check_run",
             )
             self.assertEqual(len(gated_events["autonomy_events"]), 1)
             self.assertEqual(gated_events["autonomy_events"][0]["kind"], "autonomy_gated")
             self.assertEqual(proposals["proposals"][0]["state"], "pending")
-            self.assertEqual(evals["eval_specs"][0]["id"], "eval_proposal_context_timeout_001_1")
-            self.assertFalse(evals["eval_specs"][0]["human_locked"])
+            self.assertEqual(checks["check_specs"][0]["id"], "check_proposal_context_timeout_001_1")
+            self.assertFalse(checks["check_specs"][0]["human_locked"])
             self.assertTrue(lock["human_locked"])
             self.assertEqual(lock["actor_agent_identity_id"], "agent_researcher_001")
-            self.assertEqual(locks["eval_spec_locks"][0]["eval_spec_id"], "eval_proposal_context_timeout_001_1")
-            self.assertTrue(detail["eval_specs"][0]["human_locked"])
+            self.assertEqual(locks["check_locks"][0]["check_spec_id"], "check_proposal_context_timeout_001_1")
+            self.assertTrue(detail["check_specs"][0]["human_locked"])
             self.assertFalse(unlock["human_locked"])
             self.assertEqual(unlock["actor_agent_identity_id"], "agent_researcher_001")
             self.assertEqual(approval["previous_trust_level"], "L0_generated")
             self.assertEqual(approval["trust_level"], "L3_human_approved")
             self.assertEqual(approval["reason"], "human gate approval")
             self.assertEqual(approval["actor_agent_identity_id"], "agent_researcher_001")
-            self.assertEqual(active_locks_after_unlock["eval_spec_locks"], [])
-            self.assertEqual(evals_after_approval["eval_specs"][0]["trust_level"], "L3_human_approved")
+            self.assertEqual(active_locks_after_unlock["check_locks"], [])
+            self.assertEqual(checks_after_approval["check_specs"][0]["trust_level"], "L3_human_approved")
             self.assertEqual(detail["gate_history"][-1]["kind"], "autonomy_decision")
-            self.assertEqual(detail["gate_history"][-1]["reason"], "missing_eval_run")
+            self.assertEqual(detail["gate_history"][-1]["reason"], "missing_check_run")
             self.assertEqual(detail["evidence_chain"]["steps"][-1]["status"], "gated")
 
     def test_evidence_summary_is_redacted_by_default(self) -> None:
@@ -992,7 +992,7 @@ class WebTests(unittest.TestCase):
             with RunningServer(db_path) as server:
                 prepare = server.post_json(
                     "/api/harness/prepare",
-                    {"proposal_id": "proposal_harness_timeout_eval_001"},
+                    {"proposal_id": "proposal_harness_timeout_check_001"},
                 )
                 proposals = server.get_json("/api/proposals")
                 harness_patches = server.get_json("/api/harness-patches")
@@ -1001,7 +1001,7 @@ class WebTests(unittest.TestCase):
             self.assertEqual(prepare["state"], "pending")
             self.assertEqual(
                 prepare["patch_transaction_ids"],
-                ["patch_proposal_harness_timeout_eval_001_1"],
+                ["patch_proposal_harness_timeout_check_001_1"],
             )
             self.assertEqual(proposals["proposals"][0]["state"], "pending")
             self.assertEqual(harness_patches["patch_transactions"][0]["status"], "ready")
@@ -1012,7 +1012,7 @@ class WebTests(unittest.TestCase):
             db_path = Path(tmpdir) / "kyoko.db"
             workspace = Path(tmpdir) / "workspace"
             workspace.mkdir()
-            target = workspace / "evals/generated_timeout_eval.py"
+            target = workspace / "checks/generated_timeout_check.py"
             ingest_source_fixture(db_path, FIXTURE)
             submit_learning_proposal(
                 db_path=db_path,
@@ -1024,7 +1024,7 @@ class WebTests(unittest.TestCase):
                 policy = server.post_json("/api/policy", {"allow_repo_patch": True})
                 prepare = server.post_json(
                     "/api/harness/prepare",
-                    {"proposal_id": "proposal_harness_generated_eval_001"},
+                    {"proposal_id": "proposal_harness_generated_check_001"},
                 )
                 apply = server.post_json(
                     "/api/harness/apply",
@@ -1061,7 +1061,7 @@ class WebTests(unittest.TestCase):
                 lock = server.post_json(
                     "/api/harness-targets/lock",
                     {
-                        "target_path": "evals/generated_timeout_eval.py",
+                        "target_path": "checks/generated_timeout_check.py",
                         "locked": True,
                         "reason": "manual owner review",
                         "actor_agent_identity_id": "agent_researcher_001",
@@ -1071,7 +1071,7 @@ class WebTests(unittest.TestCase):
                 unlock = server.post_json(
                     "/api/harness-targets/lock",
                     {
-                        "target_path": "evals/generated_timeout_eval.py",
+                        "target_path": "checks/generated_timeout_check.py",
                         "locked": False,
                         "actor_agent_identity_id": "agent_researcher_001",
                     },
@@ -1081,7 +1081,7 @@ class WebTests(unittest.TestCase):
             self.assertTrue(lock["human_locked"])
             self.assertEqual(lock["reason"], "manual owner review")
             self.assertEqual(lock["actor_agent_identity_id"], "agent_researcher_001")
-            self.assertEqual(locks["harness_target_locks"][0]["target_path"], "evals/generated_timeout_eval.py")
+            self.assertEqual(locks["harness_target_locks"][0]["target_path"], "checks/generated_timeout_check.py")
             self.assertFalse(unlock["human_locked"])
             self.assertEqual(unlock["actor_agent_identity_id"], "agent_researcher_001")
             self.assertEqual(active_locks_after_unlock["harness_target_locks"], [])
@@ -1114,22 +1114,22 @@ class WebTests(unittest.TestCase):
                 )
 
             self.assertEqual(report["decisions"][0]["action"], "gated")
-            self.assertEqual(report["decisions"][0]["reason"], "missing_eval_run")
+            self.assertEqual(report["decisions"][0]["reason"], "missing_check_run")
             self.assertEqual(
-                report["decisions"][0]["eval_spec_ids"],
-                ["eval_proposal_harness_generated_eval_001_1"],
+                report["decisions"][0]["check_spec_ids"],
+                ["check_proposal_harness_generated_check_001_1"],
             )
             self.assertEqual(
                 report["decisions"][0]["patch_transaction_ids"],
-                ["patch_proposal_harness_generated_eval_001_1"],
+                ["patch_proposal_harness_generated_check_001_1"],
             )
-            self.assertFalse((workspace / "evals/generated_timeout_eval.py").exists())
+            self.assertFalse((workspace / "checks/generated_timeout_check.py").exists())
 
     def test_harness_apply_and_rollback_endpoints_support_unified_diff(self) -> None:
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
             workspace = Path(tmpdir) / "workspace"
-            target = workspace / "evals/generated_timeout_eval.py"
+            target = workspace / "checks/generated_timeout_check.py"
             target.parent.mkdir(parents=True)
             target.write_text("old\n")
             ingest_source_fixture(db_path, FIXTURE)
@@ -1139,8 +1139,8 @@ class WebTests(unittest.TestCase):
                 kind="patch_diff",
                 media_type="text/x-diff",
                 data=(
-                    "--- a/evals/generated_timeout_eval.py\n"
-                    "+++ b/evals/generated_timeout_eval.py\n"
+                    "--- a/checks/generated_timeout_check.py\n"
+                    "+++ b/checks/generated_timeout_check.py\n"
                     "@@ -1 +1 @@\n"
                     "-old\n"
                     "+new\n"
@@ -1151,7 +1151,7 @@ class WebTests(unittest.TestCase):
             proposal["producer"]["session_id"] = "operator_session_harness_web_unified_diff_001"
             proposal["proposed_changes"][0]["patch_kind"] = "unified_diff"
             proposal["proposed_changes"][0]["diff_ref"] = diff_blob.blob_id
-            proposal["proposed_changes"][0]["target_paths"] = ["evals/generated_timeout_eval.py"]
+            proposal["proposed_changes"][0]["target_paths"] = ["checks/generated_timeout_check.py"]
             proposal["proposed_changes"][0]["command_plan"] = []
             submit_learning_proposal_payload(
                 db_path=db_path,
@@ -1186,7 +1186,7 @@ class WebTests(unittest.TestCase):
             self.assertEqual(rollback["status"], "rolled_back")
             self.assertEqual(target.read_text(), "old\n")
 
-    def test_eval_and_replay_endpoints(self) -> None:
+    def test_check_and_replay_endpoints(self) -> None:
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
             ingest_source_fixture(db_path, FIXTURE)
@@ -1198,12 +1198,12 @@ class WebTests(unittest.TestCase):
 
             with RunningServer(db_path) as server:
                 generate = server.post_json(
-                    "/api/evals/generate",
+                    "/api/checks/generate",
                     {"proposal_id": "proposal_context_timeout_001"},
                 )
                 replay = server.post_json(
                     "/api/replay",
-                    {"eval_spec_id": "eval_proposal_context_timeout_001_1"},
+                    {"check_spec_id": "check_proposal_context_timeout_001_1"},
                 )
                 complete = server.post_json(
                     "/api/replay/complete",
@@ -1212,35 +1212,35 @@ class WebTests(unittest.TestCase):
                         "fixture_path": str(REPLAY_SUCCESS),
                     },
                 )
-                eval_run = server.post_json(
-                    "/api/evals/run",
+                check_run = server.post_json(
+                    "/api/checks/run",
                     {
-                        "eval_spec_id": "eval_proposal_context_timeout_001_1",
+                        "check_spec_id": "check_proposal_context_timeout_001_1",
                         "replay_run_id": replay["replay_run_id"],
                     },
                 )
-                evals = server.get_json("/api/evals")
-                eval_detail = server.get_json("/api/eval-detail?id=eval_proposal_context_timeout_001_1")
+                checks = server.get_json("/api/checks")
+                check_detail = server.get_json("/api/check-detail?id=check_proposal_context_timeout_001_1")
                 replay_detail = server.get_json(f"/api/replay-detail?id={replay['replay_run_id']}")
                 status = server.get_json("/api/status")
 
-            self.assertEqual(generate["eval_spec_ids"], ["eval_proposal_context_timeout_001_1"])
+            self.assertEqual(generate["check_spec_ids"], ["check_proposal_context_timeout_001_1"])
             self.assertEqual(replay["status"], "passed")
             self.assertEqual(replay["source_run_id"], "run_research_topic_001")
             self.assertEqual(complete["output_run_id"], "run_research_topic_replay_001")
-            self.assertEqual(eval_run["status"], "passed")
-            self.assertEqual(eval_run["promoted_trust_level"], "L2_regression")
-            self.assertEqual(eval_detail["summary"]["latest_comparison"], "fail_before_pass_after")
+            self.assertEqual(check_run["status"], "passed")
+            self.assertEqual(check_run["promoted_trust_level"], "L2_regression")
+            self.assertEqual(check_detail["summary"]["latest_comparison"], "fail_before_pass_after")
             self.assertEqual(replay_detail["summary"]["actual_side_effect_mode"], "network_mocked")
-            self.assertEqual(len(evals["eval_specs"]), 1)
-            self.assertEqual(len(evals["eval_runs"]), 1)
-            self.assertEqual(len(evals["replay_runs"]), 1)
-            self.assertEqual(status["counts"]["eval_specs"], 1)
-            self.assertEqual(status["counts"]["eval_runs"], 1)
+            self.assertEqual(len(checks["check_specs"]), 1)
+            self.assertEqual(len(checks["check_runs"]), 1)
+            self.assertEqual(len(checks["replay_runs"]), 1)
+            self.assertEqual(status["counts"]["check_specs"], 1)
+            self.assertEqual(status["counts"]["check_runs"], 1)
             self.assertEqual(status["counts"]["replay_runs"], 1)
-            self.assertEqual(len(eval_detail["summary"]["latest_assertions"]), 3)
-            self.assertEqual(eval_detail["summary"]["latest_assertions"][1]["actual"], 1)
-            self.assertEqual(eval_detail["summary"]["latest_assertions"][2]["path"], "metadata.source_status")
+            self.assertEqual(len(check_detail["summary"]["latest_assertions"]), 3)
+            self.assertEqual(check_detail["summary"]["latest_assertions"][1]["actual"], 1)
+            self.assertEqual(check_detail["summary"]["latest_assertions"][2]["path"], "metadata.source_status")
 
     def test_judge_command_endpoint_captures_external_verdict(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -1255,12 +1255,12 @@ class WebTests(unittest.TestCase):
 
             with RunningServer(db_path) as server:
                 server.post_json(
-                    "/api/evals/generate",
+                    "/api/checks/generate",
                     {"proposal_id": "proposal_context_timeout_001"},
                 )
-                _set_web_eval_type(
+                _set_web_check_type(
                     db_path,
-                    "eval_proposal_context_timeout_001_1",
+                    "check_proposal_context_timeout_001_1",
                     "judge",
                     {
                         "rubric": "Recovered source evidence is complete and dated.",
@@ -1272,22 +1272,22 @@ class WebTests(unittest.TestCase):
                 judge = server.post_json(
                     "/api/judge-command",
                     {
-                        "eval_spec_id": "eval_proposal_context_timeout_001_1",
+                        "check_spec_id": "check_proposal_context_timeout_001_1",
                         "command": [sys.executable, str(JUDGE_COMMAND)],
                         "output_dir": str(output_dir),
                     },
                 )
-                evals = server.get_json("/api/evals")
+                checks = server.get_json("/api/checks")
 
-            self.assertEqual(judge["eval_run"]["status"], "passed")
-            self.assertEqual(judge["eval_run"]["result"]["judge_backend"], "external_command")
-            self.assertFalse(judge["eval_run"]["result"]["gateable"])
-            self.assertIsNone(judge["eval_run"]["promoted_trust_level"])
+            self.assertEqual(judge["check_run"]["status"], "passed")
+            self.assertEqual(judge["check_run"]["result"]["judge_backend"], "external_command")
+            self.assertFalse(judge["check_run"]["result"]["gateable"])
+            self.assertIsNone(judge["check_run"]["promoted_trust_level"])
             self.assertEqual(judge["judgment"]["judge"], "fixture_external_judge")
             self.assertTrue(Path(judge["request_path"]).exists())
             self.assertTrue(Path(judge["result_path"]).exists())
             self.assertTrue(Path(judge["raw_output_path"]).exists())
-            self.assertEqual(len(evals["eval_runs"]), 1)
+            self.assertEqual(len(checks["check_runs"]), 1)
 
     def test_replay_adapter_endpoint_runs_registered_adapter(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -1309,7 +1309,7 @@ class WebTests(unittest.TestCase):
 
             with RunningServer(db_path) as server:
                 server.post_json(
-                    "/api/evals/generate",
+                    "/api/checks/generate",
                     {"proposal_id": "proposal_context_timeout_001"},
                 )
                 adapters = server.get_json("/api/replay-adapters")
@@ -1317,17 +1317,17 @@ class WebTests(unittest.TestCase):
                     "/api/replay-adapters/run",
                     {
                         "adapter_id": "fixture_replay",
-                        "eval_spec_id": "eval_proposal_context_timeout_001_1",
-                        "run_eval": True,
+                        "check_spec_id": "check_proposal_context_timeout_001_1",
+                        "run_check": True,
                     },
                 )
-                evals = server.get_json("/api/evals")
+                checks = server.get_json("/api/checks")
                 status = server.get_json("/api/status")
 
             self.assertEqual(adapters["replay_adapters"][0]["id"], "fixture_replay")
             self.assertEqual(replay["status"], "passed")
-            self.assertEqual(replay["eval_run"]["promoted_trust_level"], "L2_regression")
-            self.assertEqual(len(evals["eval_runs"]), 1)
+            self.assertEqual(replay["check_run"]["promoted_trust_level"], "L2_regression")
+            self.assertEqual(len(checks["check_runs"]), 1)
             self.assertEqual(status["counts"]["replay_adapters"], 1)
             self.assertEqual(status["counts"]["replay_runs"], 1)
 
@@ -1361,18 +1361,18 @@ class WebTests(unittest.TestCase):
                 )
                 proposals = server.get_json("/api/proposals")
                 skills = server.get_json("/api/skills")
-                evals = server.get_json("/api/evals")
+                checks = server.get_json("/api/checks")
 
             self.assertEqual(policy["policy"]["context_mode"], "autonomous")
             self.assertEqual(improve["proposal_id"], "proposal_context_timeout_001")
-            self.assertEqual(improve["eval_spec_ids"], ["eval_proposal_context_timeout_001_1"])
+            self.assertEqual(improve["check_spec_ids"], ["check_proposal_context_timeout_001_1"])
             self.assertEqual(improve["replay_runs"][0]["adapter_id"], "fixture_replay")
             self.assertEqual(improve["replay_runs"][0]["status"], "passed")
-            self.assertEqual(improve["replay_runs"][0]["eval_run"]["status"], "passed")
+            self.assertEqual(improve["replay_runs"][0]["check_run"]["status"], "passed")
             self.assertEqual(improve["autonomy"]["decisions"][0]["action"], "applied")
             self.assertEqual(proposals["proposals"][0]["state"], "applied")
             self.assertEqual(skills["skills"][0]["id"], "skill_proposal_context_timeout_001_1")
-            self.assertEqual(evals["eval_runs"][0]["status"], "passed")
+            self.assertEqual(checks["check_runs"][0]["status"], "passed")
 
     def test_improve_endpoint_applies_harness_patch_with_workspace_root(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -1408,18 +1408,18 @@ class WebTests(unittest.TestCase):
                 improve = server.post_json(
                     "/api/improve",
                     {
-                        "proposal_id": "proposal_harness_generated_eval_001",
+                        "proposal_id": "proposal_harness_generated_check_001",
                         "replay_adapter_id": "fixture_replay",
                         "harness_workspace_root": str(workspace),
                     },
                 )
 
-            target = workspace / "evals/generated_timeout_eval.py"
+            target = workspace / "checks/generated_timeout_check.py"
             self.assertEqual(
-                improve["generated_eval_spec_ids"],
-                ["eval_proposal_harness_generated_eval_001_1"],
+                improve["generated_check_spec_ids"],
+                ["check_proposal_harness_generated_check_001_1"],
             )
-            self.assertEqual(improve["replay_runs"][0]["eval_run"]["status"], "passed")
+            self.assertEqual(improve["replay_runs"][0]["check_run"]["status"], "passed")
             self.assertEqual(improve["autonomy"]["decisions"][0]["action"], "applied")
             self.assertTrue(target.exists())
 
@@ -1461,13 +1461,13 @@ class WebTests(unittest.TestCase):
                 improve = server.post_json(
                     "/api/improve",
                     {
-                        "proposal_id": "proposal_harness_generated_eval_001",
+                        "proposal_id": "proposal_harness_generated_check_001",
                         "replay_adapter_id": "fixture_replay",
                     },
                 )
 
-            target = workspace / "evals/generated_timeout_eval.py"
-            self.assertEqual(improve["replay_runs"][0]["eval_run"]["status"], "passed")
+            target = workspace / "checks/generated_timeout_check.py"
+            self.assertEqual(improve["replay_runs"][0]["check_run"]["status"], "passed")
             self.assertEqual(improve["autonomy"]["decisions"][0]["action"], "applied")
             self.assertTrue(target.exists())
 
@@ -1489,15 +1489,15 @@ class WebTests(unittest.TestCase):
                     },
                 )
                 proposals = server.get_json("/api/proposals")
-                evals = server.get_json("/api/evals")
+                checks = server.get_json("/api/checks")
 
             self.assertEqual(improve["source_import"]["candidate"]["id"], "openclaw_main")
             self.assertEqual(improve["profile_id"], "profile_openclaw_main")
             self.assertEqual(improve["proposal_id"], "proposal_mock_span_openclaw_error_session_failure_1")
             self.assertEqual(proposals["proposals"][0]["id"], "proposal_mock_span_openclaw_error_session_failure_1")
             self.assertEqual(
-                evals["eval_specs"][0]["id"],
-                "eval_proposal_mock_span_openclaw_error_session_failure_1_1",
+                checks["check_specs"][0]["id"],
+                "check_proposal_mock_span_openclaw_error_session_failure_1_1",
             )
 
     def test_improve_endpoint_uses_selected_operator_adapter_for_discovered_source(self) -> None:
@@ -1568,15 +1568,15 @@ class WebTests(unittest.TestCase):
                         "run_autonomy": False,
                     },
                 )
-                evals = server.get_json("/api/evals")
+                checks = server.get_json("/api/checks")
 
             self.assertEqual(improve["source_import"]["candidate"]["id"], "openclaw_main")
             self.assertEqual(improve["profile_id"], "profile_news_research_001")
             self.assertTrue(improve["replay_runs"])
             self.assertEqual(improve["replay_runs"][0]["adapter_id"], "fixture_replay")
-            self.assertEqual(improve["replay_runs"][0]["eval_run"]["status"], "passed")
+            self.assertEqual(improve["replay_runs"][0]["check_run"]["status"], "passed")
             self.assertIsNone(improve["autonomy"])
-            self.assertEqual(len(evals["replay_runs"]), 1)
+            self.assertEqual(len(checks["replay_runs"]), 1)
 
     def test_replay_server_lifecycle_endpoints_control_managed_adapter(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -2024,13 +2024,13 @@ def replay(request):
             self.assertEqual(raised.exception.code, 400)
 
 
-def _set_web_eval_type(db_path: Path, eval_spec_id: str, eval_type: str, definition: dict) -> None:
+def _set_web_check_type(db_path: Path, check_spec_id: str, check_type: str, definition: dict) -> None:
     import sqlite3
 
     with sqlite3.connect(db_path) as connection:
         connection.execute(
-            "UPDATE eval_specs SET eval_type = ?, definition_json = ? WHERE id = ?",
-            (eval_type, json.dumps(definition, sort_keys=True), eval_spec_id),
+            "UPDATE check_specs SET check_type = ?, definition_json = ? WHERE id = ?",
+            (check_type, json.dumps(definition, sort_keys=True), check_spec_id),
         )
 
 

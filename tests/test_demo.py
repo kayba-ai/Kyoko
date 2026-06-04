@@ -17,16 +17,16 @@ class DemoTests(unittest.TestCase):
 
             self.assertEqual(report.profile_id, "profile_news_research_001")
             self.assertEqual(report.proposal_id, "proposal_context_timeout_001")
-            self.assertEqual(report.eval_spec_ids, ("eval_proposal_context_timeout_001_1",))
+            self.assertEqual(report.check_spec_ids, ("check_proposal_context_timeout_001_1",))
             self.assertEqual(report.adapter_id, "fixture_replay")
-            self.assertEqual(report.eval_status, "passed")
+            self.assertEqual(report.check_status, "passed")
             self.assertEqual(report.promoted_trust_level, "L2_regression")
             self.assertEqual(report.applied_skill_ids, ("skill_proposal_context_timeout_001_1",))
             self.assertEqual(status.counts["learning_proposals"], 1)
-            self.assertEqual(status.counts["eval_specs"], 1)
+            self.assertEqual(status.counts["check_specs"], 1)
             self.assertEqual(status.counts["replay_adapters"], 1)
             self.assertEqual(status.counts["replay_runs"], 1)
-            self.assertEqual(status.counts["eval_runs"], 1)
+            self.assertEqual(status.counts["check_runs"], 1)
             self.assertEqual(status.counts["skills"], 1)
 
     def test_demo_setup_is_idempotent_for_seed_artifacts(self) -> None:
@@ -45,9 +45,9 @@ class DemoTests(unittest.TestCase):
 
             self.assertTrue(first.proposal_created)
             self.assertFalse(second.proposal_created)
-            self.assertEqual(second.eval_spec_existing_ids, ("eval_proposal_context_timeout_001_1",))
+            self.assertEqual(second.check_spec_existing_ids, ("check_proposal_context_timeout_001_1",))
             self.assertEqual(status.counts["learning_proposals"], 1)
-            self.assertEqual(status.counts["eval_specs"], 1)
+            self.assertEqual(status.counts["check_specs"], 1)
             self.assertEqual(status.counts["replay_adapters"], 1)
             self.assertEqual(status.counts["skills"], 1)
 

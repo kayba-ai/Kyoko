@@ -7,7 +7,7 @@ import type {
   AnnotationKind,
   AutonomyPolicy,
   DashboardMetrics,
-  EvalsBundle,
+  ChecksBundle,
   Issue,
   IssueSection,
   IssueSeverity,
@@ -158,7 +158,7 @@ export const api = {
       (d) => d.autonomy_events ?? d.events ?? [],
     ),
 
-  evals: () => getJson<EvalsBundle>("/api/evals"),
+  checks: () => getJson<ChecksBundle>("/api/checks"),
 
   // Redaction is a fixed global default and retention is a manual prune (SCOPE
   // simplification) — neither has a policy endpoint anymore; Settings shows them

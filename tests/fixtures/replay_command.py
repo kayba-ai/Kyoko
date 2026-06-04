@@ -10,7 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from kyoko.evals import BEGIN_REPLAY_RESULT_BLOCK, END_REPLAY_RESULT_BLOCK
+from kyoko.checks import BEGIN_REPLAY_RESULT_BLOCK, END_REPLAY_RESULT_BLOCK
 
 
 def main() -> int:

@@ -13,7 +13,7 @@ def main() -> int:
         print("KYOKO_JUDGE_REQUEST_PATH missing", file=sys.stderr)
         return 2
     request = json.loads(Path(request_path).read_text())
-    eval_spec_id = request["eval_spec"]["id"]
+    check_spec_id = request["check_spec"]["id"]
     target = request["target"]
     result = {
         "schema_version": "kyoko.judge_result.v1",
@@ -31,7 +31,7 @@ def main() -> int:
             ],
         },
         "metadata": {
-            "eval_spec_id": eval_spec_id,
+            "check_spec_id": check_spec_id,
             "saw_redacted_request": request.get("redaction", {}).get("redacted") is True,
         },
     }

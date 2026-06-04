@@ -11,7 +11,7 @@ import unittest
 from urllib.error import URLError
 from urllib.request import urlopen
 
-from kyoko.evals import generate_evals_for_proposal
+from kyoko.checks import generate_checks_for_proposal
 from kyoko.proposals import submit_learning_proposal
 from kyoko.replay_servers import run_replay_server
 from kyoko.replay_templates import write_replay_server_template
@@ -44,7 +44,7 @@ class ReplayHookExampleTests(unittest.TestCase):
                 hook_path = EXAMPLES / hook_name
 
                 py_compile.compile(str(hook_path), doraise=True)
-                eval_spec_id = _prepare_eval(db_path)
+                check_spec_id = _prepare_check(db_path)
                 write_replay_server_template(
                     output_path=server_path,
                     framework=framework,
@@ -61,9 +61,9 @@ class ReplayHookExampleTests(unittest.TestCase):
                     _wait_for_health(port)
                     report = run_replay_server(
                         db_path=db_path,
-                        eval_spec_id=eval_spec_id,
+                        check_spec_id=check_spec_id,
                         server_url=f"http://127.0.0.1:{port}",
-                        run_eval_after=True,
+                        run_check_after=True,
                     )
                 finally:
                     _stop_process(process)
@@ -73,8 +73,8 @@ class ReplayHookExampleTests(unittest.TestCase):
                     report.completion.result["target_map"]["span_fetch_timeout_001"],
                     "span_fetch_retry_success_001",
                 )
-                self.assertEqual(report.eval_run.status, "passed")
-                self.assertEqual(report.eval_run.promoted_trust_level, "L2_regression")
+                self.assertEqual(report.check_run.status, "passed")
+                self.assertEqual(report.check_run.promoted_trust_level, "L2_regression")
 
     def test_ai_sdk_replay_hook_example_runs_through_generated_node_server(self) -> None:
         node = shutil.which("node")
@@ -93,7 +93,7 @@ class ReplayHookExampleTests(unittest.TestCase):
                 text=True,
             )
             self.assertEqual(check.returncode, 0, check.stderr)
-            eval_spec_id = _prepare_eval(db_path)
+            check_spec_id = _prepare_check(db_path)
             write_replay_server_template(
                 output_path=server_path,
                 framework="ai-sdk-typescript",
@@ -110,30 +110,30 @@ class ReplayHookExampleTests(unittest.TestCase):
                 _wait_for_health(port)
                 report = run_replay_server(
                     db_path=db_path,
-                    eval_spec_id=eval_spec_id,
+                    check_spec_id=check_spec_id,
                     server_url=f"http://127.0.0.1:{port}",
-                    run_eval_after=True,
+                    run_check_after=True,
                 )
             finally:
                 _stop_process(process)
 
             self.assertEqual(report.completion.status, "passed")
-            self.assertEqual(report.eval_run.status, "passed")
-            self.assertEqual(report.eval_run.promoted_trust_level, "L2_regression")
+            self.assertEqual(report.check_run.status, "passed")
+            self.assertEqual(report.check_run.promoted_trust_level, "L2_regression")
 
 
-def _prepare_eval(db_path: Path) -> str:
+def _prepare_check(db_path: Path) -> str:
     ingest_source_fixture(db_path, FIXTURE)
     submit_learning_proposal(
         db_path=db_path,
         proposal_path=VALID_PROPOSAL,
         schema_path=SCHEMA,
     )
-    eval_report = generate_evals_for_proposal(
+    check_report = generate_checks_for_proposal(
         db_path=db_path,
         proposal_id="proposal_context_timeout_001",
     )
-    return eval_report.eval_spec_ids[0]
+    return check_report.check_spec_ids[0]
 
 
 def _clean_env() -> dict[str, str]:

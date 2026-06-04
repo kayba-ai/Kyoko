@@ -21,8 +21,8 @@ ENTITY_TABLES = {
     "learning_proposal": "learning_proposals",
     "proposal": "learning_proposals",
     "skill": "skills",
-    "eval_spec": "eval_specs",
-    "eval_run": "eval_runs",
+    "check_spec": "check_specs",
+    "check_run": "check_runs",
     "replay_run": "replay_runs",
     "patch_transaction": "patch_transactions",
 }
@@ -70,7 +70,7 @@ def assess_proposal_confidence(
 
     verification_contribution = _verification_contribution(verification)
     score += verification_contribution
-    factors.append(_factor("eval_replay_verification", verification_contribution, verification["note"]))
+    factors.append(_factor("check_replay_verification", verification_contribution, verification["note"]))
 
     duplicate_penalty = min(0.18, duplicates["similar_active_proposals"] * 0.06)
     if duplicate_penalty:
@@ -162,40 +162,40 @@ def _evidence_metrics(connection: sqlite3.Connection, proposal: dict[str, Any]) 
 
 def _verification_metrics(connection: sqlite3.Connection, proposal: dict[str, Any]) -> dict[str, Any]:
     proposal_id = str(proposal.get("id") or "")
-    eval_specs = _rows(connection, "SELECT * FROM eval_specs WHERE proposal_id = ?", (proposal_id,))
-    eval_runs = _rows(connection, "SELECT * FROM eval_runs WHERE proposal_id = ?", (proposal_id,))
+    check_specs = _rows(connection, "SELECT * FROM check_specs WHERE proposal_id = ?", (proposal_id,))
+    check_runs = _rows(connection, "SELECT * FROM check_runs WHERE proposal_id = ?", (proposal_id,))
     replay_runs = _rows(connection, "SELECT * FROM replay_runs WHERE proposal_id = ?", (proposal_id,))
-    passed_eval_runs = [row for row in eval_runs if row.get("status") == "passed"]
-    failed_eval_runs = [row for row in eval_runs if row.get("status") == "failed"]
+    passed_check_runs = [row for row in check_runs if row.get("status") == "passed"]
+    failed_check_runs = [row for row in check_runs if row.get("status") == "failed"]
     passed_replay_runs = [row for row in replay_runs if row.get("status") == "passed"]
     failed_replay_runs = [row for row in replay_runs if row.get("status") == "failed"]
-    highest_trust_level = _highest_trust_level(eval_specs)
-    verified_trust_level = _highest_verified_trust_level(eval_specs, passed_eval_runs)
-    latest_eval_status = eval_runs[-1].get("status") if eval_runs else "not_run"
+    highest_trust_level = _highest_trust_level(check_specs)
+    verified_trust_level = _highest_verified_trust_level(check_specs, passed_check_runs)
+    latest_check_status = check_runs[-1].get("status") if check_runs else "not_run"
     latest_replay_status = replay_runs[-1].get("status") if replay_runs else "not_run"
-    if passed_eval_runs or passed_replay_runs:
+    if passed_check_runs or passed_replay_runs:
         note = (
-            f"{len(passed_eval_runs)} passed eval run(s), "
+            f"{len(passed_check_runs)} passed check run(s), "
             f"{len(passed_replay_runs)} passed replay run(s), verified trust {verified_trust_level or 'none'}."
         )
-    elif failed_eval_runs or failed_replay_runs:
+    elif failed_check_runs or failed_replay_runs:
         note = (
-            f"{len(failed_eval_runs)} failed eval run(s), "
+            f"{len(failed_check_runs)} failed check run(s), "
             f"{len(failed_replay_runs)} failed replay run(s)."
         )
     else:
-        note = "No eval or replay evidence has verified this proposal yet."
+        note = "No check or replay evidence has verified this proposal yet."
     return {
-        "eval_specs": len(eval_specs),
-        "eval_runs": len(eval_runs),
-        "passed_eval_runs": len(passed_eval_runs),
-        "failed_eval_runs": len(failed_eval_runs),
+        "check_specs": len(check_specs),
+        "check_runs": len(check_runs),
+        "passed_check_runs": len(passed_check_runs),
+        "failed_check_runs": len(failed_check_runs),
         "replay_runs": len(replay_runs),
         "passed_replay_runs": len(passed_replay_runs),
         "failed_replay_runs": len(failed_replay_runs),
         "highest_trust_level": highest_trust_level,
         "verified_trust_level": verified_trust_level,
-        "latest_eval_status": latest_eval_status,
+        "latest_check_status": latest_check_status,
         "latest_replay_status": latest_replay_status,
         "note": note,
     }
@@ -252,11 +252,11 @@ def _evidence_contribution(metrics: dict[str, Any]) -> float:
 
 def _verification_contribution(metrics: dict[str, Any]) -> float:
     contribution = 0.0
-    if metrics["passed_eval_runs"]:
+    if metrics["passed_check_runs"]:
         contribution += 0.12
-        if metrics["passed_eval_runs"] >= 2:
+        if metrics["passed_check_runs"] >= 2:
             contribution += 0.04
-    if metrics["failed_eval_runs"]:
+    if metrics["failed_check_runs"]:
         contribution -= 0.18
     if metrics["passed_replay_runs"]:
         contribution += 0.08
@@ -272,21 +272,21 @@ def _verification_contribution(metrics: dict[str, Any]) -> float:
     return round(max(-0.30, min(0.35, contribution)), 4)
 
 
-def _highest_trust_level(eval_specs: list[dict[str, Any]]) -> Optional[str]:
-    levels = [str(row.get("trust_level")) for row in eval_specs if isinstance(row.get("trust_level"), str)]
+def _highest_trust_level(check_specs: list[dict[str, Any]]) -> Optional[str]:
+    levels = [str(row.get("trust_level")) for row in check_specs if isinstance(row.get("trust_level"), str)]
     return max(levels, key=lambda level: TRUST_ORDER.get(level, -1), default=None)
 
 
 def _highest_verified_trust_level(
-    eval_specs: list[dict[str, Any]],
-    passed_eval_runs: list[dict[str, Any]],
+    check_specs: list[dict[str, Any]],
+    passed_check_runs: list[dict[str, Any]],
 ) -> Optional[str]:
-    if not passed_eval_runs:
+    if not passed_check_runs:
         return None
-    spec_by_id = {str(row.get("id")): row for row in eval_specs}
+    spec_by_id = {str(row.get("id")): row for row in check_specs}
     levels = []
-    for run in passed_eval_runs:
-        spec = spec_by_id.get(str(run.get("eval_spec_id")))
+    for run in passed_check_runs:
+        spec = spec_by_id.get(str(run.get("check_spec_id")))
         if spec is not None and isinstance(spec.get("trust_level"), str):
             levels.append(str(spec["trust_level"]))
     return max(levels, key=lambda level: TRUST_ORDER.get(level, -1), default=None)

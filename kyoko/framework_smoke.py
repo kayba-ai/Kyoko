@@ -799,8 +799,8 @@ def _improve_report_passed(report: ImproveReport) -> bool:
         return False
     replay_passed = all(
         replay.get("status") == "passed"
-        and isinstance(replay.get("eval_run"), dict)
-        and replay["eval_run"].get("status") == "passed"
+        and isinstance(replay.get("check_run"), dict)
+        and replay["check_run"].get("status") == "passed"
         for replay in report.replay_runs
     )
     applied = any(decision.action == "applied" for decision in report.autonomy.decisions)
@@ -1333,8 +1333,8 @@ def package_version() -> str:
 
 def target_entity_id(request: dict[str, Any]) -> str:
     input_payload = request.get("input")
-    eval_spec = input_payload.get("eval_spec") if isinstance(input_payload, dict) else {}
-    target = eval_spec.get("target") if isinstance(eval_spec, dict) else {}
+    check_spec = input_payload.get("check_spec") if isinstance(input_payload, dict) else {}
+    target = check_spec.get("target") if isinstance(check_spec, dict) else {}
     entity_id = target.get("entity_id") if isinstance(target, dict) else None
     return entity_id if isinstance(entity_id, str) and entity_id else "span_framework_source"
 '''.lstrip()
@@ -1789,8 +1789,8 @@ def package_version() -> str:
 
 def target_entity_id(request: dict[str, Any]) -> str:
     input_payload = request.get("input")
-    eval_spec = input_payload.get("eval_spec") if isinstance(input_payload, dict) else {}
-    target = eval_spec.get("target") if isinstance(eval_spec, dict) else {}
+    check_spec = input_payload.get("check_spec") if isinstance(input_payload, dict) else {}
+    target = check_spec.get("target") if isinstance(check_spec, dict) else {}
     entity_id = target.get("entity_id") if isinstance(target, dict) else None
     return entity_id if isinstance(entity_id, str) and entity_id else "span_framework_source"
 '''.lstrip()
@@ -2724,8 +2724,8 @@ def package_version() -> str:
 
 def target_entity_id(request: dict[str, Any]) -> str:
     input_payload = request.get("input")
-    eval_spec = input_payload.get("eval_spec") if isinstance(input_payload, dict) else {}
-    target = eval_spec.get("target") if isinstance(eval_spec, dict) else {}
+    check_spec = input_payload.get("check_spec") if isinstance(input_payload, dict) else {}
+    target = check_spec.get("target") if isinstance(check_spec, dict) else {}
     entity_id = target.get("entity_id") if isinstance(target, dict) else None
     return entity_id if isinstance(entity_id, str) and entity_id else "span_framework_source"
 '''.lstrip()
@@ -3800,8 +3800,8 @@ def package_version() -> str:
 
 def target_entity_id(request: dict[str, Any]) -> str:
     input_payload = request.get("input")
-    eval_spec = input_payload.get("eval_spec") if isinstance(input_payload, dict) else {}
-    target = eval_spec.get("target") if isinstance(eval_spec, dict) else {}
+    check_spec = input_payload.get("check_spec") if isinstance(input_payload, dict) else {}
+    target = check_spec.get("target") if isinstance(check_spec, dict) else {}
     entity_id = target.get("entity_id") if isinstance(target, dict) else None
     return entity_id if isinstance(entity_id, str) and entity_id else "span_framework_source"
 '''.lstrip()

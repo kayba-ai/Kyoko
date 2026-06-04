@@ -97,7 +97,7 @@ def _collect_candidates(
     operator_cutoff: Optional[str],
 ) -> dict[str, Any]:
     pruned_rows: dict[str, list[str]] = {
-        "eval_runs": [],
+        "check_runs": [],
         "replay_runs": [],
         "operator_runs": [],
         "runs": [],
@@ -120,23 +120,23 @@ def _collect_candidates(
             """,
             (profile_id, replay_cutoff),
         )
-        eval_ids = _ids(
+        check_ids = _ids(
             connection,
             """
             SELECT id
-            FROM eval_runs
+            FROM check_runs
             WHERE profile_id = ? AND created_at <= ?
             ORDER BY created_at, id
             """,
             (profile_id, replay_cutoff),
         )
         if replay_ids:
-            eval_ids.extend(
+            check_ids.extend(
                 _ids(
                     connection,
                     f"""
                     SELECT id
-                    FROM eval_runs
+                    FROM check_runs
                     WHERE replay_run_id IN ({_placeholders(replay_ids)})
                     ORDER BY created_at, id
                     """,
@@ -144,7 +144,7 @@ def _collect_candidates(
                 )
             )
         pruned_rows["replay_runs"] = _dedupe(replay_ids)
-        pruned_rows["eval_runs"] = _dedupe(eval_ids)
+        pruned_rows["check_runs"] = _dedupe(check_ids)
 
     if operator_cutoff is not None:
         pruned_rows["operator_runs"] = _ids(
@@ -384,7 +384,7 @@ def _protected_trace_runs(
         connection.execute(
             """
             SELECT target_json AS evidence_refs_json, definition_json AS problem_json, '{}' AS proposed_changes_json
-            FROM eval_specs
+            FROM check_specs
             WHERE profile_id = ?
             """,
             (profile_id,),
@@ -422,7 +422,7 @@ def _timeline_ids_for_pruned_rows(
         "task_attempt": pruned_rows.get("task_attempts", []),
         "task": pruned_rows.get("tasks", []),
         "replay_run": pruned_rows.get("replay_runs", []),
-        "eval_run": pruned_rows.get("eval_runs", []),
+        "check_run": pruned_rows.get("check_runs", []),
         "operator_run": pruned_rows.get("operator_runs", []),
     }
     timeline_ids: list[str] = []
@@ -447,7 +447,7 @@ def _timeline_ids_for_pruned_rows(
 def _apply_prune(connection: sqlite3.Connection, candidates: dict[str, Any]) -> None:
     rows: dict[str, list[str]] = candidates["pruned_rows"]
     _delete_timeline_events(connection, rows["timeline_events"])
-    _delete_rows(connection, "eval_runs", rows["eval_runs"])
+    _delete_rows(connection, "check_runs", rows["check_runs"])
     _delete_rows(connection, "replay_runs", rows["replay_runs"])
     _delete_rows(connection, "operator_runs", rows["operator_runs"])
 

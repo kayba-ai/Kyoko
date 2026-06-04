@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from .bundled_assets import AssetError, load_bundled_json
-from .evals import BEGIN_REPLAY_RESULT_BLOCK, END_REPLAY_RESULT_BLOCK
+from .checks import BEGIN_REPLAY_RESULT_BLOCK, END_REPLAY_RESULT_BLOCK
 
 
 def main() -> int:

@@ -64,7 +64,7 @@ ENTITY_TABLES = {
     "learning_proposal": "learning_proposals",
     "skill": "skills",
     "context_delivery_rule": "context_delivery_rules",
-    "eval_run": "eval_runs",
+    "check_run": "check_runs",
     "replay_run": "replay_runs",
     "patch_transaction": "patch_transactions",
 }
@@ -365,7 +365,7 @@ def _missing_evidence_ref(connection: sqlite3.Connection, ref: dict[str, Any]) -
 
     table = ENTITY_TABLES.get(entity_type)
     if table is None:
-        # Blob and future eval/replay/patch refs may exist outside the current
+        # Blob and future check/replay/patch refs may exist outside the current
         # runtime slice. Validate them once those stores exist.
         return None
 

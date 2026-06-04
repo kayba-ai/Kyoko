@@ -6,7 +6,7 @@ import unittest
 
 from kyoko.apply import list_skills
 from kyoko.autonomy import update_autonomy_policy
-from kyoko.evals import list_eval_runs, list_eval_specs, list_replay_runs
+from kyoko.checks import list_check_runs, list_check_specs, list_replay_runs
 from kyoko.harness import list_patch_transactions
 from kyoko.improve import run_improvement_loop
 from kyoko.proposals import submit_learning_proposal, submit_learning_proposal_payload
@@ -25,7 +25,7 @@ REPLAY_COMMAND = ROOT / "tests/fixtures/replay_command.py"
 
 
 class ImproveTests(unittest.TestCase):
-    def test_improvement_loop_runs_eval_replay_and_autonomy_for_existing_proposal(self) -> None:
+    def test_improvement_loop_runs_check_replay_and_autonomy_for_existing_proposal(self) -> None:
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
             ingest_source_fixture(db_path, SOURCE_FIXTURE)
@@ -53,17 +53,17 @@ class ImproveTests(unittest.TestCase):
             )
 
             self.assertEqual(report.proposal_id, "proposal_context_timeout_001")
-            self.assertEqual(report.eval_spec_ids, ("eval_proposal_context_timeout_001_1",))
-            self.assertEqual(report.generated_eval_spec_ids, ("eval_proposal_context_timeout_001_1",))
-            self.assertEqual(report.replay_runs[0]["eval_run"]["status"], "passed")
+            self.assertEqual(report.check_spec_ids, ("check_proposal_context_timeout_001_1",))
+            self.assertEqual(report.generated_check_spec_ids, ("check_proposal_context_timeout_001_1",))
+            self.assertEqual(report.replay_runs[0]["check_run"]["status"], "passed")
             self.assertEqual(report.autonomy.decisions[0].action, "applied")
             self.assertEqual(
                 report.autonomy.decisions[0].applied_skill_ids,
                 ("skill_proposal_context_timeout_001_1",),
             )
-            self.assertEqual(len(list_eval_specs(db_path)), 1)
+            self.assertEqual(len(list_check_specs(db_path)), 1)
             self.assertEqual(len(list_replay_runs(db_path)), 1)
-            self.assertEqual(len(list_eval_runs(db_path)), 1)
+            self.assertEqual(len(list_check_runs(db_path)), 1)
             self.assertEqual(len(list_skills(db_path)), 1)
 
     def test_improvement_loop_defaults_to_latest_enabled_replay_adapter(self) -> None:
@@ -101,7 +101,7 @@ class ImproveTests(unittest.TestCase):
             )
 
             self.assertEqual(report.replay_runs[0]["adapter_id"], "zzz_replay")
-            self.assertEqual(report.replay_runs[0]["eval_run"]["status"], "passed")
+            self.assertEqual(report.replay_runs[0]["check_run"]["status"], "passed")
             self.assertEqual(report.autonomy.decisions[0].action, "applied")
 
     def test_improvement_loop_applies_harness_patch_with_workspace_root(self) -> None:
@@ -109,7 +109,7 @@ class ImproveTests(unittest.TestCase):
             db_path = Path(tmpdir) / "kyoko.db"
             workspace = Path(tmpdir) / "workspace"
             workspace.mkdir()
-            target = workspace / "evals/generated_timeout_eval.py"
+            target = workspace / "checks/generated_timeout_check.py"
             proposal = json.loads(VALID_GENERATED_FILE_PROPOSAL.read_text())
             proposal["gate_expectations"]["requires_human_review"] = False
             ingest_source_fixture(db_path, SOURCE_FIXTURE)
@@ -134,7 +134,7 @@ class ImproveTests(unittest.TestCase):
 
             report = run_improvement_loop(
                 db_path=db_path,
-                proposal_id="proposal_harness_generated_eval_001",
+                proposal_id="proposal_harness_generated_check_001",
                 replay_adapter_id="fixture_replay",
                 output_dir=Path(tmpdir) / "improve",
                 schema_path=SCHEMA,
@@ -143,14 +143,14 @@ class ImproveTests(unittest.TestCase):
             patches = list_patch_transactions(db_path)
 
             self.assertEqual(
-                report.generated_eval_spec_ids,
-                ("eval_proposal_harness_generated_eval_001_1",),
+                report.generated_check_spec_ids,
+                ("check_proposal_harness_generated_check_001_1",),
             )
-            self.assertEqual(report.replay_runs[0]["eval_run"]["status"], "passed")
+            self.assertEqual(report.replay_runs[0]["check_run"]["status"], "passed")
             self.assertEqual(report.autonomy.decisions[0].action, "applied")
             self.assertEqual(
                 report.autonomy.decisions[0].patch_transaction_ids,
-                ("patch_proposal_harness_generated_eval_001_1",),
+                ("patch_proposal_harness_generated_check_001_1",),
             )
             self.assertEqual(patches[0]["status"], "applied")
             self.assertTrue(target.exists())
@@ -161,7 +161,7 @@ class ImproveTests(unittest.TestCase):
             db_path = Path(tmpdir) / "kyoko.db"
             workspace = Path(tmpdir) / "workspace"
             workspace.mkdir()
-            target = workspace / "evals/generated_timeout_eval.py"
+            target = workspace / "checks/generated_timeout_check.py"
             proposal = json.loads(VALID_GENERATED_FILE_PROPOSAL.read_text())
             proposal["gate_expectations"]["requires_human_review"] = False
             ingest_source_payload(
@@ -190,13 +190,13 @@ class ImproveTests(unittest.TestCase):
 
             report = run_improvement_loop(
                 db_path=db_path,
-                proposal_id="proposal_harness_generated_eval_001",
+                proposal_id="proposal_harness_generated_check_001",
                 replay_adapter_id="fixture_replay",
                 output_dir=Path(tmpdir) / "improve",
                 schema_path=SCHEMA,
             )
 
-            self.assertEqual(report.replay_runs[0]["eval_run"]["status"], "passed")
+            self.assertEqual(report.replay_runs[0]["check_run"]["status"], "passed")
             self.assertEqual(report.autonomy.decisions[0].action, "applied")
             self.assertTrue(target.exists())
             self.assertIn("TIMEOUT_SPAN_ID", target.read_text())
@@ -222,7 +222,7 @@ class ImproveTests(unittest.TestCase):
             self.assertEqual(report.source_import.candidate["id"], "openclaw_main")
             self.assertEqual(report.profile_id, "profile_openclaw_main")
             self.assertEqual(report.proposal_id, "proposal_mock_span_openclaw_error_session_failure_1")
-            self.assertEqual(report.generated_eval_spec_ids, ("eval_proposal_mock_span_openclaw_error_session_failure_1_1",))
+            self.assertEqual(report.generated_check_spec_ids, ("check_proposal_mock_span_openclaw_error_session_failure_1_1",))
             self.assertEqual(report.replay_runs, ())
             self.assertIsNone(report.autonomy)
             self.assertTrue(Path(report.source_import.to_json()["import"]["normalized_path"]).exists())

@@ -6,7 +6,7 @@ from typing import Any
 TERMS: dict[str, dict[str, str]] = {
     "issue": {
         "label": "Issue",
-        "description": "A specific observed failure or weakness backed by trace, task, eval, or replay evidence.",
+        "description": "A specific observed failure or weakness backed by trace, task, check, or replay evidence.",
     },
     "insight": {
         "label": "Insight",
@@ -18,7 +18,7 @@ TERMS: dict[str, dict[str, str]] = {
     },
     "harness": {
         "label": "Harness fix",
-        "description": "A change to eval, replay, instrumentation, or repository harness files.",
+        "description": "A change to check, replay, instrumentation, or repository harness files.",
     },
 }
 

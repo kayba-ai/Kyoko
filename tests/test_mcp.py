@@ -92,11 +92,11 @@ class McpTests(unittest.TestCase):
             self.assertIn("kyoko_get_policy", tool_names)
             self.assertIn("kyoko_prune_retention_dry_run", tool_names)
             self.assertIn("kyoko_get_proposal_detail", tool_names)
-            self.assertIn("kyoko_get_eval_detail", tool_names)
-            self.assertIn("kyoko_list_eval_assertion_presets", tool_names)
-            self.assertIn("kyoko_get_eval_capabilities", tool_names)
+            self.assertIn("kyoko_get_check_detail", tool_names)
+            self.assertIn("kyoko_list_check_assertion_presets", tool_names)
+            self.assertIn("kyoko_get_check_capabilities", tool_names)
             self.assertIn("kyoko_run_judge_command", tool_names)
-            self.assertIn("kyoko_list_eval_spec_locks", tool_names)
+            self.assertIn("kyoko_list_check_locks", tool_names)
             self.assertIn("kyoko_get_replay_detail", tool_names)
             self.assertIn("kyoko_list_issues", tool_names)
             self.assertIn("kyoko_get_issue", tool_names)
@@ -244,7 +244,7 @@ class McpTests(unittest.TestCase):
             self.assertEqual(result["reason"], "ran_operator_adapter")
             self.assertEqual(result["result"]["adapter_id"], "fixture_operator")
             self.assertEqual(result["result"]["proposal_id"], "proposal_command_span_fetch_timeout_001")
-            self.assertEqual(result["routing_after"]["state"], "needs_eval_generation")
+            self.assertEqual(result["routing_after"]["state"], "needs_check_generation")
 
     def test_mcp_prepare_operator_smoke_matrix_writes_prompt_artifacts(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -390,9 +390,9 @@ class McpTests(unittest.TestCase):
             context_rules = _call_tool(server, "kyoko_list_context_rules", {})
             context_rule_revisions = _call_tool(server, "kyoko_list_context_rule_revisions", {})
             harness_target_locks = _call_tool(server, "kyoko_list_harness_target_locks", {})
-            eval_assertion_presets = _call_tool(server, "kyoko_list_eval_assertion_presets", {})
-            eval_capabilities = _call_tool(server, "kyoko_get_eval_capabilities", {})
-            eval_spec_locks = _call_tool(server, "kyoko_list_eval_spec_locks", {})
+            check_assertion_presets = _call_tool(server, "kyoko_list_check_assertion_presets", {})
+            check_capabilities = _call_tool(server, "kyoko_get_check_capabilities", {})
+            check_locks = _call_tool(server, "kyoko_list_check_locks", {})
             skill_revisions = _call_tool(server, "kyoko_list_skill_revisions", {})
             profile_next_analysis = _call_tool(
                 server,
@@ -423,19 +423,19 @@ class McpTests(unittest.TestCase):
                 "kyoko_get_proposal_detail",
                 {"proposal_id": "proposal_context_timeout_001"},
             )
-            evals = _call_tool(
+            checks = _call_tool(
                 server,
-                "kyoko_generate_evals",
+                "kyoko_generate_checks",
                 {"proposal_id": "proposal_context_timeout_001"},
             )
-            eval_detail = _call_tool(
+            check_detail = _call_tool(
                 server,
-                "kyoko_get_eval_detail",
-                {"eval_spec_id": "eval_proposal_context_timeout_001_1"},
+                "kyoko_get_check_detail",
+                {"check_spec_id": "check_proposal_context_timeout_001_1"},
             )
 
             self.assertFalse(status["isError"])
-            self.assertEqual(status["structuredContent"]["schema_version"], 24)
+            self.assertEqual(status["structuredContent"]["schema_version"], 25)
             self.assertEqual(
                 profiles["structuredContent"]["profiles"][0]["id"],
                 "profile_news_research_001",
@@ -480,27 +480,27 @@ class McpTests(unittest.TestCase):
             self.assertEqual(
                 [
                     preset["name"]
-                    for preset in eval_assertion_presets["structuredContent"]["assertion_presets"]
+                    for preset in check_assertion_presets["structuredContent"]["assertion_presets"]
                 ],
                 ["replay_success_shape", "replay_handoff_present"],
             )
             self.assertEqual(
-                eval_capabilities["structuredContent"]["gateable_eval_types"],
+                check_capabilities["structuredContent"]["gateable_check_types"],
                 ["deterministic_assertion", "regression_replay"],
             )
-            self.assertFalse(eval_capabilities["structuredContent"]["judge"]["invokes_model"])
+            self.assertFalse(check_capabilities["structuredContent"]["judge"]["invokes_model"])
             self.assertIn(
                 "dashboard:Run judge",
-                eval_capabilities["structuredContent"]["judge"]["handoff_surfaces"],
+                check_capabilities["structuredContent"]["judge"]["handoff_surfaces"],
             )
-            self.assertEqual(eval_spec_locks["structuredContent"]["eval_spec_locks"], [])
+            self.assertEqual(check_locks["structuredContent"]["check_locks"], [])
             self.assertEqual(skill_revisions["structuredContent"]["skill_revisions"], [])
             self.assertEqual(profile_next_analysis["structuredContent"]["status"], "executed")
             self.assertEqual(profile_next_analysis["structuredContent"]["reason"], "prepared_operator_prompt")
             self.assertEqual(profile_next_analysis["structuredContent"]["result"]["target"], "codex")
             self.assertEqual(submit["structuredContent"]["proposal_id"], "proposal_context_timeout_001")
             self.assertEqual(profile_next["structuredContent"]["status"], "planned")
-            self.assertEqual(profile_next["structuredContent"]["action"], "generate_evals")
+            self.assertEqual(profile_next["structuredContent"]["action"], "generate_checks")
             self.assertEqual(
                 dashboard_metrics["structuredContent"]["issues"]["total"],
                 1,
@@ -530,21 +530,21 @@ class McpTests(unittest.TestCase):
                 "observed_issue",
             )
             self.assertEqual(
-                detail["structuredContent"]["eval_guidance"]["gateable_eval_types"],
+                detail["structuredContent"]["check_guidance"]["gateable_check_types"],
                 ["deterministic_assertion", "regression_replay"],
             )
             self.assertEqual(
                 [
                     preset["name"]
-                    for preset in detail["structuredContent"]["eval_guidance"]["assertion_presets"]
+                    for preset in detail["structuredContent"]["check_guidance"]["assertion_presets"]
                 ],
                 ["replay_success_shape", "replay_handoff_present"],
             )
             self.assertEqual(
-                evals["structuredContent"]["eval_spec_ids"],
-                ["eval_proposal_context_timeout_001_1"],
+                checks["structuredContent"]["check_spec_ids"],
+                ["check_proposal_context_timeout_001_1"],
             )
-            self.assertEqual(eval_detail["structuredContent"]["summary"]["latest_status"], "not_run")
+            self.assertEqual(check_detail["structuredContent"]["summary"]["latest_status"], "not_run")
 
     def test_run_improve_tool_imports_source_without_autonomy(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -574,8 +574,8 @@ class McpTests(unittest.TestCase):
                 "proposal_mock_span_openclaw_error_session_failure_1",
             )
             self.assertEqual(
-                payload["generated_eval_spec_ids"],
-                ["eval_proposal_mock_span_openclaw_error_session_failure_1_1"],
+                payload["generated_check_spec_ids"],
+                ["check_proposal_mock_span_openclaw_error_session_failure_1_1"],
             )
             self.assertEqual(payload["replay_runs"], [])
             self.assertIsNone(payload["autonomy"])
@@ -591,12 +591,12 @@ class McpTests(unittest.TestCase):
             _call_tool(server, "kyoko_submit_proposal", {"proposal": proposal})
             _call_tool(
                 server,
-                "kyoko_generate_evals",
+                "kyoko_generate_checks",
                 {"proposal_id": "proposal_context_timeout_001"},
             )
-            _set_mcp_eval_type(
+            _set_mcp_check_type(
                 db_path,
-                "eval_proposal_context_timeout_001_1",
+                "check_proposal_context_timeout_001_1",
                 "judge",
                 {
                     "rubric": "Recovered source evidence is complete and dated.",
@@ -610,7 +610,7 @@ class McpTests(unittest.TestCase):
                 server,
                 "kyoko_run_judge_command",
                 {
-                    "eval_spec_id": "eval_proposal_context_timeout_001_1",
+                    "check_spec_id": "check_proposal_context_timeout_001_1",
                     "command": [sys.executable, str(JUDGE_COMMAND)],
                     "output_dir": str(output_dir),
                 },
@@ -618,10 +618,10 @@ class McpTests(unittest.TestCase):
 
             self.assertFalse(report["isError"])
             payload = report["structuredContent"]
-            self.assertEqual(payload["eval_run"]["status"], "passed")
-            self.assertEqual(payload["eval_run"]["result"]["judge_backend"], "external_command")
-            self.assertFalse(payload["eval_run"]["result"]["gateable"])
-            self.assertIsNone(payload["eval_run"]["promoted_trust_level"])
+            self.assertEqual(payload["check_run"]["status"], "passed")
+            self.assertEqual(payload["check_run"]["result"]["judge_backend"], "external_command")
+            self.assertFalse(payload["check_run"]["result"]["gateable"])
+            self.assertIsNone(payload["check_run"]["promoted_trust_level"])
             self.assertEqual(payload["judgment"]["judge"], "fixture_external_judge")
             self.assertTrue(Path(payload["request_path"]).exists())
             self.assertTrue(Path(payload["result_path"]).exists())
@@ -1137,11 +1137,11 @@ print("claude installed")
             self.assertEqual(written["target"], "openclaw")
 
 
-def _set_mcp_eval_type(db_path: Path, eval_spec_id: str, eval_type: str, definition: dict) -> None:
+def _set_mcp_check_type(db_path: Path, check_spec_id: str, check_type: str, definition: dict) -> None:
     with sqlite3.connect(db_path) as connection:
         connection.execute(
-            "UPDATE eval_specs SET eval_type = ?, definition_json = ? WHERE id = ?",
-            (eval_type, json.dumps(definition, sort_keys=True), eval_spec_id),
+            "UPDATE check_specs SET check_type = ?, definition_json = ? WHERE id = ?",
+            (check_type, json.dumps(definition, sort_keys=True), check_spec_id),
         )
 
 

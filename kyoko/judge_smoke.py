@@ -8,12 +8,12 @@ from pathlib import Path
 from typing import Any, Optional, Sequence
 
 from .bundled_assets import AssetError, bundled_asset_path, load_bundled_json
-from .evals import (
+from .checks import (
     BEGIN_JUDGE_RESULT_BLOCK,
     END_JUDGE_RESULT_BLOCK,
-    EvalError,
+    CheckError,
     build_judge_request,
-    generate_evals_for_proposal,
+    generate_checks_for_proposal,
     run_judge_command,
 )
 from .proposals import ProposalError, list_learning_proposals, submit_learning_proposal_payload
@@ -33,7 +33,7 @@ class JudgeSmokeReport:
     output_dir: Path
     profile_id: str
     proposal_id: str
-    eval_spec_id: str
+    check_spec_id: str
     request_path: Path
     handoff_path: Path
     result_path: Path
@@ -45,8 +45,8 @@ class JudgeSmokeReport:
     external_command_invoked: bool
     provider_backed: bool
     external_model_invoked: bool
-    eval_run_id: Optional[str]
-    eval_status: Optional[str]
+    check_run_id: Optional[str]
+    check_status: Optional[str]
     promoted_trust_level: Optional[str]
     judgment: Optional[dict[str, Any]]
     passed: bool
@@ -58,7 +58,7 @@ class JudgeSmokeReport:
             "output_dir": str(self.output_dir),
             "profile_id": self.profile_id,
             "proposal_id": self.proposal_id,
-            "eval_spec_id": self.eval_spec_id,
+            "check_spec_id": self.check_spec_id,
             "request_path": str(self.request_path),
             "handoff_path": str(self.handoff_path),
             "result_path": str(self.result_path),
@@ -71,8 +71,8 @@ class JudgeSmokeReport:
             "external_command_invoked": self.external_command_invoked,
             "provider_backed": self.provider_backed,
             "external_model_invoked": self.external_model_invoked,
-            "eval_run_id": self.eval_run_id,
-            "eval_status": self.eval_status,
+            "check_run_id": self.check_run_id,
+            "check_status": self.check_status,
             "promoted_trust_level": self.promoted_trust_level,
             "judgment": self.judgment,
             "passed": self.passed,
@@ -97,7 +97,7 @@ def run_judge_smoke(
         db_path=selected_db_path,
         schema_path=schema_path,
     )
-    eval_spec_id = seed["eval_spec_id"]
+    check_spec_id = seed["check_spec_id"]
     profile_id = seed["profile_id"]
     selected_command = tuple(str(part) for part in (command or ()))
     request_path = selected_output_dir / "judge-request.json"
@@ -108,7 +108,7 @@ def run_judge_smoke(
     if prepare_only:
         request = build_judge_request(
             db_path=selected_db_path,
-            eval_spec_id=eval_spec_id,
+            check_spec_id=check_spec_id,
             redaction_consumer="judge:command",
         )
         request_path.write_text(json.dumps(request, indent=2, sort_keys=True) + "\n")
@@ -117,7 +117,7 @@ def run_judge_smoke(
             db_path=selected_db_path,
             output_dir=selected_output_dir,
             profile_id=profile_id,
-            eval_spec_id=eval_spec_id,
+            check_spec_id=check_spec_id,
             command=selected_command,
             request_path=request_path,
             result_path=result_path,
@@ -130,7 +130,7 @@ def run_judge_smoke(
             output_dir=selected_output_dir,
             profile_id=profile_id,
             proposal_id=JUDGE_SMOKE_PROPOSAL_ID,
-            eval_spec_id=eval_spec_id,
+            check_spec_id=check_spec_id,
             request_path=request_path,
             handoff_path=handoff_path,
             result_path=result_path,
@@ -142,8 +142,8 @@ def run_judge_smoke(
             external_command_invoked=False,
             provider_backed=provider_backed,
             external_model_invoked=False,
-            eval_run_id=None,
-            eval_status="prepared",
+            check_run_id=None,
+            check_status="prepared",
             promoted_trust_level=None,
             judgment=None,
             passed=True,
@@ -154,7 +154,7 @@ def run_judge_smoke(
 
     report = run_judge_command(
         db_path=selected_db_path,
-        eval_spec_id=eval_spec_id,
+        check_spec_id=check_spec_id,
         output_dir=selected_output_dir,
         command=selected_command,
         timeout_seconds=timeout_seconds,
@@ -164,7 +164,7 @@ def run_judge_smoke(
         db_path=selected_db_path,
         output_dir=selected_output_dir,
         profile_id=profile_id,
-        eval_spec_id=eval_spec_id,
+        check_spec_id=check_spec_id,
         command=selected_command,
         request_path=report.request_path,
         result_path=report.result_path,
@@ -172,13 +172,13 @@ def run_judge_smoke(
         provider_backed=provider_backed,
         prepare_only=False,
     )
-    passed = report.eval_run.status == "passed"
+    passed = report.check_run.status == "passed"
     return JudgeSmokeReport(
         db_path=selected_db_path,
         output_dir=selected_output_dir,
         profile_id=report.profile_id,
         proposal_id=report.proposal_id or JUDGE_SMOKE_PROPOSAL_ID,
-        eval_spec_id=report.eval_spec_id,
+        check_spec_id=report.check_spec_id,
         request_path=report.request_path,
         handoff_path=handoff_path,
         result_path=report.result_path,
@@ -190,9 +190,9 @@ def run_judge_smoke(
         external_command_invoked=True,
         provider_backed=provider_backed,
         external_model_invoked=provider_backed,
-        eval_run_id=report.eval_run.eval_run_id,
-        eval_status=report.eval_run.status,
-        promoted_trust_level=report.eval_run.promoted_trust_level,
+        check_run_id=report.check_run.check_run_id,
+        check_status=report.check_run.status,
+        promoted_trust_level=report.check_run.promoted_trust_level,
         judgment=report.judgment,
         passed=passed,
     )
@@ -232,20 +232,20 @@ def _seed_judge_smoke_database(*, db_path: Path, schema_path: Optional[Path]) ->
                 schema_path=_schema_path(schema_path),
             )
             proposal_created = True
-        eval_report = generate_evals_for_proposal(
+        check_report = generate_checks_for_proposal(
             db_path=db_path,
             proposal_id=JUDGE_SMOKE_PROPOSAL_ID,
         )
-    except (EvalError, ProposalError, StorageError) as exc:
+    except (CheckError, ProposalError, StorageError) as exc:
         raise JudgeSmokeError(str(exc)) from exc
 
-    eval_spec_ids = tuple(eval_report.eval_spec_ids + eval_report.existing_eval_spec_ids)
-    if not eval_spec_ids:
-        raise JudgeSmokeError(f"judge_smoke_eval_not_available:{JUDGE_SMOKE_PROPOSAL_ID}")
+    check_spec_ids = tuple(check_report.check_spec_ids + check_report.existing_check_spec_ids)
+    if not check_spec_ids:
+        raise JudgeSmokeError(f"judge_smoke_check_not_available:{JUDGE_SMOKE_PROPOSAL_ID}")
     return {
         "profile_id": ingest_report.profile_id,
         "proposal_created": proposal_created,
-        "eval_spec_id": eval_spec_ids[0],
+        "check_spec_id": check_spec_ids[0],
     }
 
 
@@ -267,10 +267,10 @@ def _judge_smoke_proposal_payload() -> dict[str, Any]:
     evidence_refs = proposal.get("evidence_refs") if isinstance(proposal.get("evidence_refs"), list) else []
     changes = proposal.get("proposed_changes") if isinstance(proposal.get("proposed_changes"), list) else []
     for change in changes:
-        if not isinstance(change, dict) or change.get("type") != "eval_spec":
+        if not isinstance(change, dict) or change.get("type") != "check_spec":
             continue
         change["name"] = "judge smoke: recovered source evidence satisfies rubric"
-        change["eval_type"] = "judge"
+        change["check_type"] = "judge"
         change["side_effect_mode"] = "none"
         change["definition"] = {
             "rubric": (
@@ -299,7 +299,7 @@ def _write_handoff(
     db_path: Path,
     output_dir: Path,
     profile_id: str,
-    eval_spec_id: str,
+    check_spec_id: str,
     command: Sequence[str],
     request_path: Path,
     result_path: Path,
@@ -312,12 +312,12 @@ def _write_handoff(
         "db_path": str(db_path),
         "output_dir": str(output_dir),
         "profile_id": profile_id,
-        "eval_spec_id": eval_spec_id,
+        "check_spec_id": check_spec_id,
         "command": list(command),
         "shell_command": _shell_command(command),
         "environment": {
             "KYOKO_JUDGE_REQUEST_PATH": str(request_path),
-            "KYOKO_EVAL_SPEC_ID": eval_spec_id,
+            "KYOKO_CHECK_SPEC_ID": check_spec_id,
             "KYOKO_PROFILE_ID": profile_id,
             "KYOKO_JUDGE_RESULT_BLOCK_BEGIN": BEGIN_JUDGE_RESULT_BLOCK,
             "KYOKO_JUDGE_RESULT_BLOCK_END": END_JUDGE_RESULT_BLOCK,

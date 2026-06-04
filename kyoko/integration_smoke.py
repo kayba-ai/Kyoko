@@ -354,7 +354,7 @@ def _default_replay_request() -> dict[str, Any]:
         "replay_run_id": "replay_integration_smoke_001",
         "side_effect_mode": "network_mocked",
         "profile_id": "profile_integration_smoke",
-        "eval_spec_id": "eval_spec_integration_smoke",
+        "check_spec_id": "check_spec_integration_smoke",
     }
 
 

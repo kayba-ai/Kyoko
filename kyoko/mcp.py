@@ -25,7 +25,7 @@ from .autonomy import get_autonomy_policy
 from .blobs import list_payload_blobs, prune_payload_blobs, storage_report
 from .dashboard_metrics import get_dashboard_metrics
 from .details import (
-    get_eval_detail,
+    get_check_detail,
     get_issue_detail,
     get_proposal_detail,
     get_replay_detail,
@@ -35,16 +35,16 @@ from .details import (
 from .issues import create_issue, list_issues
 from .doctor import DEFAULT_SMOKE_EVIDENCE_DIR, DoctorError, run_doctor
 from .evidence import build_evidence_bundle
-from .evals import (
-    generate_evals_for_proposal,
+from .checks import (
+    generate_checks_for_proposal,
     list_assertion_presets,
-    list_eval_capabilities,
-    list_eval_runs,
-    list_eval_spec_locks,
-    list_eval_specs,
+    list_check_capabilities,
+    list_check_runs,
+    list_check_locks,
+    list_check_specs,
     list_replay_runs,
     parse_judge_command,
-    run_eval,
+    run_check,
     run_judge_command,
 )
 from .annotations import create_annotation, list_annotations
@@ -266,7 +266,7 @@ class KyokoMcpServer:
                     },
                     "instructions": (
                         "Kyoko exposes local-first agent optimization tools. "
-                        "Default MCP tools are read/propose/eval-request plus local "
+                        "Default MCP tools are read/propose/check-request plus local "
                         "readiness and dry-run style checks; direct apply and harness "
                         "writes are intentionally not exposed."
                     ),
@@ -724,7 +724,7 @@ def mcp_safety_contract(tools: dict[str, McpTool]) -> dict[str, Any]:
     passed = not direct_apply and not direct_harness_write and "kyoko_run_improve" in autonomy_disabled_tools
     return {
         "passed": passed,
-        "default_surface": "read_propose_eval_request_with_annotated_privileged_rollbacks",
+        "default_surface": "read_propose_check_request_with_annotated_privileged_rollbacks",
         "tool_count": len(tools),
         "prohibited_tool_names": sorted(MCP_PROHIBITED_DEFAULT_TOOL_NAMES),
         "direct_apply_tools_exposed": direct_apply,
@@ -865,7 +865,7 @@ def _build_tools(server: KyokoMcpServer) -> dict[str, McpTool]:
             title="Run Kyoko Profile Next Step",
             description=(
                 "Plan or run the next local Kyoko step for a profile. Defaults to dry-run; "
-                "set run=true before mutating eval/replay/autonomy state."
+                "set run=true before mutating check/replay/autonomy state."
             ),
             input_schema=_object_schema(
                 {
@@ -892,7 +892,7 @@ def _build_tools(server: KyokoMcpServer) -> dict[str, McpTool]:
             title="Kyoko Dashboard Metrics",
             description=(
                 "Return bounded product-loop metrics for one profile: issues, proposal state, "
-                "eval pass/fail, replay result, autonomy actions, and before/after verification."
+                "check pass/fail, replay result, autonomy actions, and before/after verification."
             ),
             input_schema=_object_schema({"profile_id": {"type": "string"}}),
             handler=lambda args: get_dashboard_metrics(
@@ -1046,7 +1046,7 @@ def _build_tools(server: KyokoMcpServer) -> dict[str, McpTool]:
             description=(
                 "Attach a durable annotation (issue|good|note) to a run or span. Evidence "
                 "only — an annotation may seed a proposal but never changes agent behavior "
-                "or bypasses the eval/replay gate."
+                "or bypasses the check/replay gate."
             ),
             input_schema=_object_schema(
                 {
@@ -1131,7 +1131,7 @@ def _build_tools(server: KyokoMcpServer) -> dict[str, McpTool]:
             description=(
                 "Create a first-class issue (category/severity/affected-entity links and "
                 "optional proposal backlinks). Evidence only — an issue may seed a proposal "
-                "but never changes agent behavior or bypasses the eval/replay gate."
+                "but never changes agent behavior or bypasses the check/replay gate."
             ),
             input_schema=_object_schema(
                 {
@@ -1286,7 +1286,7 @@ def _build_tools(server: KyokoMcpServer) -> dict[str, McpTool]:
         McpTool(
             name="kyoko_get_evidence",
             title="Kyoko Evidence Bundle",
-            description="Return canonical profile/run/task/span/handoff/eval evidence for analysis.",
+            description="Return canonical profile/run/task/span/handoff/check evidence for analysis.",
             input_schema=_object_schema(
                 {
                     "profile_id": {"type": "string"},
@@ -1348,7 +1348,7 @@ def _build_tools(server: KyokoMcpServer) -> dict[str, McpTool]:
         McpTool(
             name="kyoko_get_proposal_detail",
             title="Kyoko Proposal Detail",
-            description="Return target, evidence, eval, replay, patch, timeline, and autonomy gate detail for a proposal.",
+            description="Return target, evidence, check, replay, patch, timeline, and autonomy gate detail for a proposal.",
             input_schema=_object_schema(
                 {"proposal_id": {"type": "string"}},
                 required=["proposal_id"],
@@ -1373,7 +1373,7 @@ def _build_tools(server: KyokoMcpServer) -> dict[str, McpTool]:
         McpTool(
             name="kyoko_prune_retention_dry_run",
             title="Kyoko Retention Prune Dry Run",
-            description="Preview trace, replay, eval, and operator rows that would be pruned without deleting data.",
+            description="Preview trace, replay, check, and operator rows that would be pruned without deleting data.",
             input_schema=_object_schema(
                 {
                     "profile_id": {"type": "string"},
@@ -1508,59 +1508,59 @@ def _build_tools(server: KyokoMcpServer) -> dict[str, McpTool]:
             idempotent=False,
         ),
         McpTool(
-            name="kyoko_list_evals",
-            title="Kyoko Evals And Replay",
-            description="List eval specs, eval runs, and replay runs.",
+            name="kyoko_list_checks",
+            title="Kyoko Checks And Replay",
+            description="List check specs, check runs, and replay runs.",
             input_schema=_object_schema({}),
             handler=lambda _args: {
-                "eval_specs": list_eval_specs(server.db_path),
-                "eval_runs": list_eval_runs(server.db_path),
+                "check_specs": list_check_specs(server.db_path),
+                "check_runs": list_check_runs(server.db_path),
                 "replay_runs": list_replay_runs(server.db_path),
             },
         ),
         McpTool(
-            name="kyoko_list_eval_assertion_presets",
-            title="Kyoko Eval Assertion Presets",
-            description="List supported eval assertion presets and their concrete assertion expansions.",
+            name="kyoko_list_check_assertion_presets",
+            title="Kyoko Check Assertion Presets",
+            description="List supported check assertion presets and their concrete assertion expansions.",
             input_schema=_object_schema({}),
             handler=lambda _args: {"assertion_presets": list_assertion_presets()},
         ),
         McpTool(
-            name="kyoko_get_eval_capabilities",
-            title="Kyoko Eval Capabilities",
-            description="List supported eval types, assertions, presets, replay modes, side-effect modes, and trust levels.",
+            name="kyoko_get_check_capabilities",
+            title="Kyoko Check Capabilities",
+            description="List supported check types, assertions, presets, replay modes, side-effect modes, and trust levels.",
             input_schema=_object_schema({}),
-            handler=lambda _args: list_eval_capabilities(),
+            handler=lambda _args: list_check_capabilities(),
         ),
         McpTool(
-            name="kyoko_list_eval_spec_locks",
-            title="Kyoko Eval Spec Locks",
-            description="List active human locks for eval specs.",
+            name="kyoko_list_check_locks",
+            title="Kyoko Check Spec Locks",
+            description="List active human locks for check specs.",
             input_schema=_object_schema({"include_unlocked": {"type": "boolean"}}),
             handler=lambda args: {
-                "eval_spec_locks": list_eval_spec_locks(
+                "check_locks": list_check_locks(
                     server.db_path,
                     locked_only=not bool(args.get("include_unlocked", False)),
                 )
             },
         ),
         McpTool(
-            name="kyoko_get_eval_detail",
-            title="Kyoko Eval Detail",
-            description="Return target, eval runs, replay runs, and gate evidence for an eval spec.",
+            name="kyoko_get_check_detail",
+            title="Kyoko Check Detail",
+            description="Return target, check runs, replay runs, and gate evidence for an check spec.",
             input_schema=_object_schema(
-                {"eval_spec_id": {"type": "string"}},
-                required=["eval_spec_id"],
+                {"check_spec_id": {"type": "string"}},
+                required=["check_spec_id"],
             ),
-            handler=lambda args: get_eval_detail(
+            handler=lambda args: get_check_detail(
                 db_path=server.db_path,
-                eval_spec_id=_required_string(args, "eval_spec_id"),
+                check_spec_id=_required_string(args, "check_spec_id"),
             ),
         ),
         McpTool(
             name="kyoko_get_replay_detail",
             title="Kyoko Replay Detail",
-            description="Return source/output runs, side-effect metadata, spans, and linked eval runs for a replay run.",
+            description="Return source/output runs, side-effect metadata, spans, and linked check runs for a replay run.",
             input_schema=_object_schema(
                 {"replay_run_id": {"type": "string"}},
                 required=["replay_run_id"],
@@ -1571,29 +1571,29 @@ def _build_tools(server: KyokoMcpServer) -> dict[str, McpTool]:
             ),
         ),
         McpTool(
-            name="kyoko_generate_evals",
-            title="Generate Kyoko Evals",
-            description="Create eval specs from a validated LearningProposal.",
+            name="kyoko_generate_checks",
+            title="Generate Kyoko Checks",
+            description="Create check specs from a validated LearningProposal.",
             input_schema=_object_schema(
                 {"proposal_id": {"type": "string"}},
                 required=["proposal_id"],
             ),
-            handler=lambda args: _generate_evals(server, args),
+            handler=lambda args: _generate_checks(server, args),
             read_only=False,
             idempotent=True,
         ),
         McpTool(
-            name="kyoko_run_eval",
-            title="Run Kyoko Eval",
-            description="Run a Kyoko eval spec.",
+            name="kyoko_run_check",
+            title="Run Kyoko Check",
+            description="Run a Kyoko check spec.",
             input_schema=_object_schema(
                 {
-                    "eval_spec_id": {"type": "string"},
+                    "check_spec_id": {"type": "string"},
                     "replay_run_id": {"type": "string"},
                 },
-                required=["eval_spec_id"],
+                required=["check_spec_id"],
             ),
-            handler=lambda args: _run_eval(server, args),
+            handler=lambda args: _run_check(server, args),
             read_only=False,
             idempotent=False,
         ),
@@ -1601,13 +1601,13 @@ def _build_tools(server: KyokoMcpServer) -> dict[str, McpTool]:
             name="kyoko_run_judge_command",
             title="Run Kyoko Judge Command",
             description=(
-                "Run an explicit external judge command for a judge eval. "
+                "Run an explicit external judge command for a judge check. "
                 "The command may invoke a live/provider model and the captured "
                 "verdict remains non-gateable."
             ),
             input_schema=_object_schema(
                 {
-                    "eval_spec_id": {"type": "string"},
+                    "check_spec_id": {"type": "string"},
                     "command": {
                         "oneOf": [
                             {"type": "string"},
@@ -1618,7 +1618,7 @@ def _build_tools(server: KyokoMcpServer) -> dict[str, McpTool]:
                     "replay_run_id": {"type": "string"},
                     "timeout_seconds": {"type": "integer", "minimum": 1},
                 },
-                required=["eval_spec_id", "command", "output_dir"],
+                required=["check_spec_id", "command", "output_dir"],
             ),
             handler=lambda args: _run_judge_command(server, args),
             read_only=False,
@@ -1634,14 +1634,14 @@ def _build_tools(server: KyokoMcpServer) -> dict[str, McpTool]:
         McpTool(
             name="kyoko_run_replay_adapter",
             title="Run Kyoko Replay Adapter",
-            description="Run a registered replay adapter for an eval spec and optionally run the eval.",
+            description="Run a registered replay adapter for an check spec and optionally run the check.",
             input_schema=_object_schema(
                 {
                     "adapter_id": {"type": "string"},
-                    "eval_spec_id": {"type": "string"},
-                    "run_eval": {"type": "boolean"},
+                    "check_spec_id": {"type": "string"},
+                    "run_check": {"type": "boolean"},
                 },
-                required=["adapter_id", "eval_spec_id"],
+                required=["adapter_id", "check_spec_id"],
             ),
             handler=lambda args: _run_replay_adapter(server, args),
             read_only=False,
@@ -1652,7 +1652,7 @@ def _build_tools(server: KyokoMcpServer) -> dict[str, McpTool]:
             title="Run Kyoko Improve",
             description=(
                 "Run the non-applying improvement pipeline: optional discovered-source import, "
-                "operator proposal, eval generation, and selected or latest enabled replay. "
+                "operator proposal, check generation, and selected or latest enabled replay. "
                 "MCP improve never runs autonomy/apply."
             ),
             input_schema=_object_schema(
@@ -1747,28 +1747,28 @@ def _submit_proposal(server: KyokoMcpServer, args: dict[str, Any]) -> dict[str, 
     }
 
 
-def _generate_evals(server: KyokoMcpServer, args: dict[str, Any]) -> dict[str, Any]:
+def _generate_checks(server: KyokoMcpServer, args: dict[str, Any]) -> dict[str, Any]:
     proposal_id = _required_string(args, "proposal_id")
-    report = generate_evals_for_proposal(db_path=server.db_path, proposal_id=proposal_id)
+    report = generate_checks_for_proposal(db_path=server.db_path, proposal_id=proposal_id)
     return {
         "proposal_id": report.proposal_id,
         "profile_id": report.profile_id,
-        "eval_spec_ids": list(report.eval_spec_ids),
-        "existing_eval_spec_ids": list(report.existing_eval_spec_ids),
+        "check_spec_ids": list(report.check_spec_ids),
+        "existing_check_spec_ids": list(report.existing_check_spec_ids),
     }
 
 
-def _run_eval(server: KyokoMcpServer, args: dict[str, Any]) -> dict[str, Any]:
-    report = run_eval(
+def _run_check(server: KyokoMcpServer, args: dict[str, Any]) -> dict[str, Any]:
+    report = run_check(
         db_path=server.db_path,
-        eval_spec_id=_required_string(args, "eval_spec_id"),
+        check_spec_id=_required_string(args, "check_spec_id"),
         replay_run_id=_optional_string(args, "replay_run_id"),
     )
     return {
-        "eval_run_id": report.eval_run_id,
+        "check_run_id": report.check_run_id,
         "profile_id": report.profile_id,
         "proposal_id": report.proposal_id,
-        "eval_spec_id": report.eval_spec_id,
+        "check_spec_id": report.check_spec_id,
         "replay_run_id": report.replay_run_id,
         "status": report.status,
         "result": report.result,
@@ -1782,7 +1782,7 @@ def _run_judge_command(server: KyokoMcpServer, args: dict[str, Any]) -> dict[str
         raise McpError("output_dir_required")
     report = run_judge_command(
         db_path=server.db_path,
-        eval_spec_id=_required_string(args, "eval_spec_id"),
+        check_spec_id=_required_string(args, "check_spec_id"),
         output_dir=output_dir,
         command=_required_command(args, "command"),
         replay_run_id=_optional_string(args, "replay_run_id"),
@@ -1795,8 +1795,8 @@ def _run_replay_adapter(server: KyokoMcpServer, args: dict[str, Any]) -> dict[st
     report = run_registered_replay_adapter(
         db_path=server.db_path,
         adapter_id=_required_string(args, "adapter_id"),
-        eval_spec_id=_required_string(args, "eval_spec_id"),
-        run_eval_after=bool(args.get("run_eval", True)),
+        check_spec_id=_required_string(args, "check_spec_id"),
+        run_check_after=bool(args.get("run_check", True)),
     )
     return _replay_report_payload(report)
 
@@ -1907,21 +1907,21 @@ def _prepare_operator_smoke_matrix(server: KyokoMcpServer, args: dict[str, Any])
 
 def _replay_report_payload(report: object) -> dict[str, Any]:
     completion = getattr(report, "completion")
-    eval_run = getattr(report, "eval_run", None)
+    check_run = getattr(report, "check_run", None)
     payload: dict[str, Any] = {
         "replay_run_id": getattr(report, "replay_run_id"),
         "profile_id": getattr(report, "profile_id"),
-        "eval_spec_id": getattr(report, "eval_spec_id"),
+        "check_spec_id": getattr(report, "check_spec_id"),
         "output_run_id": completion.output_run_id,
         "status": completion.status,
         "result": completion.result,
-        "eval_run": {
-            "eval_run_id": eval_run.eval_run_id,
-            "status": eval_run.status,
-            "promoted_trust_level": eval_run.promoted_trust_level,
-            "result": eval_run.result,
+        "check_run": {
+            "check_run_id": check_run.check_run_id,
+            "status": check_run.status,
+            "promoted_trust_level": check_run.promoted_trust_level,
+            "result": check_run.result,
         }
-        if eval_run is not None
+        if check_run is not None
         else None,
     }
     for attr in (
@@ -1952,24 +1952,24 @@ def _replay_report_payload(report: object) -> dict[str, Any]:
 
 
 def _judge_command_payload(report: object) -> dict[str, Any]:
-    eval_run = getattr(report, "eval_run")
+    check_run = getattr(report, "check_run")
     return {
         "profile_id": getattr(report, "profile_id"),
         "proposal_id": getattr(report, "proposal_id"),
-        "eval_spec_id": getattr(report, "eval_spec_id"),
+        "check_spec_id": getattr(report, "check_spec_id"),
         "request_path": str(getattr(report, "request_path")),
         "result_path": str(getattr(report, "result_path")),
         "raw_output_path": str(getattr(report, "raw_output_path")),
         "judgment": getattr(report, "judgment"),
-        "eval_run": {
-            "eval_run_id": eval_run.eval_run_id,
-            "profile_id": eval_run.profile_id,
-            "proposal_id": eval_run.proposal_id,
-            "eval_spec_id": eval_run.eval_spec_id,
-            "replay_run_id": eval_run.replay_run_id,
-            "status": eval_run.status,
-            "result": eval_run.result,
-            "promoted_trust_level": eval_run.promoted_trust_level,
+        "check_run": {
+            "check_run_id": check_run.check_run_id,
+            "profile_id": check_run.profile_id,
+            "proposal_id": check_run.proposal_id,
+            "check_spec_id": check_run.check_spec_id,
+            "replay_run_id": check_run.replay_run_id,
+            "status": check_run.status,
+            "result": check_run.result,
+            "promoted_trust_level": check_run.promoted_trust_level,
         },
     }
 

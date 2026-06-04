@@ -6,9 +6,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
-from .evals import (
+from .checks import (
     SAFE_REPLAY_SIDE_EFFECT_MODES,
-    EvalError,
+    CheckError,
     ReplayCommandReport,
     parse_replay_command,
     run_replay_command,
@@ -203,22 +203,22 @@ def run_registered_replay_adapter(
     *,
     db_path: Path,
     adapter_id: str,
-    eval_spec_id: str,
+    check_spec_id: str,
     output_dir: Optional[Path] = None,
     mode: Optional[str] = None,
     side_effect_mode: Optional[str] = None,
     source_run_id: Optional[str] = None,
     timeout_seconds: Optional[int] = None,
-    run_eval_after: bool = False,
+    run_check_after: bool = False,
 ) -> ReplayCommandReport | ReplayServerRunReport | ManagedReplayServerRunReport:
     initialize_database(db_path)
     with connect(db_path) as connection:
         adapter = _get_adapter(connection, adapter_id)
         if int(adapter["enabled"]) != 1:
             raise ReplayAdapterError(f"replay_adapter_disabled:{adapter_id}")
-        eval_profile_id = _eval_spec_profile_id(connection, eval_spec_id)
-        if eval_profile_id != str(adapter["profile_id"]):
-            raise ReplayAdapterError(f"replay_adapter_profile_mismatch:{adapter_id}:{eval_spec_id}")
+        check_profile_id = _check_spec_profile_id(connection, check_spec_id)
+        if check_profile_id != str(adapter["profile_id"]):
+            raise ReplayAdapterError(f"replay_adapter_profile_mismatch:{adapter_id}:{check_spec_id}")
 
     metadata = _json_loads(adapter["metadata_json"], {})
     adapter_kind = _kind_from_metadata(metadata)
@@ -235,7 +235,7 @@ def run_registered_replay_adapter(
             raise ReplayAdapterError(f"replay_adapter_server_url_missing:{adapter_id}")
         return run_replay_server(
             db_path=db_path,
-            eval_spec_id=eval_spec_id,
+            check_spec_id=check_spec_id,
             server_url=server_url,
             health_path=_metadata_path(metadata, "health_path", DEFAULT_HEALTH_PATH),
             replay_path=_metadata_path(metadata, "replay_path", DEFAULT_REPLAY_PATH),
@@ -243,7 +243,7 @@ def run_registered_replay_adapter(
             side_effect_mode=selected_side_effect_mode,
             source_run_id=source_run_id,
             timeout_seconds=selected_timeout,
-            run_eval_after=run_eval_after,
+            run_check_after=run_check_after,
             allow_remote_server=allow_remote_server,
         )
 
@@ -263,7 +263,7 @@ def run_registered_replay_adapter(
         if server_status.running and server_status.healthy:
             return run_replay_server(
                 db_path=db_path,
-                eval_spec_id=eval_spec_id,
+                check_spec_id=check_spec_id,
                 server_url=server_url,
                 health_path=_metadata_path(metadata, "health_path", DEFAULT_HEALTH_PATH),
                 replay_path=_metadata_path(metadata, "replay_path", DEFAULT_REPLAY_PATH),
@@ -271,13 +271,13 @@ def run_registered_replay_adapter(
                 side_effect_mode=selected_side_effect_mode,
                 source_run_id=source_run_id,
                 timeout_seconds=selected_timeout,
-                run_eval_after=run_eval_after,
+                run_check_after=run_check_after,
                 allow_remote_server=allow_remote_server,
             )
-        selected_output_dir = output_dir or _adapter_output_dir(db_path, adapter, eval_spec_id)
+        selected_output_dir = output_dir or _adapter_output_dir(db_path, adapter, check_spec_id)
         return run_managed_replay_server(
             db_path=db_path,
-            eval_spec_id=eval_spec_id,
+            check_spec_id=check_spec_id,
             command=[str(part) for part in command],
             server_url=server_url,
             output_dir=selected_output_dir,
@@ -289,24 +289,24 @@ def run_registered_replay_adapter(
             timeout_seconds=selected_timeout,
             startup_timeout_seconds=_metadata_int(metadata, "startup_timeout_seconds", 15),
             cwd=_metadata_path_optional(metadata, "cwd"),
-            run_eval_after=run_eval_after,
+            run_check_after=run_check_after,
             allow_remote_server=allow_remote_server,
         )
 
     command = _json_loads(adapter["command_json"], [])
     _validate_command(command)
-    selected_output_dir = output_dir or _adapter_output_dir(db_path, adapter, eval_spec_id)
+    selected_output_dir = output_dir or _adapter_output_dir(db_path, adapter, check_spec_id)
 
     return run_replay_command(
         db_path=db_path,
-        eval_spec_id=eval_spec_id,
+        check_spec_id=check_spec_id,
         output_dir=selected_output_dir,
         command=[str(part) for part in command],
         mode=selected_mode,
         side_effect_mode=selected_side_effect_mode,
         source_run_id=source_run_id,
         timeout_seconds=selected_timeout,
-        run_eval_after=run_eval_after,
+        run_check_after=run_check_after,
     )
 
 
@@ -384,7 +384,7 @@ def stop_registered_replay_server_adapter(
 def parse_adapter_command(command: str) -> list[str]:
     try:
         return parse_replay_command(command)
-    except EvalError as exc:
+    except CheckError as exc:
         raise ReplayAdapterError(str(exc)) from exc
 
 
@@ -398,13 +398,13 @@ def _get_adapter(connection: sqlite3.Connection, adapter_id: str) -> sqlite3.Row
     return row
 
 
-def _eval_spec_profile_id(connection: sqlite3.Connection, eval_spec_id: str) -> str:
+def _check_spec_profile_id(connection: sqlite3.Connection, check_spec_id: str) -> str:
     row = connection.execute(
-        "SELECT profile_id FROM eval_specs WHERE id = ?",
-        (eval_spec_id,),
+        "SELECT profile_id FROM check_specs WHERE id = ?",
+        (check_spec_id,),
     ).fetchone()
     if row is None:
-        raise ReplayAdapterError(f"eval_spec_not_found:{eval_spec_id}")
+        raise ReplayAdapterError(f"check_spec_not_found:{check_spec_id}")
     return str(row["profile_id"])
 
 
@@ -427,13 +427,13 @@ def _managed_server_adapter(*, db_path: Path, adapter_id: str) -> tuple[sqlite3.
     return adapter, metadata
 
 
-def _adapter_output_dir(db_path: Path, adapter: sqlite3.Row, eval_spec_id: str) -> Path:
+def _adapter_output_dir(db_path: Path, adapter: sqlite3.Row, check_spec_id: str) -> Path:
     configured = adapter["output_dir"]
     if isinstance(configured, str) and configured:
         base = Path(configured)
     else:
         base = db_path.parent / DEFAULT_REPLAY_ARTIFACT_DIR
-    return base / str(adapter["id"]) / eval_spec_id
+    return base / str(adapter["id"]) / check_spec_id
 
 
 def _first_profile_id(connection: sqlite3.Connection) -> Optional[str]:

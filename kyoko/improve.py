@@ -13,7 +13,7 @@ from .analyze import (
 )
 from .autonomy import AutonomyError
 from .autonomy_runner import AutonomyRunError, AutonomyRunReport, run_autonomy
-from .evals import EvalError, generate_evals_for_proposal, list_eval_specs
+from .checks import CheckError, generate_checks_for_proposal, list_check_specs
 from .operator_adapters import OperatorAdapterError, run_registered_operator_adapter
 from .replay_adapters import ReplayAdapterError, run_registered_replay_adapter
 from .replay_servers import ReplayServerError
@@ -35,9 +35,9 @@ class ImproveReport:
     proposal_id: str
     operator: Optional[str]
     analyze: Optional[AnalyzeReport]
-    eval_spec_ids: tuple[str, ...]
-    generated_eval_spec_ids: tuple[str, ...]
-    existing_eval_spec_ids: tuple[str, ...]
+    check_spec_ids: tuple[str, ...]
+    generated_check_spec_ids: tuple[str, ...]
+    existing_check_spec_ids: tuple[str, ...]
     replay_runs: tuple[dict[str, Any], ...]
     autonomy: Optional[AutonomyRunReport]
     source_import: Optional[DiscoveredSourceImportReport]
@@ -49,9 +49,9 @@ class ImproveReport:
             "proposal_id": self.proposal_id,
             "operator": self.operator,
             "analyze": _analyze_report_json(self.analyze),
-            "eval_spec_ids": list(self.eval_spec_ids),
-            "generated_eval_spec_ids": list(self.generated_eval_spec_ids),
-            "existing_eval_spec_ids": list(self.existing_eval_spec_ids),
+            "check_spec_ids": list(self.check_spec_ids),
+            "generated_check_spec_ids": list(self.generated_check_spec_ids),
+            "existing_check_spec_ids": list(self.existing_check_spec_ids),
             "replay_runs": list(self.replay_runs),
             "autonomy": self.autonomy.to_json() if self.autonomy is not None else None,
             "source_import": self.source_import.to_json() if self.source_import is not None else None,
@@ -132,41 +132,41 @@ def run_improvement_loop(
         )
 
     notes: list[str] = []
-    generated_eval_spec_ids: tuple[str, ...] = ()
-    existing_eval_spec_ids: tuple[str, ...] = ()
+    generated_check_spec_ids: tuple[str, ...] = ()
+    existing_check_spec_ids: tuple[str, ...] = ()
     try:
-        eval_generation = generate_evals_for_proposal(
+        check_generation = generate_checks_for_proposal(
             db_path=db_path,
             proposal_id=proposal_id,
         )
-        generated_eval_spec_ids = eval_generation.eval_spec_ids
-        existing_eval_spec_ids = eval_generation.existing_eval_spec_ids
-        profile_id = eval_generation.profile_id
-    except EvalError as exc:
-        if str(exc).startswith("no_eval_spec_changes:"):
+        generated_check_spec_ids = check_generation.check_spec_ids
+        existing_check_spec_ids = check_generation.existing_check_spec_ids
+        profile_id = check_generation.profile_id
+    except CheckError as exc:
+        if str(exc).startswith("no_check_spec_changes:"):
             notes.append(str(exc))
         else:
             raise ImproveError(str(exc)) from exc
     except StorageError as exc:
         raise ImproveError(str(exc)) from exc
 
-    eval_spec_ids = _eval_spec_ids_for_proposal(db_path, proposal_id)
+    check_spec_ids = _check_spec_ids_for_proposal(db_path, proposal_id)
     replay_runs: list[dict[str, Any]] = []
     selected_replay_adapter_id = replay_adapter_id or _default_replay_adapter_id(db_path, profile_id)
     if selected_replay_adapter_id is not None:
-        if not eval_spec_ids:
-            notes.append(f"replay_adapter_skipped_no_eval_specs:{selected_replay_adapter_id}")
-        for eval_spec_id in eval_spec_ids:
+        if not check_spec_ids:
+            notes.append(f"replay_adapter_skipped_no_check_specs:{selected_replay_adapter_id}")
+        for check_spec_id in check_spec_ids:
             try:
                 replay_report = run_registered_replay_adapter(
                     db_path=db_path,
                     adapter_id=selected_replay_adapter_id,
-                    eval_spec_id=eval_spec_id,
+                    check_spec_id=check_spec_id,
                     output_dir=replay_output_dir,
                     timeout_seconds=replay_timeout_seconds,
-                    run_eval_after=True,
+                    run_check_after=True,
                 )
-            except (EvalError, ReplayAdapterError, ReplayServerError, StorageError) as exc:
+            except (CheckError, ReplayAdapterError, ReplayServerError, StorageError) as exc:
                 raise ImproveError(str(exc)) from exc
             replay_runs.append(_replay_report_json(replay_report, selected_replay_adapter_id))
 
@@ -191,9 +191,9 @@ def run_improvement_loop(
         proposal_id=proposal_id,
         operator=selected_operator,
         analyze=analyze_report,
-        eval_spec_ids=tuple(eval_spec_ids),
-        generated_eval_spec_ids=generated_eval_spec_ids,
-        existing_eval_spec_ids=existing_eval_spec_ids,
+        check_spec_ids=tuple(check_spec_ids),
+        generated_check_spec_ids=generated_check_spec_ids,
+        existing_check_spec_ids=existing_check_spec_ids,
         replay_runs=tuple(replay_runs),
         autonomy=autonomy_report,
         source_import=source_import_report,
@@ -258,10 +258,10 @@ def _run_analysis(
         raise ImproveError(str(exc)) from exc
 
 
-def _eval_spec_ids_for_proposal(db_path: Path, proposal_id: str) -> tuple[str, ...]:
+def _check_spec_ids_for_proposal(db_path: Path, proposal_id: str) -> tuple[str, ...]:
     return tuple(
         str(spec["id"])
-        for spec in list_eval_specs(db_path)
+        for spec in list_check_specs(db_path)
         if spec.get("proposal_id") == proposal_id
     )
 
@@ -342,22 +342,22 @@ def _analyze_report_json(report: Optional[AnalyzeReport]) -> Optional[dict[str, 
 
 def _replay_report_json(report: object, adapter_id: str) -> dict[str, Any]:
     completion = getattr(report, "completion", None)
-    eval_run = getattr(report, "eval_run", None)
+    check_run = getattr(report, "check_run", None)
     payload: dict[str, Any] = {
         "adapter_id": adapter_id,
         "replay_run_id": getattr(report, "replay_run_id", None),
         "profile_id": getattr(report, "profile_id", None),
-        "eval_spec_id": getattr(report, "eval_spec_id", None),
+        "check_spec_id": getattr(report, "check_spec_id", None),
         "status": getattr(completion, "status", None) if completion is not None else None,
         "output_run_id": getattr(completion, "output_run_id", None)
         if completion is not None
         else None,
-        "eval_run": {
-            "eval_run_id": eval_run.eval_run_id,
-            "status": eval_run.status,
-            "promoted_trust_level": eval_run.promoted_trust_level,
+        "check_run": {
+            "check_run_id": check_run.check_run_id,
+            "status": check_run.status,
+            "promoted_trust_level": check_run.promoted_trust_level,
         }
-        if eval_run is not None
+        if check_run is not None
         else None,
     }
     for attr in ("request_path", "result_path", "raw_output_path", "server_url"):

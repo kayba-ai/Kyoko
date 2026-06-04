@@ -32,9 +32,9 @@ ALLOWED_ACTUAL_SIDE_EFFECT_MODES_BY_REQUEST = {
     "sandboxed_filesystem": {"none", "filesystem_read", "sandboxed_filesystem"},
     "network_mocked": {"none", "network_mocked"},
 }
-EXECUTABLE_EVAL_TYPES = ("deterministic_assertion", "judge", "regression_replay", "smoke_run")
-GATEABLE_EVAL_TYPES = ("deterministic_assertion", "regression_replay")
-EVAL_TRUST_LEVELS = ("L0_generated", "L1_repeated", "L2_regression", "L3_human_approved")
+EXECUTABLE_CHECK_TYPES = ("deterministic_assertion", "judge", "regression_replay", "smoke_run")
+GATEABLE_CHECK_TYPES = ("deterministic_assertion", "regression_replay")
+CHECK_TRUST_LEVELS = ("L0_generated", "L1_repeated", "L2_regression", "L3_human_approved")
 REPLAY_MODES = ("dry_run", "sandbox", "live")
 SCHEMA_SIDE_EFFECT_MODES = (
     "none",
@@ -107,7 +107,7 @@ ASSERTION_PRESET_DEFINITIONS: dict[str, dict[str, Any]] = {
                 "minimum": 0,
             },
         ],
-        "gateable_eval_types": ["deterministic_assertion", "regression_replay"],
+        "gateable_check_types": ["deterministic_assertion", "regression_replay"],
     },
     "replay_handoff_present": {
         "name": "replay_handoff_present",
@@ -122,7 +122,7 @@ ASSERTION_PRESET_DEFINITIONS: dict[str, dict[str, Any]] = {
                 "minimum": 0,
             }
         ],
-        "gateable_eval_types": ["deterministic_assertion", "regression_replay"],
+        "gateable_check_types": ["deterministic_assertion", "regression_replay"],
     },
 }
 SUPPORTED_ASSERTION_PRESETS = tuple(ASSERTION_PRESET_DEFINITIONS)
@@ -132,16 +132,16 @@ BEGIN_JUDGE_RESULT_BLOCK = "BEGIN_KYOKO_JUDGE_RESULT_JSON"
 END_JUDGE_RESULT_BLOCK = "END_KYOKO_JUDGE_RESULT_JSON"
 
 
-class EvalError(Exception):
-    """Raised when eval or replay work cannot be performed."""
+class CheckError(Exception):
+    """Raised when check or replay work cannot be performed."""
 
 
 @dataclass(frozen=True)
-class EvalGenerationReport:
+class CheckGenerationReport:
     proposal_id: str
     profile_id: str
-    eval_spec_ids: tuple[str, ...]
-    existing_eval_spec_ids: tuple[str, ...]
+    check_spec_ids: tuple[str, ...]
+    existing_check_spec_ids: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -149,7 +149,7 @@ class ReplayRunReport:
     replay_run_id: str
     profile_id: str
     proposal_id: Optional[str]
-    eval_spec_id: str
+    check_spec_id: str
     source_run_id: Optional[str]
     mode: str
     side_effect_mode: str
@@ -158,11 +158,11 @@ class ReplayRunReport:
 
 
 @dataclass(frozen=True)
-class EvalRunReport:
-    eval_run_id: str
+class CheckRunReport:
+    check_run_id: str
     profile_id: str
     proposal_id: Optional[str]
-    eval_spec_id: str
+    check_spec_id: str
     replay_run_id: Optional[str]
     status: str
     result: dict[str, Any]
@@ -170,8 +170,8 @@ class EvalRunReport:
 
 
 @dataclass(frozen=True)
-class EvalSpecLockReport:
-    eval_spec_id: str
+class CheckSpecLockReport:
+    check_spec_id: str
     profile_id: str
     human_locked: bool
     reason: Optional[str]
@@ -179,7 +179,7 @@ class EvalSpecLockReport:
 
     def to_json(self) -> dict[str, Any]:
         return {
-            "eval_spec_id": self.eval_spec_id,
+            "check_spec_id": self.check_spec_id,
             "profile_id": self.profile_id,
             "human_locked": self.human_locked,
             "reason": self.reason,
@@ -188,8 +188,8 @@ class EvalSpecLockReport:
 
 
 @dataclass(frozen=True)
-class EvalSpecApprovalReport:
-    eval_spec_id: str
+class CheckSpecApprovalReport:
+    check_spec_id: str
     profile_id: str
     previous_trust_level: str
     trust_level: str
@@ -198,7 +198,7 @@ class EvalSpecApprovalReport:
 
     def to_json(self) -> dict[str, Any]:
         return {
-            "eval_spec_id": self.eval_spec_id,
+            "check_spec_id": self.check_spec_id,
             "profile_id": self.profile_id,
             "previous_trust_level": self.previous_trust_level,
             "trust_level": self.trust_level,
@@ -211,7 +211,7 @@ class EvalSpecApprovalReport:
 class ReplayCompletionReport:
     replay_run_id: str
     profile_id: str
-    eval_spec_id: str
+    check_spec_id: str
     output_run_id: str
     status: str
     result: dict[str, Any]
@@ -222,24 +222,24 @@ class ReplayCompletionReport:
 class ReplayCommandReport:
     replay_run_id: str
     profile_id: str
-    eval_spec_id: str
+    check_spec_id: str
     request_path: Path
     result_path: Path
     raw_output_path: Path
     completion: ReplayCompletionReport
-    eval_run: Optional[EvalRunReport]
+    check_run: Optional[CheckRunReport]
 
 
 @dataclass(frozen=True)
 class JudgeCommandReport:
     profile_id: str
     proposal_id: Optional[str]
-    eval_spec_id: str
+    check_spec_id: str
     request_path: Path
     result_path: Path
     raw_output_path: Path
     judgment: dict[str, Any]
-    eval_run: EvalRunReport
+    check_run: CheckRunReport
 
 
 def list_assertion_presets() -> list[dict[str, Any]]:
@@ -249,9 +249,9 @@ def list_assertion_presets() -> list[dict[str, Any]]:
     ]
 
 
-def list_eval_capabilities() -> dict[str, Any]:
+def list_check_capabilities() -> dict[str, Any]:
     return {
-        "eval_types": [
+        "check_types": [
             {
                 "name": "deterministic_assertion",
                 "storage": True,
@@ -289,8 +289,8 @@ def list_eval_capabilities() -> dict[str, Any]:
                 "notes": "Runs informational checks over an already-recorded source run or replay output run.",
             },
         ],
-        "executable_eval_types": list(EXECUTABLE_EVAL_TYPES),
-        "gateable_eval_types": list(GATEABLE_EVAL_TYPES),
+        "executable_check_types": list(EXECUTABLE_CHECK_TYPES),
+        "gateable_check_types": list(GATEABLE_CHECK_TYPES),
         "trust_levels": [
             {"name": "L0_generated", "gateable": False, "set_by": "proposal_or_generation"},
             {"name": "L1_repeated", "gateable": True, "set_by": "automatic_repeated_deterministic_results"},
@@ -346,44 +346,44 @@ def list_eval_capabilities() -> dict[str, Any]:
     }
 
 
-def generate_evals_for_proposal(*, db_path: Path, proposal_id: str) -> EvalGenerationReport:
+def generate_checks_for_proposal(*, db_path: Path, proposal_id: str) -> CheckGenerationReport:
     initialize_database(db_path)
     with connect(db_path) as connection:
         proposal = _get_proposal(connection, proposal_id)
         profile_id = str(proposal["profile_id"])
-        _ensure_eval_write_allowed(connection, profile_id)
-        _ensure_kyoko_source(connection, profile_id, {"evals": True, "replay": True})
+        _ensure_check_write_allowed(connection, profile_id)
+        _ensure_kyoko_source(connection, profile_id, {"checks": True, "replay": True})
 
         changes = _json_loads(proposal["proposed_changes_json"], [])
         if not isinstance(changes, list):
             changes = []
-        eval_changes = [
-            change for change in changes if isinstance(change, dict) and change.get("type") == "eval_spec"
+        check_changes = [
+            change for change in changes if isinstance(change, dict) and change.get("type") == "check_spec"
         ]
-        if not eval_changes:
-            eval_changes = _fallback_eval_changes(proposal, changes)
-        if not eval_changes:
-            raise EvalError(f"no_eval_spec_changes:{proposal_id}")
+        if not check_changes:
+            check_changes = _fallback_check_changes(proposal, changes)
+        if not check_changes:
+            raise CheckError(f"no_check_spec_changes:{proposal_id}")
 
         created_ids: list[str] = []
         existing_ids: list[str] = []
-        for index, change in enumerate(eval_changes, start=1):
-            eval_spec_id = _eval_spec_id(proposal_id, index, change)
-            if _row_exists(connection, "eval_specs", eval_spec_id):
-                existing_ids.append(eval_spec_id)
+        for index, change in enumerate(check_changes, start=1):
+            check_spec_id = _check_spec_id(proposal_id, index, change)
+            if _row_exists(connection, "check_specs", check_spec_id):
+                existing_ids.append(check_spec_id)
                 continue
 
             now = utc_now()
-            target = _target_for_eval(proposal, change)
-            definition = _definition_for_eval(proposal, change)
+            target = _target_for_check(proposal, change)
+            definition = _definition_for_check(proposal, change)
             connection.execute(
                 """
-                INSERT INTO eval_specs (
+                INSERT INTO check_specs (
                   id,
                   profile_id,
                   proposal_id,
                   name,
-                  eval_type,
+                  check_type,
                   trust_level,
                   side_effect_mode,
                   target_json,
@@ -395,11 +395,11 @@ def generate_evals_for_proposal(*, db_path: Path, proposal_id: str) -> EvalGener
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    eval_spec_id,
+                    check_spec_id,
                     profile_id,
                     proposal_id,
                     _required_string(change, "name"),
-                    _required_string(change, "eval_type"),
+                    _required_string(change, "check_type"),
                     _required_string(change, "trust_level"),
                     _required_string(change, "side_effect_mode"),
                     _json_dumps(target),
@@ -411,53 +411,53 @@ def generate_evals_for_proposal(*, db_path: Path, proposal_id: str) -> EvalGener
             )
             _insert_timeline_event(
                 connection,
-                event_id=f"event_{eval_spec_id}_created",
+                event_id=f"event_{check_spec_id}_created",
                 profile_id=profile_id,
-                entity_type="eval_spec",
-                entity_id=eval_spec_id,
-                kind="eval_spec_created",
+                entity_type="check_spec",
+                entity_id=check_spec_id,
+                kind="check_spec_created",
                 at=now,
                 metadata={"proposal_id": proposal_id, "trust_level": change["trust_level"]},
             )
-            created_ids.append(eval_spec_id)
+            created_ids.append(check_spec_id)
 
-    return EvalGenerationReport(
+    return CheckGenerationReport(
         proposal_id=proposal_id,
         profile_id=profile_id,
-        eval_spec_ids=tuple(created_ids),
-        existing_eval_spec_ids=tuple(existing_ids),
+        check_spec_ids=tuple(created_ids),
+        existing_check_spec_ids=tuple(existing_ids),
     )
 
 
 def create_replay_run(
     *,
     db_path: Path,
-    eval_spec_id: str,
+    check_spec_id: str,
     mode: str = "dry_run",
     side_effect_mode: Optional[str] = None,
     source_run_id: Optional[str] = None,
 ) -> ReplayRunReport:
     initialize_database(db_path)
     with connect(db_path) as connection:
-        eval_spec = _get_eval_spec(connection, eval_spec_id)
-        profile_id = str(eval_spec["profile_id"])
-        proposal_id = eval_spec["proposal_id"] if eval_spec["proposal_id"] is not None else None
-        _ensure_kyoko_source(connection, profile_id, {"evals": True, "replay": True})
-        selected_side_effect_mode = side_effect_mode or str(eval_spec["side_effect_mode"])
+        check_spec = _get_check_spec(connection, check_spec_id)
+        profile_id = str(check_spec["profile_id"])
+        proposal_id = check_spec["proposal_id"] if check_spec["proposal_id"] is not None else None
+        _ensure_kyoko_source(connection, profile_id, {"checks": True, "replay": True})
+        selected_side_effect_mode = side_effect_mode or str(check_spec["side_effect_mode"])
         _validate_replay_boundary(mode=mode, side_effect_mode=selected_side_effect_mode)
 
-        target = _json_loads(eval_spec["target_json"], {})
+        target = _json_loads(check_spec["target_json"], {})
         selected_source_run_id = source_run_id or _source_run_for_target(connection, target)
         if selected_source_run_id is not None and not _row_exists(connection, "runs", selected_source_run_id):
-            raise EvalError(f"source_run_not_found:{selected_source_run_id}")
+            raise CheckError(f"source_run_not_found:{selected_source_run_id}")
 
         now = utc_now()
         replay_run_id = _next_numbered_id(
             connection,
             table="replay_runs",
-            prefix=f"replay_{eval_spec_id}",
-            where_column="eval_spec_id",
-            where_value=eval_spec_id,
+            prefix=f"replay_{check_spec_id}",
+            where_column="check_spec_id",
+            where_value=check_spec_id,
         )
         result = {
             "executed_agent": False,
@@ -473,7 +473,7 @@ def create_replay_run(
               id,
               profile_id,
               proposal_id,
-              eval_spec_id,
+              check_spec_id,
               source_run_id,
               task_attempt_id,
               mode,
@@ -494,7 +494,7 @@ def create_replay_run(
                 replay_run_id,
                 profile_id,
                 proposal_id,
-                eval_spec_id,
+                check_spec_id,
                 selected_source_run_id,
                 _task_attempt_for_source_run(connection, selected_source_run_id),
                 mode,
@@ -518,14 +518,14 @@ def create_replay_run(
             entity_id=replay_run_id,
             kind="replay_run_completed",
             at=now,
-            metadata={"eval_spec_id": eval_spec_id, "mode": mode},
+            metadata={"check_spec_id": check_spec_id, "mode": mode},
         )
 
     return ReplayRunReport(
         replay_run_id=replay_run_id,
         profile_id=profile_id,
         proposal_id=str(proposal_id) if proposal_id is not None else None,
-        eval_spec_id=eval_spec_id,
+        check_spec_id=check_spec_id,
         source_run_id=selected_source_run_id,
         mode=mode,
         side_effect_mode=selected_side_effect_mode,
@@ -534,40 +534,40 @@ def create_replay_run(
     )
 
 
-def run_eval(
+def run_check(
     *,
     db_path: Path,
-    eval_spec_id: str,
+    check_spec_id: str,
     replay_run_id: Optional[str] = None,
-) -> EvalRunReport:
+) -> CheckRunReport:
     initialize_database(db_path)
     with connect(db_path) as connection:
-        eval_spec = _get_eval_spec(connection, eval_spec_id)
-        profile_id = str(eval_spec["profile_id"])
-        proposal_id = eval_spec["proposal_id"] if eval_spec["proposal_id"] is not None else None
-        _ensure_kyoko_source(connection, profile_id, {"evals": True, "replay": True})
+        check_spec = _get_check_spec(connection, check_spec_id)
+        profile_id = str(check_spec["profile_id"])
+        proposal_id = check_spec["proposal_id"] if check_spec["proposal_id"] is not None else None
+        _ensure_kyoko_source(connection, profile_id, {"checks": True, "replay": True})
 
         replay_row = None
         if replay_run_id is not None:
             replay_row = _get_replay_run(connection, replay_run_id)
-            if str(replay_row["eval_spec_id"]) != eval_spec_id:
-                raise EvalError(f"replay_eval_mismatch:{replay_run_id}:{eval_spec_id}")
+            if str(replay_row["check_spec_id"]) != check_spec_id:
+                raise CheckError(f"replay_check_mismatch:{replay_run_id}:{check_spec_id}")
 
         now = utc_now()
-        eval_run_id = _next_numbered_id(
+        check_run_id = _next_numbered_id(
             connection,
-            table="eval_runs",
-            prefix=f"evalrun_{eval_spec_id}",
-            where_column="eval_spec_id",
-            where_value=eval_spec_id,
+            table="check_runs",
+            prefix=f"checkrun_{check_spec_id}",
+            where_column="check_spec_id",
+            where_value=check_spec_id,
         )
-        status, result = _evaluate(connection, eval_spec, replay_row)
+        status, result = _evaluate(connection, check_spec, replay_row)
         connection.execute(
             """
-            INSERT INTO eval_runs (
+            INSERT INTO check_runs (
               id,
               profile_id,
-              eval_spec_id,
+              check_spec_id,
               proposal_id,
               replay_run_id,
               status,
@@ -581,9 +581,9 @@ def run_eval(
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                eval_run_id,
+                check_run_id,
                 profile_id,
-                eval_spec_id,
+                check_spec_id,
                 proposal_id,
                 replay_run_id,
                 status,
@@ -595,27 +595,27 @@ def run_eval(
                 now,
             ),
         )
-        promoted_trust_level = _maybe_promote_trust_level(connection, eval_spec, status, result, now)
+        promoted_trust_level = _maybe_promote_trust_level(connection, check_spec, status, result, now)
         _insert_timeline_event(
             connection,
-            event_id=f"event_{eval_run_id}_{status}",
+            event_id=f"event_{check_run_id}_{status}",
             profile_id=profile_id,
-            entity_type="eval_run",
-            entity_id=eval_run_id,
-            kind=f"eval_run_{status}",
+            entity_type="check_run",
+            entity_id=check_run_id,
+            kind=f"check_run_{status}",
             at=now,
             metadata={
-                "eval_spec_id": eval_spec_id,
+                "check_spec_id": check_spec_id,
                 "replay_run_id": replay_run_id,
                 "promoted_trust_level": promoted_trust_level,
             },
         )
 
-    return EvalRunReport(
-        eval_run_id=eval_run_id,
+    return CheckRunReport(
+        check_run_id=check_run_id,
         profile_id=profile_id,
         proposal_id=str(proposal_id) if proposal_id is not None else None,
-        eval_spec_id=eval_spec_id,
+        check_spec_id=check_spec_id,
         replay_run_id=replay_run_id,
         status=status,
         result=result,
@@ -648,31 +648,31 @@ def complete_replay_from_payload(
     initialize_database(db_path)
     replay_payload = fixture.get("replay")
     if not isinstance(replay_payload, dict):
-        raise EvalError(f"{source_label}: missing replay object")
+        raise CheckError(f"{source_label}: missing replay object")
 
     expected_replay_run_id = replay_payload.get("replay_run_id")
     if isinstance(expected_replay_run_id, str) and expected_replay_run_id != replay_run_id:
-        raise EvalError(f"replay_fixture_id_mismatch:{expected_replay_run_id}:{replay_run_id}")
+        raise CheckError(f"replay_fixture_id_mismatch:{expected_replay_run_id}:{replay_run_id}")
 
     output_run_id = replay_payload.get("output_run_id")
     if not isinstance(output_run_id, str) or not output_run_id:
-        raise EvalError("replay_output_run_id_required")
+        raise CheckError("replay_output_run_id_required")
 
     actual_side_effect_mode = replay_payload.get("actual_side_effect_mode", "unknown")
     if actual_side_effect_mode not in SAFE_REPLAY_SIDE_EFFECT_MODES:
-        raise EvalError(f"unsafe_replay_side_effect_mode:{actual_side_effect_mode}")
+        raise CheckError(f"unsafe_replay_side_effect_mode:{actual_side_effect_mode}")
 
     with connect(db_path) as connection:
         replay_row = _get_replay_run(connection, replay_run_id)
         profile_id = str(replay_row["profile_id"])
-        eval_spec_id = str(replay_row["eval_spec_id"])
+        check_spec_id = str(replay_row["check_spec_id"])
         requested_side_effect_mode = str(replay_row["side_effect_mode"])
         _validate_actual_replay_side_effect_mode(
             requested_side_effect_mode=requested_side_effect_mode,
             actual_side_effect_mode=str(actual_side_effect_mode),
         )
         if fixture.get("profile", {}).get("id") != profile_id:
-            raise EvalError(f"replay_profile_mismatch:{source_label}:{profile_id}")
+            raise CheckError(f"replay_profile_mismatch:{source_label}:{profile_id}")
 
     ingest_report = ingest_source_payload(
         db_path=db_path,
@@ -683,10 +683,10 @@ def complete_replay_from_payload(
     with connect(db_path) as connection:
         replay_row = _get_replay_run(connection, replay_run_id)
         if not _row_exists(connection, "runs", output_run_id):
-            raise EvalError(f"replay_output_run_not_found:{output_run_id}")
+            raise CheckError(f"replay_output_run_not_found:{output_run_id}")
         status = str(replay_payload.get("status") or "passed")
         if status not in {"passed", "failed", "errored", "cancelled"}:
-            raise EvalError(f"unsupported_replay_completion_status:{status}")
+            raise CheckError(f"unsupported_replay_completion_status:{status}")
 
         now = utc_now()
         previous_result = _json_loads(replay_row["result_json"], {})
@@ -720,13 +720,13 @@ def complete_replay_from_payload(
             entity_id=replay_run_id,
             kind="replay_run_fixture_completed",
             at=now,
-            metadata={"eval_spec_id": replay_row["eval_spec_id"], "output_run_id": output_run_id},
+            metadata={"check_spec_id": replay_row["check_spec_id"], "output_run_id": output_run_id},
         )
 
     return ReplayCompletionReport(
         replay_run_id=replay_run_id,
         profile_id=str(replay_row["profile_id"]),
-        eval_spec_id=str(replay_row["eval_spec_id"]),
+        check_spec_id=str(replay_row["check_spec_id"]),
         output_run_id=output_run_id,
         status=status,
         result=result,
@@ -757,7 +757,7 @@ def complete_replay_from_server_response(
 
     output_run_id = response.get("run_id") or response.get("output_run_id")
     if not isinstance(output_run_id, str) or not output_run_id:
-        raise EvalError(f"{source_label}: replay server response missing run_id")
+        raise CheckError(f"{source_label}: replay server response missing run_id")
 
     actual_side_effect_mode = (
         response.get("actual_side_effect_mode")
@@ -766,7 +766,7 @@ def complete_replay_from_server_response(
         or "unknown"
     )
     if actual_side_effect_mode not in SAFE_REPLAY_SIDE_EFFECT_MODES:
-        raise EvalError(f"unsafe_replay_side_effect_mode:{actual_side_effect_mode}")
+        raise CheckError(f"unsafe_replay_side_effect_mode:{actual_side_effect_mode}")
 
     raw_status = str(response.get("status") or "passed")
     status = {
@@ -776,9 +776,9 @@ def complete_replay_from_server_response(
         "succeeded": "passed",
     }.get(raw_status, raw_status)
     if status not in {"passed", "failed", "errored", "cancelled"}:
-        raise EvalError(f"unsupported_replay_completion_status:{status}")
+        raise CheckError(f"unsupported_replay_completion_status:{status}")
     if status != "passed":
-        raise EvalError(f"replay_server_returned_status:{status}")
+        raise CheckError(f"replay_server_returned_status:{status}")
 
     with connect(db_path) as connection:
         replay_row = _get_replay_run(connection, replay_run_id)
@@ -788,10 +788,10 @@ def complete_replay_from_server_response(
             actual_side_effect_mode=str(actual_side_effect_mode),
         )
         if not _row_exists(connection, "runs", output_run_id):
-            raise EvalError(f"replay_output_run_not_found:{output_run_id}")
+            raise CheckError(f"replay_output_run_not_found:{output_run_id}")
 
         profile_id = str(replay_row["profile_id"])
-        eval_spec_id = str(replay_row["eval_spec_id"])
+        check_spec_id = str(replay_row["check_spec_id"])
     response_blob = put_json_blob(
         db_path=db_path,
         payload=response,
@@ -800,7 +800,7 @@ def complete_replay_from_server_response(
         redaction_mode="redacted",
         metadata={
             "replay_run_id": replay_run_id,
-            "eval_spec_id": eval_spec_id,
+            "check_spec_id": check_spec_id,
             "output_run_id": output_run_id,
             "source_label": source_label,
         },
@@ -842,13 +842,13 @@ def complete_replay_from_server_response(
             entity_id=replay_run_id,
             kind="replay_run_server_completed",
             at=now,
-            metadata={"eval_spec_id": eval_spec_id, "output_run_id": output_run_id},
+            metadata={"check_spec_id": check_spec_id, "output_run_id": output_run_id},
         )
 
     return ReplayCompletionReport(
         replay_run_id=replay_run_id,
         profile_id=profile_id,
-        eval_spec_id=eval_spec_id,
+        check_spec_id=check_spec_id,
         output_run_id=output_run_id,
         status=status,
         result=result,
@@ -884,31 +884,31 @@ def _validate_replay_server_response_identity(
                 identities.append((f"replay.{key}", value))
 
     if not identities:
-        raise EvalError(f"{source_label}: replay_server_identity_required:{replay_run_id}")
+        raise CheckError(f"{source_label}: replay_server_identity_required:{replay_run_id}")
     for key, value in identities:
         if value != replay_run_id:
-            raise EvalError(f"replay_server_identity_mismatch:{key}:{value}:{replay_run_id}")
+            raise CheckError(f"replay_server_identity_mismatch:{key}:{value}:{replay_run_id}")
 
 
 def run_replay_command(
     *,
     db_path: Path,
-    eval_spec_id: str,
+    check_spec_id: str,
     output_dir: Path,
     command: Sequence[str],
     mode: str = "dry_run",
     side_effect_mode: Optional[str] = None,
     source_run_id: Optional[str] = None,
     timeout_seconds: int = 120,
-    run_eval_after: bool = False,
+    run_check_after: bool = False,
 ) -> ReplayCommandReport:
     if not command:
-        raise EvalError("replay_command_required")
+        raise CheckError("replay_command_required")
 
     output_dir.mkdir(parents=True, exist_ok=True)
     replay = create_replay_run(
         db_path=db_path,
-        eval_spec_id=eval_spec_id,
+        check_spec_id=check_spec_id,
         mode=mode,
         side_effect_mode=side_effect_mode,
         source_run_id=source_run_id,
@@ -933,7 +933,7 @@ def run_replay_command(
     env = os.environ.copy()
     env["KYOKO_REPLAY_REQUEST_PATH"] = str(request_path)
     env["KYOKO_REPLAY_RUN_ID"] = replay.replay_run_id
-    env["KYOKO_EVAL_SPEC_ID"] = eval_spec_id
+    env["KYOKO_CHECK_SPEC_ID"] = check_spec_id
     if replay.source_run_id is not None:
         env["KYOKO_SOURCE_RUN_ID"] = replay.source_run_id
 
@@ -948,10 +948,10 @@ def run_replay_command(
         )
     except FileNotFoundError as exc:
         _mark_replay_errored(db_path, replay.replay_run_id, f"replay_command_not_found:{command[0]}")
-        raise EvalError(f"replay_command_not_found:{command[0]}") from exc
+        raise CheckError(f"replay_command_not_found:{command[0]}") from exc
     except subprocess.TimeoutExpired as exc:
         _mark_replay_errored(db_path, replay.replay_run_id, f"replay_command_timeout:{timeout_seconds}")
-        raise EvalError(f"replay_command_timeout:{timeout_seconds}") from exc
+        raise CheckError(f"replay_command_timeout:{timeout_seconds}") from exc
 
     raw_output = completed.stdout
     if completed.stderr:
@@ -968,7 +968,7 @@ def run_replay_command(
 
     if completed.returncode != 0:
         _mark_replay_errored(db_path, replay.replay_run_id, f"replay_command_failed:{completed.returncode}")
-        raise EvalError(f"replay_command_failed:{completed.returncode}")
+        raise CheckError(f"replay_command_failed:{completed.returncode}")
 
     try:
         replay_result = extract_replay_result_from_output(completed.stdout)
@@ -988,47 +988,47 @@ def run_replay_command(
             fixture=replay_result,
             source_label=str(result_path),
         )
-        eval_run = (
-            run_eval(
+        check_run = (
+            run_check(
                 db_path=db_path,
-                eval_spec_id=eval_spec_id,
+                check_spec_id=check_spec_id,
                 replay_run_id=replay.replay_run_id,
             )
-            if run_eval_after
+            if run_check_after
             else None
         )
-    except EvalError as exc:
+    except CheckError as exc:
         _mark_replay_errored(db_path, replay.replay_run_id, str(exc))
         raise
 
     return ReplayCommandReport(
         replay_run_id=replay.replay_run_id,
         profile_id=replay.profile_id,
-        eval_spec_id=eval_spec_id,
+        check_spec_id=check_spec_id,
         request_path=request_path,
         result_path=result_path,
         raw_output_path=raw_output_path,
         completion=completion,
-        eval_run=eval_run,
+        check_run=check_run,
     )
 
 
 def run_judge_command(
     *,
     db_path: Path,
-    eval_spec_id: str,
+    check_spec_id: str,
     output_dir: Path,
     command: Sequence[str],
     replay_run_id: Optional[str] = None,
     timeout_seconds: int = 120,
 ) -> JudgeCommandReport:
     if not command:
-        raise EvalError("judge_command_required")
+        raise CheckError("judge_command_required")
 
     output_dir.mkdir(parents=True, exist_ok=True)
     request = build_judge_request(
         db_path=db_path,
-        eval_spec_id=eval_spec_id,
+        check_spec_id=check_spec_id,
         replay_run_id=replay_run_id,
         redaction_consumer="judge:command",
     )
@@ -1039,7 +1039,7 @@ def run_judge_command(
 
     env = os.environ.copy()
     env["KYOKO_JUDGE_REQUEST_PATH"] = str(request_path)
-    env["KYOKO_EVAL_SPEC_ID"] = eval_spec_id
+    env["KYOKO_CHECK_SPEC_ID"] = check_spec_id
     env["KYOKO_PROFILE_ID"] = str(request["profile_id"])
     env["KYOKO_JUDGE_RESULT_BLOCK_BEGIN"] = BEGIN_JUDGE_RESULT_BLOCK
     env["KYOKO_JUDGE_RESULT_BLOCK_END"] = END_JUDGE_RESULT_BLOCK
@@ -1057,9 +1057,9 @@ def run_judge_command(
             env=env,
         )
     except FileNotFoundError as exc:
-        raise EvalError(f"judge_command_not_found:{command[0]}") from exc
+        raise CheckError(f"judge_command_not_found:{command[0]}") from exc
     except subprocess.TimeoutExpired as exc:
-        raise EvalError(f"judge_command_timeout:{timeout_seconds}") from exc
+        raise CheckError(f"judge_command_timeout:{timeout_seconds}") from exc
 
     raw_output = completed.stdout
     if completed.stderr:
@@ -1067,7 +1067,7 @@ def run_judge_command(
     raw_output_path.write_text(raw_output)
 
     if completed.returncode != 0:
-        raise EvalError(f"judge_command_failed:{completed.returncode}")
+        raise CheckError(f"judge_command_failed:{completed.returncode}")
 
     judge_result = extract_judge_result_from_output(completed.stdout)
     result_path.write_text(json.dumps(judge_result, indent=2, sort_keys=True) + "\n")
@@ -1078,54 +1078,54 @@ def run_judge_command(
     ]
     judgment = record_external_judge_result(
         db_path=db_path,
-        eval_spec_id=eval_spec_id,
+        check_spec_id=check_spec_id,
         judge_result=judge_result,
         artifact_refs=artifacts,
     )
-    eval_run = run_eval(
+    check_run = run_check(
         db_path=db_path,
-        eval_spec_id=eval_spec_id,
+        check_spec_id=check_spec_id,
         replay_run_id=replay_run_id,
     )
-    _merge_eval_run_artifacts(
+    _merge_check_run_artifacts(
         db_path=db_path,
-        eval_run_id=eval_run.eval_run_id,
+        check_run_id=check_run.check_run_id,
         artifacts=artifacts,
     )
     return JudgeCommandReport(
-        profile_id=eval_run.profile_id,
-        proposal_id=eval_run.proposal_id,
-        eval_spec_id=eval_spec_id,
+        profile_id=check_run.profile_id,
+        proposal_id=check_run.proposal_id,
+        check_spec_id=check_spec_id,
         request_path=request_path,
         result_path=result_path,
         raw_output_path=raw_output_path,
         judgment=judgment,
-        eval_run=eval_run,
+        check_run=check_run,
     )
 
 
 def build_judge_request(
     *,
     db_path: Path,
-    eval_spec_id: str,
+    check_spec_id: str,
     replay_run_id: Optional[str] = None,
     redaction_consumer: str = "judge",
 ) -> dict[str, Any]:
     initialize_database(db_path)
     with connect(db_path) as connection:
-        eval_spec = _get_eval_spec(connection, eval_spec_id)
-        if str(eval_spec["eval_type"]) != "judge":
-            raise EvalError(f"judge_command_requires_judge_eval:{eval_spec_id}")
-        profile_id = str(eval_spec["profile_id"])
-        target = _json_loads(eval_spec["target_json"], {})
-        definition = _judge_definition(_json_loads(eval_spec["definition_json"], {}))
-        proposal_id = eval_spec["proposal_id"] if eval_spec["proposal_id"] is not None else None
+        check_spec = _get_check_spec(connection, check_spec_id)
+        if str(check_spec["check_type"]) != "judge":
+            raise CheckError(f"judge_command_requires_judge_check:{check_spec_id}")
+        profile_id = str(check_spec["profile_id"])
+        target = _json_loads(check_spec["target_json"], {})
+        definition = _judge_definition(_json_loads(check_spec["definition_json"], {}))
+        proposal_id = check_spec["proposal_id"] if check_spec["proposal_id"] is not None else None
         proposal = _decode_row(_get_proposal(connection, str(proposal_id))) if proposal_id is not None else None
         replay_row = None
         if replay_run_id is not None:
             replay_row = _get_replay_run(connection, replay_run_id)
-            if str(replay_row["eval_spec_id"]) != eval_spec_id:
-                raise EvalError(f"replay_eval_mismatch:{replay_run_id}:{eval_spec_id}")
+            if str(replay_row["check_spec_id"]) != check_spec_id:
+                raise CheckError(f"replay_check_mismatch:{replay_run_id}:{check_spec_id}")
         target_run_id = _target_run_id(connection, target)
 
     from .evidence import build_evidence_bundle
@@ -1139,7 +1139,7 @@ def build_judge_request(
     judge_request = {
         "schema_version": "kyoko.judge_request.v1",
         "profile_id": profile_id,
-        "eval_spec": _decode_row(eval_spec),
+        "check_spec": _decode_row(check_spec),
         "target": target,
         "definition": definition,
         "proposal": proposal,
@@ -1148,7 +1148,7 @@ def build_judge_request(
         "judge_contract": {
             "stdout_begin": BEGIN_JUDGE_RESULT_BLOCK,
             "stdout_end": END_JUDGE_RESULT_BLOCK,
-            "required_eval_spec_id": eval_spec_id,
+            "required_check_spec_id": check_spec_id,
             "result_schema_version": "kyoko.judge_result.v1",
         },
     }
@@ -1159,28 +1159,28 @@ def build_judge_request(
         if isinstance(redaction, dict):
             redaction["consumer"] = redaction_consumer
     except RedactionError as exc:
-        raise EvalError(str(exc)) from exc
+        raise CheckError(str(exc)) from exc
     return result.payload
 
 
 def record_external_judge_result(
     *,
     db_path: Path,
-    eval_spec_id: str,
+    check_spec_id: str,
     judge_result: dict[str, Any],
     artifact_refs: Sequence[dict[str, Any]] = (),
 ) -> dict[str, Any]:
     initialize_database(db_path)
     if not isinstance(judge_result, dict):
-        raise EvalError("judge_result_must_be_object")
+        raise CheckError("judge_result_must_be_object")
     with connect(db_path) as connection:
-        eval_spec = _get_eval_spec(connection, eval_spec_id)
-        if str(eval_spec["eval_type"]) != "judge":
-            raise EvalError(f"judge_result_requires_judge_eval:{eval_spec_id}")
-        definition = _json_loads(eval_spec["definition_json"], {})
+        check_spec = _get_check_spec(connection, check_spec_id)
+        if str(check_spec["check_type"]) != "judge":
+            raise CheckError(f"judge_result_requires_judge_check:{check_spec_id}")
+        definition = _json_loads(check_spec["definition_json"], {})
         judgment = _external_judgment(judge_result)
         if _judge_verdict(judgment) is None:
-            raise EvalError("judge_verdict_required")
+            raise CheckError("judge_verdict_required")
         clean_artifacts = [
             artifact
             for artifact in artifact_refs
@@ -1202,12 +1202,12 @@ def record_external_judge_result(
         }
         connection.execute(
             """
-            UPDATE eval_specs
+            UPDATE check_specs
             SET definition_json = ?,
                 updated_at = ?
             WHERE id = ?
             """,
-            (_json_dumps(definition), now, eval_spec_id),
+            (_json_dumps(definition), now, check_spec_id),
         )
     return judgment
 
@@ -1254,19 +1254,19 @@ def _merge_replay_artifacts(
         )
 
 
-def _merge_eval_run_artifacts(
+def _merge_check_run_artifacts(
     *,
     db_path: Path,
-    eval_run_id: str,
+    check_run_id: str,
     artifacts: Sequence[dict[str, Any]],
 ) -> None:
     with connect(db_path) as connection:
         row = connection.execute(
-            "SELECT artifact_refs_json FROM eval_runs WHERE id = ?",
-            (eval_run_id,),
+            "SELECT artifact_refs_json FROM check_runs WHERE id = ?",
+            (check_run_id,),
         ).fetchone()
         if row is None:
-            raise EvalError(f"eval_run_not_found:{eval_run_id}")
+            raise CheckError(f"check_run_not_found:{check_run_id}")
         existing = _json_loads(row["artifact_refs_json"], [])
         merged: dict[tuple[str, str], dict[str, Any]] = {}
         if isinstance(existing, list):
@@ -1284,12 +1284,12 @@ def _merge_eval_run_artifacts(
                 merged[(kind, path)] = artifact
         connection.execute(
             """
-            UPDATE eval_runs
+            UPDATE check_runs
             SET artifact_refs_json = ?,
                 updated_at = ?
             WHERE id = ?
             """,
-            (_json_dumps(list(merged.values())), utc_now(), eval_run_id),
+            (_json_dumps(list(merged.values())), utc_now(), check_run_id),
         )
 
 
@@ -1303,7 +1303,7 @@ def build_replay_request(
     initialize_database(db_path)
     with connect(db_path) as connection:
         replay_row = _get_replay_run(connection, replay_run_id)
-        eval_spec = _get_eval_spec(connection, str(replay_row["eval_spec_id"]))
+        check_spec = _get_check_spec(connection, str(replay_row["check_spec_id"]))
         profile_id = str(replay_row["profile_id"])
         source_run_id = replay_row["source_run_id"] if replay_row["source_run_id"] is not None else None
         source_run = _one(
@@ -1326,7 +1326,7 @@ def build_replay_request(
         "schema_version": "kyoko.replay_request.v1",
         "profile_id": profile_id,
         "replay_run": _decode_row(replay_row),
-        "eval_spec": _decode_row(eval_spec),
+        "check_spec": _decode_row(check_spec),
         "source_run": source_run,
         "source_spans": source_spans,
         "handoffs": handoffs,
@@ -1346,45 +1346,45 @@ def build_replay_request(
         if isinstance(redaction, dict):
             redaction["consumer"] = redaction_consumer
     except RedactionError as exc:
-        raise EvalError(str(exc)) from exc
+        raise CheckError(str(exc)) from exc
     return result.payload
 
 
 def extract_replay_result_from_output(output: str) -> dict[str, Any]:
     if output.count(BEGIN_REPLAY_RESULT_BLOCK) != 1 or output.count(END_REPLAY_RESULT_BLOCK) != 1:
-        raise EvalError("replay_output_must_contain_exactly_one_result_block")
+        raise CheckError("replay_output_must_contain_exactly_one_result_block")
 
     start = output.index(BEGIN_REPLAY_RESULT_BLOCK) + len(BEGIN_REPLAY_RESULT_BLOCK)
     end = output.index(END_REPLAY_RESULT_BLOCK)
     if end <= start:
-        raise EvalError("replay_result_block_order_invalid")
+        raise CheckError("replay_result_block_order_invalid")
 
     raw_json = output[start:end].strip()
     try:
         replay_result = json.loads(raw_json)
     except json.JSONDecodeError as exc:
-        raise EvalError(f"replay_result_json_invalid:{exc}") from exc
+        raise CheckError(f"replay_result_json_invalid:{exc}") from exc
     if not isinstance(replay_result, dict):
-        raise EvalError("replay_result_must_be_object")
+        raise CheckError("replay_result_must_be_object")
     return replay_result
 
 
 def extract_judge_result_from_output(output: str) -> dict[str, Any]:
     if output.count(BEGIN_JUDGE_RESULT_BLOCK) != 1 or output.count(END_JUDGE_RESULT_BLOCK) != 1:
-        raise EvalError("judge_output_must_contain_exactly_one_result_block")
+        raise CheckError("judge_output_must_contain_exactly_one_result_block")
 
     start = output.index(BEGIN_JUDGE_RESULT_BLOCK) + len(BEGIN_JUDGE_RESULT_BLOCK)
     end = output.index(END_JUDGE_RESULT_BLOCK)
     if end <= start:
-        raise EvalError("judge_result_block_order_invalid")
+        raise CheckError("judge_result_block_order_invalid")
 
     raw_json = output[start:end].strip()
     try:
         judge_result = json.loads(raw_json)
     except json.JSONDecodeError as exc:
-        raise EvalError(f"judge_result_json_invalid:{exc}") from exc
+        raise CheckError(f"judge_result_json_invalid:{exc}") from exc
     if not isinstance(judge_result, dict):
-        raise EvalError("judge_result_must_be_object")
+        raise CheckError("judge_result_must_be_object")
     return judge_result
 
 
@@ -1392,17 +1392,17 @@ def parse_replay_command(command: str) -> list[str]:
     try:
         return shlex.split(command)
     except ValueError as exc:
-        raise EvalError(f"invalid_replay_command:{exc}") from exc
+        raise CheckError(f"invalid_replay_command:{exc}") from exc
 
 
 def parse_judge_command(command: str) -> list[str]:
     try:
         return shlex.split(command)
     except ValueError as exc:
-        raise EvalError(f"invalid_judge_command:{exc}") from exc
+        raise CheckError(f"invalid_judge_command:{exc}") from exc
 
 
-def list_eval_specs(db_path: Path) -> list[dict[str, Any]]:
+def list_check_specs(db_path: Path) -> list[dict[str, Any]]:
     if not db_path.exists():
         return []
     with connect(db_path) as connection:
@@ -1410,14 +1410,14 @@ def list_eval_specs(db_path: Path) -> list[dict[str, Any]]:
             rows = connection.execute(
                 """
                 SELECT
-                  eval_specs.*,
-                  COALESCE(eval_spec_locks.human_locked, 0) AS human_locked,
-                  eval_spec_locks.reason AS human_lock_reason
-                FROM eval_specs
-                LEFT JOIN eval_spec_locks
-                  ON eval_spec_locks.eval_spec_id = eval_specs.id
-                 AND eval_spec_locks.profile_id = eval_specs.profile_id
-                ORDER BY eval_specs.created_at DESC, eval_specs.id ASC
+                  check_specs.*,
+                  COALESCE(check_locks.human_locked, 0) AS human_locked,
+                  check_locks.reason AS human_lock_reason
+                FROM check_specs
+                LEFT JOIN check_locks
+                  ON check_locks.check_spec_id = check_specs.id
+                 AND check_locks.profile_id = check_specs.profile_id
+                ORDER BY check_specs.created_at DESC, check_specs.id ASC
                 """
             ).fetchall()
         except sqlite3.OperationalError:
@@ -1428,7 +1428,7 @@ def list_eval_specs(db_path: Path) -> list[dict[str, Any]]:
     return specs
 
 
-def list_eval_spec_locks(
+def list_check_locks(
     db_path: Path,
     *,
     profile_id: Optional[str] = None,
@@ -1450,10 +1450,10 @@ def list_eval_spec_locks(
         try:
             rows = connection.execute(
                 f"""
-                SELECT profile_id, eval_spec_id, human_locked, reason, created_at, updated_at
-                FROM eval_spec_locks
+                SELECT profile_id, check_spec_id, human_locked, reason, created_at, updated_at
+                FROM check_locks
                 {where_sql}
-                ORDER BY updated_at DESC, eval_spec_id ASC
+                ORDER BY updated_at DESC, check_spec_id ASC
                 """,
                 params,
             ).fetchall()
@@ -1466,20 +1466,20 @@ def list_eval_spec_locks(
     return locks
 
 
-def set_eval_spec_lock(
+def set_check_lock(
     *,
     db_path: Path,
-    eval_spec_id: str,
+    check_spec_id: str,
     locked: bool,
     reason: Optional[str] = None,
     actor_agent_identity_id: Optional[str] = None,
-) -> EvalSpecLockReport:
+) -> CheckSpecLockReport:
     initialize_database(db_path)
     with connect(db_path) as connection:
-        eval_spec = _get_eval_spec(connection, eval_spec_id)
-        profile_id = str(eval_spec["profile_id"])
+        check_spec = _get_check_spec(connection, check_spec_id)
+        profile_id = str(check_spec["profile_id"])
         now = utc_now()
-        _ensure_kyoko_source(connection, profile_id, {"evals": True})
+        _ensure_kyoko_source(connection, profile_id, {"checks": True})
         clean_actor_agent_identity_id = _validate_actor_agent_identity_id(
             connection,
             profile_id,
@@ -1488,40 +1488,40 @@ def set_eval_spec_lock(
         existing = connection.execute(
             """
             SELECT created_at
-            FROM eval_spec_locks
-            WHERE profile_id = ? AND eval_spec_id = ?
+            FROM check_locks
+            WHERE profile_id = ? AND check_spec_id = ?
             """,
-            (profile_id, eval_spec_id),
+            (profile_id, check_spec_id),
         ).fetchone()
         created_at = str(existing["created_at"]) if existing is not None else now
         selected_reason = reason
         connection.execute(
             """
-            INSERT INTO eval_spec_locks (
+            INSERT INTO check_locks (
               profile_id,
-              eval_spec_id,
+              check_spec_id,
               human_locked,
               reason,
               created_at,
               updated_at
             )
             VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(profile_id, eval_spec_id) DO UPDATE SET
+            ON CONFLICT(profile_id, check_spec_id) DO UPDATE SET
               human_locked = excluded.human_locked,
               reason = excluded.reason,
               updated_at = excluded.updated_at
             """,
             (
                 profile_id,
-                eval_spec_id,
+                check_spec_id,
                 1 if locked else 0,
                 selected_reason,
                 created_at,
                 now,
             ),
         )
-        return EvalSpecLockReport(
-            eval_spec_id=eval_spec_id,
+        return CheckSpecLockReport(
+            check_spec_id=check_spec_id,
             profile_id=profile_id,
             human_locked=locked,
             reason=selected_reason,
@@ -1529,39 +1529,39 @@ def set_eval_spec_lock(
         )
 
 
-def approve_eval_spec(
+def approve_check_spec(
     *,
     db_path: Path,
-    eval_spec_id: str,
+    check_spec_id: str,
     reason: Optional[str] = None,
     actor_agent_identity_id: Optional[str] = None,
-) -> EvalSpecApprovalReport:
+) -> CheckSpecApprovalReport:
     initialize_database(db_path)
     with connect(db_path) as connection:
-        eval_spec = _get_eval_spec(connection, eval_spec_id)
-        profile_id = str(eval_spec["profile_id"])
-        if _eval_spec_is_human_locked(connection, eval_spec_id):
-            raise EvalError(f"human_locked_eval_spec:{eval_spec_id}")
+        check_spec = _get_check_spec(connection, check_spec_id)
+        profile_id = str(check_spec["profile_id"])
+        if _check_spec_is_human_locked(connection, check_spec_id):
+            raise CheckError(f"human_locked_check_spec:{check_spec_id}")
         now = utc_now()
-        _ensure_kyoko_source(connection, profile_id, {"evals": True})
+        _ensure_kyoko_source(connection, profile_id, {"checks": True})
         clean_actor_agent_identity_id = _validate_actor_agent_identity_id(
             connection,
             profile_id,
             actor_agent_identity_id,
         )
-        previous_trust_level = str(eval_spec["trust_level"])
+        previous_trust_level = str(check_spec["trust_level"])
         clean_reason = reason.strip() if isinstance(reason, str) and reason.strip() else None
         connection.execute(
-            "UPDATE eval_specs SET trust_level = ?, updated_at = ? WHERE id = ?",
-            ("L3_human_approved", now, eval_spec_id),
+            "UPDATE check_specs SET trust_level = ?, updated_at = ? WHERE id = ?",
+            ("L3_human_approved", now, check_spec_id),
         )
         _insert_timeline_event(
             connection,
-            event_id=f"event_{eval_spec_id}_human_approved_{uuid.uuid4().hex[:8]}",
+            event_id=f"event_{check_spec_id}_human_approved_{uuid.uuid4().hex[:8]}",
             profile_id=profile_id,
-            entity_type="eval_spec",
-            entity_id=eval_spec_id,
-            kind="eval_spec_human_approved",
+            entity_type="check_spec",
+            entity_id=check_spec_id,
+            kind="check_spec_human_approved",
             at=now,
             agent_identity_id=clean_actor_agent_identity_id,
             metadata={
@@ -1571,8 +1571,8 @@ def approve_eval_spec(
                 "actor_agent_identity_id": clean_actor_agent_identity_id,
             },
         )
-        return EvalSpecApprovalReport(
-            eval_spec_id=eval_spec_id,
+        return CheckSpecApprovalReport(
+            check_spec_id=check_spec_id,
             profile_id=profile_id,
             previous_trust_level=previous_trust_level,
             trust_level="L3_human_approved",
@@ -1581,7 +1581,7 @@ def approve_eval_spec(
         )
 
 
-def list_eval_runs(db_path: Path) -> list[dict[str, Any]]:
+def list_check_runs(db_path: Path) -> list[dict[str, Any]]:
     if not db_path.exists():
         return []
     with connect(db_path) as connection:
@@ -1589,7 +1589,7 @@ def list_eval_runs(db_path: Path) -> list[dict[str, Any]]:
             rows = connection.execute(
                 """
                 SELECT *
-                FROM eval_runs
+                FROM check_runs
                 ORDER BY created_at DESC, id ASC
                 """
             ).fetchall()
@@ -1621,17 +1621,17 @@ def _get_proposal(connection: sqlite3.Connection, proposal_id: str) -> sqlite3.R
         (proposal_id,),
     ).fetchone()
     if row is None:
-        raise EvalError(f"proposal_not_found:{proposal_id}")
+        raise CheckError(f"proposal_not_found:{proposal_id}")
     return row
 
 
-def _get_eval_spec(connection: sqlite3.Connection, eval_spec_id: str) -> sqlite3.Row:
+def _get_check_spec(connection: sqlite3.Connection, check_spec_id: str) -> sqlite3.Row:
     row = connection.execute(
-        "SELECT * FROM eval_specs WHERE id = ?",
-        (eval_spec_id,),
+        "SELECT * FROM check_specs WHERE id = ?",
+        (check_spec_id,),
     ).fetchone()
     if row is None:
-        raise EvalError(f"eval_spec_not_found:{eval_spec_id}")
+        raise CheckError(f"check_spec_not_found:{check_spec_id}")
     return row
 
 
@@ -1641,19 +1641,19 @@ def _get_replay_run(connection: sqlite3.Connection, replay_run_id: str) -> sqlit
         (replay_run_id,),
     ).fetchone()
     if row is None:
-        raise EvalError(f"replay_run_not_found:{replay_run_id}")
+        raise CheckError(f"replay_run_not_found:{replay_run_id}")
     return row
 
 
-def _ensure_eval_write_allowed(connection: sqlite3.Connection, profile_id: str) -> None:
+def _ensure_check_write_allowed(connection: sqlite3.Connection, profile_id: str) -> None:
     row = connection.execute(
-        "SELECT allow_eval_write FROM autonomy_policies WHERE profile_id = ?",
+        "SELECT allow_check_write FROM autonomy_policies WHERE profile_id = ?",
         (profile_id,),
     ).fetchone()
     if row is None:
-        raise EvalError(f"autonomy_policy_not_found:{profile_id}")
-    if int(row["allow_eval_write"]) != 1:
-        raise EvalError("eval_write_not_allowed")
+        raise CheckError(f"autonomy_policy_not_found:{profile_id}")
+    if int(row["allow_check_write"]) != 1:
+        raise CheckError("check_write_not_allowed")
 
 
 def _ensure_kyoko_source(
@@ -1753,18 +1753,18 @@ def _validate_actor_agent_identity_id(
         (clean_actor_agent_identity_id, profile_id),
     ).fetchone()
     if row is None:
-        raise EvalError(f"actor_agent_identity_not_found:{clean_actor_agent_identity_id}")
+        raise CheckError(f"actor_agent_identity_not_found:{clean_actor_agent_identity_id}")
     return clean_actor_agent_identity_id
 
 
-def _eval_spec_id(proposal_id: str, index: int, change: dict[str, Any]) -> str:
-    explicit_id = change.get("eval_spec_id")
+def _check_spec_id(proposal_id: str, index: int, change: dict[str, Any]) -> str:
+    explicit_id = change.get("check_spec_id")
     if isinstance(explicit_id, str) and explicit_id:
         return explicit_id
-    return f"eval_{proposal_id}_{index}"
+    return f"check_{proposal_id}_{index}"
 
 
-def _fallback_eval_changes(proposal: sqlite3.Row, changes: list[Any]) -> list[dict[str, Any]]:
+def _fallback_check_changes(proposal: sqlite3.Row, changes: list[Any]) -> list[dict[str, Any]]:
     context_change_types = {"skillbook_update", "context_delivery_rule"}
     has_context_change = any(
         isinstance(change, dict) and change.get("type") in context_change_types
@@ -1781,20 +1781,20 @@ def _fallback_eval_changes(proposal: sqlite3.Row, changes: list[Any]) -> list[di
         return []
     section = str(proposal["section"])
     generated_by = (
-        "kyoko_fallback_harness_eval"
+        "kyoko_fallback_harness_check"
         if section == "harness" and has_harness_change
-        else "kyoko_fallback_context_eval"
+        else "kyoko_fallback_context_check"
     )
     return [
         {
-            "type": "eval_spec",
-            "name": _fallback_eval_name(str(proposal["title"] or proposal["id"])),
-            "eval_type": "deterministic_assertion",
+            "type": "check_spec",
+            "name": _fallback_check_name(str(proposal["title"] or proposal["id"])),
+            "check_type": "deterministic_assertion",
             "trust_level": "L0_generated",
             "side_effect_mode": "network_mocked",
             "definition": {
                 "generated_by": generated_by,
-                "given": "proposal cites failure evidence but did not provide an explicit eval spec",
+                "given": "proposal cites failure evidence but did not provide an explicit check spec",
                 "expect": "the targeted failure is no longer failed after replay or a future run",
                 "assertions": [{"type": "target_status_not_failed"}],
             },
@@ -1802,14 +1802,14 @@ def _fallback_eval_changes(proposal: sqlite3.Row, changes: list[Any]) -> list[di
     ]
 
 
-def _fallback_eval_name(title: str) -> str:
+def _fallback_check_name(title: str) -> str:
     normalized = " ".join(title.strip().split())
     if not normalized:
         normalized = "context proposal"
     return f"generated gate for {normalized}"[:120]
 
 
-def _target_for_eval(proposal: sqlite3.Row, change: dict[str, Any]) -> dict[str, Any]:
+def _target_for_check(proposal: sqlite3.Row, change: dict[str, Any]) -> dict[str, Any]:
     definition = change.get("definition")
     if isinstance(definition, dict):
         target = definition.get("target")
@@ -1831,14 +1831,14 @@ def _target_for_eval(proposal: sqlite3.Row, change: dict[str, Any]) -> dict[str,
         if isinstance(target, dict):
             return dict(target)
 
-    raise EvalError(f"eval_target_unavailable:{proposal['id']}")
+    raise CheckError(f"check_target_unavailable:{proposal['id']}")
 
 
 def _target_from_evidence_ref(ref: dict[str, Any], source: str) -> dict[str, Any]:
     entity_type = ref.get("entity_type")
     entity_id = ref.get("entity_id")
     if not isinstance(entity_type, str) or not isinstance(entity_id, str):
-        raise EvalError("invalid_eval_target_evidence")
+        raise CheckError("invalid_check_target_evidence")
     return {
         "entity_type": entity_type,
         "entity_id": entity_id,
@@ -1847,7 +1847,7 @@ def _target_from_evidence_ref(ref: dict[str, Any], source: str) -> dict[str, Any
     }
 
 
-def _definition_for_eval(proposal: sqlite3.Row, change: dict[str, Any]) -> dict[str, Any]:
+def _definition_for_check(proposal: sqlite3.Row, change: dict[str, Any]) -> dict[str, Any]:
     definition = change.get("definition")
     if not isinstance(definition, dict):
         definition = {}
@@ -1865,11 +1865,11 @@ def _definition_for_eval(proposal: sqlite3.Row, change: dict[str, Any]) -> dict[
 
 def _validate_replay_boundary(*, mode: str, side_effect_mode: str) -> None:
     if mode not in {"dry_run", "sandbox", "live"}:
-        raise EvalError(f"unsupported_replay_mode:{mode}")
+        raise CheckError(f"unsupported_replay_mode:{mode}")
     if side_effect_mode not in SAFE_REPLAY_SIDE_EFFECT_MODES:
-        raise EvalError(f"unsafe_replay_side_effect_mode:{side_effect_mode}")
+        raise CheckError(f"unsafe_replay_side_effect_mode:{side_effect_mode}")
     if mode == "live":
-        raise EvalError("live_replay_not_supported")
+        raise CheckError("live_replay_not_supported")
 
 
 def _validate_actual_replay_side_effect_mode(
@@ -1879,11 +1879,11 @@ def _validate_actual_replay_side_effect_mode(
 ) -> None:
     allowed = ALLOWED_ACTUAL_SIDE_EFFECT_MODES_BY_REQUEST.get(requested_side_effect_mode)
     if allowed is None:
-        raise EvalError(f"unsafe_replay_side_effect_mode:{requested_side_effect_mode}")
+        raise CheckError(f"unsafe_replay_side_effect_mode:{requested_side_effect_mode}")
     if actual_side_effect_mode not in SAFE_REPLAY_SIDE_EFFECT_MODES:
-        raise EvalError(f"unsafe_replay_side_effect_mode:{actual_side_effect_mode}")
+        raise CheckError(f"unsafe_replay_side_effect_mode:{actual_side_effect_mode}")
     if actual_side_effect_mode not in allowed:
-        raise EvalError(
+        raise CheckError(
             "replay_side_effect_mode_exceeds_request:"
             f"{actual_side_effect_mode}:{requested_side_effect_mode}"
         )
@@ -1927,38 +1927,38 @@ def _task_attempt_for_source_run(
 
 def _evaluate(
     connection: sqlite3.Connection,
-    eval_spec: sqlite3.Row,
+    check_spec: sqlite3.Row,
     replay_row: Optional[sqlite3.Row],
 ) -> tuple[str, dict[str, Any]]:
-    eval_type = str(eval_spec["eval_type"])
-    if eval_type == "smoke_run":
-        return _evaluate_smoke_run(connection, eval_spec, replay_row)
-    if eval_type == "judge":
-        return _evaluate_recorded_judge(eval_spec)
-    if eval_type == "regression_replay":
-        return _evaluate_regression_replay(connection, eval_spec, replay_row)
-    if eval_type != "deterministic_assertion":
+    check_type = str(check_spec["check_type"])
+    if check_type == "smoke_run":
+        return _evaluate_smoke_run(connection, check_spec, replay_row)
+    if check_type == "judge":
+        return _evaluate_recorded_judge(check_spec)
+    if check_type == "regression_replay":
+        return _evaluate_regression_replay(connection, check_spec, replay_row)
+    if check_type != "deterministic_assertion":
         return (
             "errored",
             {
-                "error": f"unsupported_eval_type:{eval_type}",
-                "supported_eval_type": "deterministic_assertion",
-                "supported_eval_types": list(EXECUTABLE_EVAL_TYPES),
+                "error": f"unsupported_check_type:{check_type}",
+                "supported_check_type": "deterministic_assertion",
+                "supported_check_types": list(EXECUTABLE_CHECK_TYPES),
             },
         )
 
-    return _evaluate_deterministic_assertions(connection, eval_spec, replay_row)
+    return _evaluate_deterministic_assertions(connection, check_spec, replay_row)
 
 
 def _evaluate_deterministic_assertions(
     connection: sqlite3.Connection,
-    eval_spec: sqlite3.Row,
+    check_spec: sqlite3.Row,
     replay_row: Optional[sqlite3.Row],
     *,
     definition_override: Optional[dict[str, Any]] = None,
 ) -> tuple[str, dict[str, Any]]:
-    target = _json_loads(eval_spec["target_json"], {})
-    definition = definition_override or _json_loads(eval_spec["definition_json"], {})
+    target = _json_loads(check_spec["target_json"], {})
+    definition = definition_override or _json_loads(check_spec["definition_json"], {})
     observed_status = _target_status(connection, target)
     failure_statuses = set(definition.get("failure_statuses", sorted(FAILURE_STATUSES)))
     replay_result = _json_loads(replay_row["result_json"], {}) if replay_row is not None else None
@@ -2015,7 +2015,7 @@ def _evaluate_deterministic_assertions(
 
 def _evaluate_regression_replay(
     connection: sqlite3.Connection,
-    eval_spec: sqlite3.Row,
+    check_spec: sqlite3.Row,
     replay_row: Optional[sqlite3.Row],
 ) -> tuple[str, dict[str, Any]]:
     if replay_row is None:
@@ -2023,13 +2023,13 @@ def _evaluate_regression_replay(
             "errored",
             {
                 "error": "replay_required",
-                "eval_type": "regression_replay",
+                "check_type": "regression_replay",
                 "required_replay": True,
                 "gateable": True,
             },
         )
 
-    definition = _json_loads(eval_spec["definition_json"], {})
+    definition = _json_loads(check_spec["definition_json"], {})
     assertion_specs = _assertion_specs(definition)
     if not _has_target_status_assertion(assertion_specs):
         definition = dict(definition)
@@ -2037,11 +2037,11 @@ def _evaluate_regression_replay(
 
     status, result = _evaluate_deterministic_assertions(
         connection,
-        eval_spec,
+        check_spec,
         replay_row,
         definition_override=definition,
     )
-    result["eval_type"] = "regression_replay"
+    result["check_type"] = "regression_replay"
     result["required_replay"] = True
     result["gateable"] = True
     if str(replay_row["status"]) != "passed":
@@ -2064,8 +2064,8 @@ def _has_target_status_assertion(assertions: list[dict[str, Any]]) -> bool:
     )
 
 
-def _evaluate_recorded_judge(eval_spec: sqlite3.Row) -> tuple[str, dict[str, Any]]:
-    definition = _judge_definition(_json_loads(eval_spec["definition_json"], {}))
+def _evaluate_recorded_judge(check_spec: sqlite3.Row) -> tuple[str, dict[str, Any]]:
+    definition = _judge_definition(_json_loads(check_spec["definition_json"], {}))
     judgment = _recorded_judgment(definition)
     verdict = _judge_verdict(judgment)
     judge_backend = judgment.get("judge_backend", judgment.get("backend", "recorded_judgment"))
@@ -2073,9 +2073,9 @@ def _evaluate_recorded_judge(eval_spec: sqlite3.Row) -> tuple[str, dict[str, Any
         judge_backend = "recorded_judgment"
     external_judge = definition.get("external_judge") if isinstance(definition.get("external_judge"), dict) else {}
     result = {
-        "eval_type": "judge",
+        "check_type": "judge",
         "judge_backend": judge_backend,
-        "target": _json_loads(eval_spec["target_json"], {}),
+        "target": _json_loads(check_spec["target_json"], {}),
         "rubric": judgment.get("rubric", definition.get("rubric")),
         "judge": judgment.get("judge", judgment.get("judge_name", definition.get("judge"))),
         "score": judgment.get("score", definition.get("score")),
@@ -2181,16 +2181,16 @@ def _target_run_id(connection: sqlite3.Connection, target: dict[str, Any]) -> Op
 
 def _evaluate_smoke_run(
     connection: sqlite3.Connection,
-    eval_spec: sqlite3.Row,
+    check_spec: sqlite3.Row,
     replay_row: Optional[sqlite3.Row],
 ) -> tuple[str, dict[str, Any]]:
-    target = _json_loads(eval_spec["target_json"], {})
-    definition = _json_loads(eval_spec["definition_json"], {})
+    target = _json_loads(check_spec["target_json"], {})
+    definition = _json_loads(check_spec["definition_json"], {})
     smoke_definition = _smoke_definition(definition)
     failure_statuses = set(smoke_definition.get("failure_statuses", sorted(FAILURE_STATUSES)))
     replay_result = _json_loads(replay_row["result_json"], {}) if replay_row is not None else None
     run_id, run_source = _smoke_run_id(connection, target, smoke_definition, replay_row, replay_result)
-    run_row = _resolve_eval_entity(connection, "run", run_id)
+    run_row = _resolve_check_entity(connection, "run", run_id)
     run_status = run_row.get("status") if run_row is not None else None
     checks: list[dict[str, Any]] = []
 
@@ -2481,7 +2481,7 @@ def _evaluate_replay_target_field_assertion(
             "passed": False,
             "reason": "replay_target_missing",
         }
-    row = _resolve_eval_entity(
+    row = _resolve_check_entity(
         connection,
         replay_target.get("entity_type"),
         replay_target.get("entity_id"),
@@ -2533,7 +2533,7 @@ def _evaluate_replay_run_status_assertion(
 ) -> dict[str, Any]:
     expected = assertion.get("equals", "succeeded")
     output_run_id = _replay_output_run_id(context)
-    row = _resolve_eval_entity(connection, "run", output_run_id)
+    row = _resolve_check_entity(connection, "run", output_run_id)
     actual = row.get("status") if row is not None else None
     passed = actual == expected
     return {
@@ -2667,10 +2667,10 @@ def _replay_entity_candidates(
     entity_id: Optional[str],
 ) -> list[dict[str, Any]]:
     if entity_id:
-        row = _resolve_eval_entity(connection, entity_type, entity_id)
+        row = _resolve_check_entity(connection, entity_type, entity_id)
         return [row] if row is not None else []
     if entity_type == "run":
-        row = _resolve_eval_entity(connection, "run", output_run_id)
+        row = _resolve_check_entity(connection, "run", output_run_id)
         return [row] if row is not None else []
     if not isinstance(output_run_id, str) or not output_run_id:
         return []
@@ -2727,7 +2727,7 @@ def _definition_min_count(
     return default
 
 
-def _resolve_eval_entity(
+def _resolve_check_entity(
     connection: sqlite3.Connection,
     entity_type: Any,
     entity_id: Any,
@@ -2818,18 +2818,18 @@ def _all(connection: sqlite3.Connection, query: str, args: tuple[Any, ...]) -> l
 
 def _maybe_promote_trust_level(
     connection: sqlite3.Connection,
-    eval_spec: sqlite3.Row,
+    check_spec: sqlite3.Row,
     latest_status: str,
     result: dict[str, Any],
     now: str,
 ) -> Optional[str]:
-    eval_type = str(eval_spec["eval_type"])
-    if eval_type not in GATEABLE_EVAL_TYPES:
+    check_type = str(check_spec["check_type"])
+    if check_type not in GATEABLE_CHECK_TYPES:
         return None
-    if _eval_spec_is_human_locked(connection, str(eval_spec["id"])):
+    if _check_spec_is_human_locked(connection, str(check_spec["id"])):
         return None
 
-    current_trust_level = str(eval_spec["trust_level"])
+    current_trust_level = str(check_spec["trust_level"])
     if (
         latest_status == "passed"
         and result.get("comparison") == "fail_before_pass_after"
@@ -2837,12 +2837,12 @@ def _maybe_promote_trust_level(
         and current_trust_level not in {"L2_regression", "L3_human_approved"}
     ):
         connection.execute(
-            "UPDATE eval_specs SET trust_level = ?, updated_at = ? WHERE id = ?",
-            ("L2_regression", now, eval_spec["id"]),
+            "UPDATE check_specs SET trust_level = ?, updated_at = ? WHERE id = ?",
+            ("L2_regression", now, check_spec["id"]),
         )
         return "L2_regression"
 
-    if eval_type != "deterministic_assertion":
+    if check_type != "deterministic_assertion":
         return None
     if current_trust_level != "L0_generated":
         return None
@@ -2852,33 +2852,33 @@ def _maybe_promote_trust_level(
     rows = connection.execute(
         """
         SELECT status
-        FROM eval_runs
-        WHERE eval_spec_id = ?
+        FROM check_runs
+        WHERE check_spec_id = ?
         ORDER BY created_at DESC, id DESC
         LIMIT 2
         """,
-        (eval_spec["id"],),
+        (check_spec["id"],),
     ).fetchall()
     statuses = [str(row["status"]) for row in rows]
     if len(statuses) < 2 or any(status != latest_status for status in statuses):
         return None
 
     connection.execute(
-        "UPDATE eval_specs SET trust_level = ?, updated_at = ? WHERE id = ?",
-        ("L1_repeated", now, eval_spec["id"]),
+        "UPDATE check_specs SET trust_level = ?, updated_at = ? WHERE id = ?",
+        ("L1_repeated", now, check_spec["id"]),
     )
     return "L1_repeated"
 
 
-def _eval_spec_is_human_locked(connection: sqlite3.Connection, eval_spec_id: str) -> bool:
+def _check_spec_is_human_locked(connection: sqlite3.Connection, check_spec_id: str) -> bool:
     try:
         row = connection.execute(
             """
             SELECT human_locked
-            FROM eval_spec_locks
-            WHERE eval_spec_id = ?
+            FROM check_locks
+            WHERE check_spec_id = ?
             """,
-            (eval_spec_id,),
+            (check_spec_id,),
         ).fetchone()
     except sqlite3.OperationalError:
         return False
@@ -2889,11 +2889,11 @@ def _load_json(path: Path) -> dict[str, Any]:
     try:
         payload = json.loads(path.read_text())
     except FileNotFoundError as exc:
-        raise EvalError(f"{path}: file not found") from exc
+        raise CheckError(f"{path}: file not found") from exc
     except json.JSONDecodeError as exc:
-        raise EvalError(f"{path}: invalid JSON: {exc}") from exc
+        raise CheckError(f"{path}: invalid JSON: {exc}") from exc
     if not isinstance(payload, dict):
-        raise EvalError(f"{path}: expected JSON object")
+        raise CheckError(f"{path}: expected JSON object")
     return payload
 
 
@@ -2954,7 +2954,7 @@ def _mark_replay_errored(db_path: Path, replay_run_id: str, error: str) -> None:
 def _required_string(payload: dict[str, Any], key: str) -> str:
     value = payload.get(key)
     if not isinstance(value, str) or not value:
-        raise EvalError(f"missing_required_string:{key}")
+        raise CheckError(f"missing_required_string:{key}")
     return value
 
 

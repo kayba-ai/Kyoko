@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 
 // Learning proposals are Kyoko's gated change suggestions (context/skill/harness
 // edits). This dashboard only VIEWS them — applying happens server-side behind the
-// eval/replay gate and the profile autonomy policy. No apply controls here.
+// check/replay gate and the profile autonomy policy. No apply controls here.
 
 function pct(v: number | null | undefined): string | null {
   if (v === null || v === undefined) return null;

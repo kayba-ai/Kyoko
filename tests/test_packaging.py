@@ -205,39 +205,39 @@ class PackagingTests(unittest.TestCase):
                 names,
             )
             self.assertIn(
-                f"{prefix}/docs/fixtures/cli-json/generate-evals.contract.golden.json",
+                f"{prefix}/docs/fixtures/cli-json/generate-checks.contract.golden.json",
                 names,
             )
             self.assertIn(
-                f"{prefix}/docs/fixtures/cli-json/evals.contract.golden.json",
+                f"{prefix}/docs/fixtures/cli-json/checks.contract.golden.json",
                 names,
             )
             self.assertIn(
-                f"{prefix}/docs/fixtures/cli-json/eval-assertion-presets.contract.golden.json",
+                f"{prefix}/docs/fixtures/cli-json/check-assertion-presets.contract.golden.json",
                 names,
             )
             self.assertIn(
-                f"{prefix}/docs/fixtures/cli-json/run-eval.contract.golden.json",
+                f"{prefix}/docs/fixtures/cli-json/run-check.contract.golden.json",
                 names,
             )
             self.assertIn(
-                f"{prefix}/docs/fixtures/cli-json/eval-detail.contract.golden.json",
+                f"{prefix}/docs/fixtures/cli-json/check-detail.contract.golden.json",
                 names,
             )
             self.assertIn(
-                f"{prefix}/docs/fixtures/cli-json/eval-spec-lock.contract.golden.json",
+                f"{prefix}/docs/fixtures/cli-json/check-lock.contract.golden.json",
                 names,
             )
             self.assertIn(
-                f"{prefix}/docs/fixtures/cli-json/eval-spec-locks.contract.golden.json",
+                f"{prefix}/docs/fixtures/cli-json/check-locks.contract.golden.json",
                 names,
             )
             self.assertIn(
-                f"{prefix}/docs/fixtures/cli-json/eval-spec-unlock.contract.golden.json",
+                f"{prefix}/docs/fixtures/cli-json/check-unlock.contract.golden.json",
                 names,
             )
             self.assertIn(
-                f"{prefix}/docs/fixtures/cli-json/eval-spec-approve.contract.golden.json",
+                f"{prefix}/docs/fixtures/cli-json/check-approve.contract.golden.json",
                 names,
             )
             self.assertIn(

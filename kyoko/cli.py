@@ -57,7 +57,7 @@ from .dashboard_metrics import DashboardMetricsError, get_dashboard_metrics
 from .dashboard_smoke import DashboardSmokeError, run_dashboard_browser_smoke
 from .details import (
     DetailError,
-    get_eval_detail,
+    get_check_detail,
     get_issue_detail,
     get_proposal_detail,
     get_replay_detail,
@@ -68,24 +68,24 @@ from .issues import IssueError, create_issue, list_issues
 from .demo import DemoError, run_demo_setup
 from .doctor import DEFAULT_SMOKE_EVIDENCE_DIR, DoctorError, doctor_report_text, run_doctor
 from .evidence import write_evidence_bundle
-from .evals import (
-    EvalError,
-    approve_eval_spec,
+from .checks import (
+    CheckError,
+    approve_check_spec,
     complete_replay_from_fixture,
     create_replay_run,
     run_judge_command,
-    generate_evals_for_proposal,
+    generate_checks_for_proposal,
     list_assertion_presets,
-    list_eval_capabilities,
-    list_eval_runs,
-    list_eval_spec_locks,
-    list_eval_specs,
+    list_check_capabilities,
+    list_check_runs,
+    list_check_locks,
+    list_check_specs,
     list_replay_runs,
     parse_judge_command,
     parse_replay_command,
-    run_eval,
+    run_check,
     run_replay_command,
-    set_eval_spec_lock,
+    set_check_lock,
 )
 from .framework_smoke import (
     DEFAULT_INSTALLED_FRAMEWORK_SOURCE_FRAMEWORK,
@@ -277,12 +277,12 @@ def build_parser() -> argparse.ArgumentParser:
     demo.add_argument(
         "--setup-only",
         action="store_true",
-        help="Only initialize fixtures, proposal, eval, and replay adapter.",
+        help="Only initialize fixtures, proposal, check, and replay adapter.",
     )
     demo.add_argument(
         "--no-apply",
         action="store_true",
-        help="Run replay/eval without applying the context skillbook update.",
+        help="Run replay/check without applying the context skillbook update.",
     )
     demo.add_argument(
         "--json",
@@ -573,7 +573,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     profile_next.add_argument(
         "--replay-adapter",
-        help="Replay adapter id to use for a replay/eval next step.",
+        help="Replay adapter id to use for a replay/check next step.",
     )
     profile_next.add_argument(
         "--replay-output-dir",
@@ -1093,12 +1093,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     prune_retention = subcommands.add_parser(
         "prune-retention",
-        help="Dry-run or apply relational retention pruning for traces, replay/eval, and operator runs.",
+        help="Dry-run or apply relational retention pruning for traces, replay/check, and operator runs.",
     )
     _add_db_argument(prune_retention)
     prune_retention.add_argument("--profile-id", help="Profile id. Defaults to the first profile.")
     prune_retention.add_argument("--trace-older-than-days", type=int, help="Trace retention cutoff in days.")
-    prune_retention.add_argument("--replay-older-than-days", type=int, help="Replay/eval retention cutoff in days.")
+    prune_retention.add_argument("--replay-older-than-days", type=int, help="Replay/check retention cutoff in days.")
     prune_retention.add_argument("--operator-older-than-days", type=int, help="Operator-run retention cutoff in days.")
     prune_retention.add_argument(
         "--apply",
@@ -1312,9 +1312,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="Allow generated harness file writes through apply-harness.",
     )
     policy_set.add_argument(
-        "--eval-write",
+        "--check-write",
         choices=["on", "off"],
-        help="Allow Kyoko eval spec writes.",
+        help="Allow Kyoko check spec writes.",
     )
     policy_set.add_argument(
         "--skillbook-write",
@@ -1416,7 +1416,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     proposal_detail = subcommands.add_parser(
         "proposal-detail",
-        help="Show evidence, eval, replay, patch, timeline, and autonomy detail for a proposal.",
+        help="Show evidence, check, replay, patch, timeline, and autonomy detail for a proposal.",
     )
     _add_db_argument(proposal_detail)
     proposal_detail.add_argument("proposal_id", help="LearningProposal id to inspect.")
@@ -2052,7 +2052,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     improve = subcommands.add_parser(
         "improve",
-        help="Run the agent-optimized improvement loop: analyze, generate evals, replay, and run autonomy.",
+        help="Run the agent-optimized improvement loop: analyze, generate checks, replay, and run autonomy.",
     )
     _add_db_argument(improve)
     improve.add_argument(
@@ -2118,7 +2118,7 @@ def build_parser() -> argparse.ArgumentParser:
     improve.add_argument(
         "--replay-adapter",
         help=(
-            "Registered replay adapter id used to replay every eval spec and run evals. "
+            "Registered replay adapter id used to replay every check spec and run checks. "
             "Defaults to the latest enabled profile adapter."
         ),
     )
@@ -2550,127 +2550,127 @@ def build_parser() -> argparse.ArgumentParser:
         help="Print machine-readable install metadata.",
     )
 
-    generate_evals = subcommands.add_parser(
-        "generate-evals",
-        help="Create Kyoko eval specs from a LearningProposal.",
+    generate_checks = subcommands.add_parser(
+        "generate-checks",
+        help="Create Kyoko check specs from a LearningProposal.",
     )
-    _add_db_argument(generate_evals)
-    generate_evals.add_argument(
+    _add_db_argument(generate_checks)
+    generate_checks.add_argument(
         "proposal_id",
-        help="LearningProposal id to inspect for eval_spec changes.",
+        help="LearningProposal id to inspect for check_spec changes.",
     )
-    generate_evals.add_argument(
+    generate_checks.add_argument(
         "--json",
         action="store_true",
         help="Print machine-readable JSON.",
     )
 
-    evals = subcommands.add_parser(
-        "evals",
-        help="List Kyoko eval specs and eval runs.",
+    checks = subcommands.add_parser(
+        "checks",
+        help="List Kyoko check specs and check runs.",
     )
-    _add_db_argument(evals)
-    evals.add_argument(
+    _add_db_argument(checks)
+    checks.add_argument(
         "--json",
         action="store_true",
         help="Print machine-readable JSON.",
     )
 
-    eval_assertion_presets = subcommands.add_parser(
-        "eval-assertion-presets",
-        help="List supported eval assertion presets.",
+    check_assertion_presets = subcommands.add_parser(
+        "check-assertion-presets",
+        help="List supported check assertion presets.",
     )
-    eval_assertion_presets.add_argument(
+    check_assertion_presets.add_argument(
         "--json",
         action="store_true",
         help="Print machine-readable JSON.",
     )
 
-    eval_capabilities = subcommands.add_parser(
-        "eval-capabilities",
-        help="List supported eval types, assertions, presets, replay modes, and trust levels.",
+    check_capabilities = subcommands.add_parser(
+        "check-capabilities",
+        help="List supported check types, assertions, presets, replay modes, and trust levels.",
     )
-    eval_capabilities.add_argument(
+    check_capabilities.add_argument(
         "--json",
         action="store_true",
         help="Print machine-readable JSON.",
     )
 
-    eval_spec_locks = subcommands.add_parser(
-        "eval-spec-locks",
-        help="List human locks for eval specs.",
+    check_locks = subcommands.add_parser(
+        "check-locks",
+        help="List human locks for check specs.",
     )
-    _add_db_argument(eval_spec_locks)
-    eval_spec_locks.add_argument("--profile-id", help="Optional profile id filter.")
-    eval_spec_locks.add_argument(
+    _add_db_argument(check_locks)
+    check_locks.add_argument("--profile-id", help="Optional profile id filter.")
+    check_locks.add_argument(
         "--include-unlocked",
         action="store_true",
-        help="Include previously unlocked eval specs.",
+        help="Include previously unlocked check specs.",
     )
-    eval_spec_locks.add_argument(
+    check_locks.add_argument(
         "--json",
         action="store_true",
         help="Print machine-readable JSON.",
     )
 
-    eval_spec_lock = subcommands.add_parser(
-        "eval-spec-lock",
-        help="Mark an eval spec as human-locked.",
+    check_lock = subcommands.add_parser(
+        "check-lock",
+        help="Mark an check spec as human-locked.",
     )
-    _add_db_argument(eval_spec_lock)
-    eval_spec_lock.add_argument("eval_spec_id", help="Eval spec id to lock.")
-    eval_spec_lock.add_argument("--reason", help="Optional human-readable lock reason.")
-    eval_spec_lock.add_argument(
+    _add_db_argument(check_lock)
+    check_lock.add_argument("check_spec_id", help="Check spec id to lock.")
+    check_lock.add_argument("--reason", help="Optional human-readable lock reason.")
+    check_lock.add_argument(
         "--actor-agent-identity-id",
         help="Optional agent identity id to attribute the lock event to.",
     )
-    eval_spec_lock.add_argument(
+    check_lock.add_argument(
         "--json",
         action="store_true",
         help="Print machine-readable JSON.",
     )
 
-    eval_spec_unlock = subcommands.add_parser(
-        "eval-spec-unlock",
-        help="Remove the human lock from an eval spec.",
+    check_unlock = subcommands.add_parser(
+        "check-unlock",
+        help="Remove the human lock from an check spec.",
     )
-    _add_db_argument(eval_spec_unlock)
-    eval_spec_unlock.add_argument("eval_spec_id", help="Eval spec id to unlock.")
-    eval_spec_unlock.add_argument("--reason", help="Optional human-readable unlock reason.")
-    eval_spec_unlock.add_argument(
+    _add_db_argument(check_unlock)
+    check_unlock.add_argument("check_spec_id", help="Check spec id to unlock.")
+    check_unlock.add_argument("--reason", help="Optional human-readable unlock reason.")
+    check_unlock.add_argument(
         "--actor-agent-identity-id",
         help="Optional agent identity id to attribute the unlock event to.",
     )
-    eval_spec_unlock.add_argument(
+    check_unlock.add_argument(
         "--json",
         action="store_true",
         help="Print machine-readable JSON.",
     )
 
-    eval_spec_approve = subcommands.add_parser(
-        "eval-spec-approve",
-        help="Mark an eval spec as human-approved L3 trust.",
+    check_approve = subcommands.add_parser(
+        "check-approve",
+        help="Mark an check spec as human-approved L3 trust.",
     )
-    _add_db_argument(eval_spec_approve)
-    eval_spec_approve.add_argument("eval_spec_id", help="Eval spec id to approve.")
-    eval_spec_approve.add_argument("--reason", help="Optional human-readable approval reason.")
-    eval_spec_approve.add_argument(
+    _add_db_argument(check_approve)
+    check_approve.add_argument("check_spec_id", help="Check spec id to approve.")
+    check_approve.add_argument("--reason", help="Optional human-readable approval reason.")
+    check_approve.add_argument(
         "--actor-agent-identity-id",
         help="Optional agent identity id to attribute the approval event to.",
     )
-    eval_spec_approve.add_argument(
+    check_approve.add_argument(
         "--json",
         action="store_true",
         help="Print machine-readable JSON.",
     )
 
-    eval_detail = subcommands.add_parser(
-        "eval-detail",
-        help="Show target, eval runs, replay runs, and gate evidence for an eval spec.",
+    check_detail = subcommands.add_parser(
+        "check-detail",
+        help="Show target, check runs, replay runs, and gate evidence for an check spec.",
     )
-    _add_db_argument(eval_detail)
-    eval_detail.add_argument("eval_spec_id", help="Eval spec id to inspect.")
-    eval_detail.add_argument(
+    _add_db_argument(check_detail)
+    check_detail.add_argument("check_spec_id", help="Check spec id to inspect.")
+    check_detail.add_argument(
         "--json",
         action="store_true",
         help="Print machine-readable JSON.",
@@ -2678,7 +2678,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     replay_detail = subcommands.add_parser(
         "replay-detail",
-        help="Show source run, output run, side effects, and linked eval runs for a replay run.",
+        help="Show source run, output run, side effects, and linked check runs for a replay run.",
     )
     _add_db_argument(replay_detail)
     replay_detail.add_argument("replay_run_id", help="Replay run id to inspect.")
@@ -2690,12 +2690,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     replay = subcommands.add_parser(
         "replay",
-        help="Create a bounded replay run for an eval spec.",
+        help="Create a bounded replay run for an check spec.",
     )
     _add_db_argument(replay)
     replay.add_argument(
-        "eval_spec_id",
-        help="Eval spec id to replay.",
+        "check_spec_id",
+        help="Check spec id to replay.",
     )
     replay.add_argument(
         "--mode",
@@ -2713,7 +2713,7 @@ def build_parser() -> argparse.ArgumentParser:
             "live_network",
             "unknown",
         ],
-        help="Optional replay side-effect mode. Defaults to the eval spec mode.",
+        help="Optional replay side-effect mode. Defaults to the check spec mode.",
     )
     replay.add_argument(
         "--source-run-id",
@@ -2751,8 +2751,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_db_argument(replay_command)
     replay_command.add_argument(
-        "eval_spec_id",
-        help="Eval spec id to replay.",
+        "check_spec_id",
+        help="Check spec id to replay.",
     )
     replay_command.add_argument(
         "--command",
@@ -2782,7 +2782,7 @@ def build_parser() -> argparse.ArgumentParser:
             "live_network",
             "unknown",
         ],
-        help="Optional replay side-effect mode. Defaults to the eval spec mode.",
+        help="Optional replay side-effect mode. Defaults to the check spec mode.",
     )
     replay_command.add_argument(
         "--source-run-id",
@@ -2795,9 +2795,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="External replay command timeout in seconds.",
     )
     replay_command.add_argument(
-        "--run-eval",
+        "--run-check",
         action="store_true",
-        help="Run the eval after the replay result is ingested.",
+        help="Run the check after the replay result is ingested.",
     )
     replay_command.add_argument(
         "--json",
@@ -2834,11 +2834,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     replay_server_run = subcommands.add_parser(
         "replay-server-run",
-        help="Run an eval through a Workshop-style HTTP replay server.",
+        help="Run an check through a Workshop-style HTTP replay server.",
     )
     _add_db_argument(replay_server_run)
     replay_server_run.add_argument("server_url", help="Replay server base URL.")
-    replay_server_run.add_argument("eval_spec_id", help="Eval spec id to replay.")
+    replay_server_run.add_argument("check_spec_id", help="Check spec id to replay.")
     replay_server_run.add_argument(
         "--health-path",
         default="/health",
@@ -2866,7 +2866,7 @@ def build_parser() -> argparse.ArgumentParser:
             "unknown",
         ],
         default=None,
-        help="Replay side-effect mode. Defaults to the eval spec mode.",
+        help="Replay side-effect mode. Defaults to the check spec mode.",
     )
     replay_server_run.add_argument("--source-run-id", help="Optional source run id override.")
     replay_server_run.add_argument("--trace-endpoint", help="Kyoko ingest endpoint for replay traces.")
@@ -2882,9 +2882,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="Skip the replay server health check before POST /replay.",
     )
     replay_server_run.add_argument(
-        "--run-eval",
+        "--run-check",
         action="store_true",
-        help="Run the eval after the replay result is ingested.",
+        help="Run the check after the replay result is ingested.",
     )
     replay_server_run.add_argument(
         "--json",
@@ -3078,7 +3078,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     integration_framework_improve = integration_subcommands.add_parser(
         "framework-improve",
-        help="Run an installed framework through source, replay, eval, and improve apply.",
+        help="Run an installed framework through source, replay, check, and improve apply.",
     )
     _add_db_argument(integration_framework_improve)
     integration_framework_improve.add_argument(
@@ -3416,7 +3416,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_db_argument(replay_adapter_run)
     replay_adapter_run.add_argument("adapter_id", help="Replay adapter id.")
-    replay_adapter_run.add_argument("eval_spec_id", help="Eval spec id to replay.")
+    replay_adapter_run.add_argument("check_spec_id", help="Check spec id to replay.")
     replay_adapter_run.add_argument("--output-dir", type=Path, help="Override artifact output directory.")
     replay_adapter_run.add_argument(
         "--mode",
@@ -3438,9 +3438,9 @@ def build_parser() -> argparse.ArgumentParser:
     replay_adapter_run.add_argument("--source-run-id", help="Optional source run id override.")
     replay_adapter_run.add_argument("--timeout", type=int, help="Override timeout in seconds.")
     replay_adapter_run.add_argument(
-        "--run-eval",
+        "--run-check",
         action="store_true",
-        help="Run the eval after the replay result is ingested.",
+        help="Run the check after the replay result is ingested.",
     )
     replay_adapter_run.add_argument(
         "--json",
@@ -3448,20 +3448,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="Print machine-readable JSON.",
     )
 
-    run_eval_parser = subcommands.add_parser(
-        "run-eval",
-        help="Run a Kyoko eval spec.",
+    run_check_parser = subcommands.add_parser(
+        "run-check",
+        help="Run a Kyoko check spec.",
     )
-    _add_db_argument(run_eval_parser)
-    run_eval_parser.add_argument(
-        "eval_spec_id",
-        help="Eval spec id to run.",
+    _add_db_argument(run_check_parser)
+    run_check_parser.add_argument(
+        "check_spec_id",
+        help="Check spec id to run.",
     )
-    run_eval_parser.add_argument(
+    run_check_parser.add_argument(
         "--replay-run-id",
-        help="Optional replay run id to link to this eval run.",
+        help="Optional replay run id to link to this check run.",
     )
-    run_eval_parser.add_argument(
+    run_check_parser.add_argument(
         "--json",
         action="store_true",
         help="Print machine-readable JSON.",
@@ -3469,12 +3469,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     judge_command_parser = subcommands.add_parser(
         "judge-command",
-        help="Run an external judge command and capture its verdict into a judge eval.",
+        help="Run an external judge command and capture its verdict into a judge check.",
     )
     _add_db_argument(judge_command_parser)
     judge_command_parser.add_argument(
-        "eval_spec_id",
-        help="Judge eval spec id to run.",
+        "check_spec_id",
+        help="Judge check spec id to run.",
     )
     judge_command_parser.add_argument(
         "--command",
@@ -3490,7 +3490,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     judge_command_parser.add_argument(
         "--replay-run-id",
-        help="Optional replay run id to include and link to this judge eval run.",
+        help="Optional replay run id to include and link to this judge check run.",
     )
     judge_command_parser.add_argument(
         "--timeout",
@@ -3703,13 +3703,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(f"demo complete: {report.profile_id}")
             print(f"db: {report.db_path}")
             print(f"proposal: {report.proposal_id}")
-            for eval_spec_id in report.eval_spec_ids:
-                print(f"eval_spec: {eval_spec_id}")
+            for check_spec_id in report.check_spec_ids:
+                print(f"check_spec: {check_spec_id}")
             print(f"replay_adapter: {report.adapter_id}")
             if report.replay_run_id:
                 print(f"replay_run: {report.replay_run_id}")
-            if report.eval_status:
-                print(f"eval_status: {report.eval_status}")
+            if report.check_status:
+                print(f"check_status: {report.check_status}")
             if report.promoted_trust_level:
                 print(f"promoted_trust_level: {report.promoted_trust_level}")
             for skill_id in report.applied_skill_ids:
@@ -4665,7 +4665,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 context_mode=args.context_mode,
                 harness_mode=args.harness_mode,
                 allow_repo_patch=_on_off(args.repo_patch),
-                allow_eval_write=_on_off(args.eval_write),
+                allow_check_write=_on_off(args.check_write),
                 allow_skillbook_write=_on_off(args.skillbook_write),
                 dirty_worktree_policy=args.dirty_worktree_policy,
             )
@@ -4799,22 +4799,22 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(f"target: {target_ref.get('entity_type', 'unknown')}:{target_ref.get('entity_id', 'unknown')}")
             print(f"autonomy: {gate['action']} ({gate['reason']})")
             print(f"evidence_refs: {len(detail['evidence'])}")
-            print(f"eval_specs: {len(detail['eval_specs'])}")
-            eval_guidance = detail.get("eval_guidance", {})
+            print(f"check_specs: {len(detail['check_specs'])}")
+            check_guidance = detail.get("check_guidance", {})
             assertion_preset_names = [
                 preset.get("name")
-                for preset in eval_guidance.get("assertion_presets", [])
+                for preset in check_guidance.get("assertion_presets", [])
                 if isinstance(preset, dict) and preset.get("name")
             ]
             print(
-                "gateable_eval_types: "
-                f"{', '.join(eval_guidance.get('gateable_eval_types', [])) or 'none'}"
+                "gateable_check_types: "
+                f"{', '.join(check_guidance.get('gateable_check_types', [])) or 'none'}"
             )
             print(
                 "assertion_presets: "
                 f"{', '.join(assertion_preset_names) or 'none'}"
             )
-            print(f"eval_runs: {len(detail['eval_runs'])}")
+            print(f"check_runs: {len(detail['check_runs'])}")
             print(f"replay_runs: {len(detail['replay_runs'])}")
             print(f"patch_transactions: {len(detail['patch_transactions'])}")
             evidence_chain = detail.get("evidence_chain", {})
@@ -5492,13 +5492,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 print(f"source_import: {report.source_import.candidate['id']}")
             if report.operator:
                 print(f"operator: {report.operator}")
-            for eval_spec_id in report.eval_spec_ids:
-                print(f"eval_spec: {eval_spec_id}")
+            for check_spec_id in report.check_spec_ids:
+                print(f"check_spec: {check_spec_id}")
             for replay in report.replay_runs:
                 print(f"replay_run: {replay.get('replay_run_id')}")
-                eval_run = replay.get("eval_run")
-                if isinstance(eval_run, dict):
-                    print(f"eval_status: {eval_run.get('status')}")
+                check_run = replay.get("check_run")
+                if isinstance(check_run, dict):
+                    print(f"check_status: {check_run.get('status')}")
             if report.autonomy is not None:
                 for decision in report.autonomy.decisions:
                     print(
@@ -5976,62 +5976,62 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             return 0
         parser.error("mcp subcommand required")
 
-    if args.command == "generate-evals":
+    if args.command == "generate-checks":
         try:
-            report = generate_evals_for_proposal(
+            report = generate_checks_for_proposal(
                 db_path=args.db,
                 proposal_id=args.proposal_id,
             )
-        except (EvalError, StorageError) as exc:
-            print(f"eval generation failed: {exc}", file=sys.stderr)
+        except (CheckError, StorageError) as exc:
+            print(f"check generation failed: {exc}", file=sys.stderr)
             return 1
         payload = {
             "proposal_id": report.proposal_id,
             "profile_id": report.profile_id,
-            "eval_spec_ids": list(report.eval_spec_ids),
-            "existing_eval_spec_ids": list(report.existing_eval_spec_ids),
+            "check_spec_ids": list(report.check_spec_ids),
+            "existing_check_spec_ids": list(report.existing_check_spec_ids),
         }
         if args.json:
             print(json.dumps(payload, sort_keys=True))
         else:
-            print(f"eval generation complete: {report.proposal_id}")
-            for eval_spec_id in report.eval_spec_ids:
-                print(f"eval_spec: {eval_spec_id}")
-            for eval_spec_id in report.existing_eval_spec_ids:
-                print(f"existing_eval_spec: {eval_spec_id}")
+            print(f"check generation complete: {report.proposal_id}")
+            for check_spec_id in report.check_spec_ids:
+                print(f"check_spec: {check_spec_id}")
+            for check_spec_id in report.existing_check_spec_ids:
+                print(f"existing_check_spec: {check_spec_id}")
         return 0
 
-    if args.command == "evals":
-        eval_specs = list_eval_specs(args.db)
-        eval_runs = list_eval_runs(args.db)
+    if args.command == "checks":
+        check_specs = list_check_specs(args.db)
+        check_runs = list_check_runs(args.db)
         replay_runs = list_replay_runs(args.db)
         if args.json:
             print(
                 json.dumps(
                     {
-                        "eval_specs": eval_specs,
-                        "eval_runs": eval_runs,
+                        "check_specs": check_specs,
+                        "check_runs": check_runs,
                         "replay_runs": replay_runs,
                     },
                     sort_keys=True,
                 )
             )
         else:
-            if not eval_specs:
-                print("no eval specs")
-            for eval_spec in eval_specs:
+            if not check_specs:
+                print("no check specs")
+            for check_spec in check_specs:
                 print(
-                    f"{eval_spec['id']} "
-                    f"[{eval_spec['eval_type']}/{eval_spec['trust_level']}] "
-                    f"{eval_spec['name']}"
+                    f"{check_spec['id']} "
+                    f"[{check_spec['check_type']}/{check_spec['trust_level']}] "
+                    f"{check_spec['name']}"
                 )
             if replay_runs:
                 print(f"replay_runs: {len(replay_runs)}")
-            if eval_runs:
-                print(f"eval_runs: {len(eval_runs)}")
+            if check_runs:
+                print(f"check_runs: {len(check_runs)}")
         return 0
 
-    if args.command == "eval-assertion-presets":
+    if args.command == "check-assertion-presets":
         presets = list_assertion_presets()
         if args.json:
             print(json.dumps({"assertion_presets": presets}, sort_keys=True))
@@ -6041,57 +6041,57 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 print(f"{preset['name']}: {assertion_names}")
         return 0
 
-    if args.command == "eval-capabilities":
-        capabilities = list_eval_capabilities()
+    if args.command == "check-capabilities":
+        capabilities = list_check_capabilities()
         if args.json:
             print(json.dumps(capabilities, sort_keys=True))
         else:
-            print("eval_types:")
-            for eval_type in capabilities["eval_types"]:
-                gate = "gateable" if eval_type["gateable"] else "informational"
-                print(f"  {eval_type['name']}: {gate}")
+            print("check_types:")
+            for check_type in capabilities["check_types"]:
+                gate = "gateable" if check_type["gateable"] else "informational"
+                print(f"  {check_type['name']}: {gate}")
             print("assertion_presets:")
             for preset in capabilities["assertion_presets"]:
                 print(f"  {preset['name']}")
         return 0
 
-    if args.command == "eval-spec-locks":
+    if args.command == "check-locks":
         try:
-            locks = list_eval_spec_locks(
+            locks = list_check_locks(
                 args.db,
                 profile_id=args.profile_id,
                 locked_only=not args.include_unlocked,
             )
         except StorageError as exc:
-            print(f"eval spec locks failed: {exc}", file=sys.stderr)
+            print(f"check spec locks failed: {exc}", file=sys.stderr)
             return 1
         if args.json:
-            print(json.dumps({"eval_spec_locks": locks}, sort_keys=True))
+            print(json.dumps({"check_locks": locks}, sort_keys=True))
         else:
             if not locks:
-                print("no eval spec locks")
+                print("no check spec locks")
             for lock in locks:
                 state = "locked" if lock.get("human_locked") else "unlocked"
                 reason = f" reason={lock['reason']}" if lock.get("reason") else ""
-                print(f"{lock['profile_id']} {lock['eval_spec_id']} [{state}]{reason}")
+                print(f"{lock['profile_id']} {lock['check_spec_id']} [{state}]{reason}")
         return 0
 
-    if args.command in {"eval-spec-lock", "eval-spec-unlock"}:
+    if args.command in {"check-lock", "check-unlock"}:
         try:
-            report = set_eval_spec_lock(
+            report = set_check_lock(
                 db_path=args.db,
-                eval_spec_id=args.eval_spec_id,
-                locked=args.command == "eval-spec-lock",
+                check_spec_id=args.check_spec_id,
+                locked=args.command == "check-lock",
                 reason=args.reason,
                 actor_agent_identity_id=args.actor_agent_identity_id,
             )
-        except (EvalError, StorageError) as exc:
+        except (CheckError, StorageError) as exc:
             print(f"{args.command} failed: {exc}", file=sys.stderr)
             return 1
         if args.json:
             print(json.dumps(report.to_json(), sort_keys=True))
         else:
-            print(f"eval_spec: {report.eval_spec_id}")
+            print(f"check_spec: {report.check_spec_id}")
             print(f"human_locked: {report.human_locked}")
             if report.reason:
                 print(f"reason: {report.reason}")
@@ -6099,21 +6099,21 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 print(f"actor_agent_identity_id: {report.actor_agent_identity_id}")
         return 0
 
-    if args.command == "eval-spec-approve":
+    if args.command == "check-approve":
         try:
-            report = approve_eval_spec(
+            report = approve_check_spec(
                 db_path=args.db,
-                eval_spec_id=args.eval_spec_id,
+                check_spec_id=args.check_spec_id,
                 reason=args.reason,
                 actor_agent_identity_id=args.actor_agent_identity_id,
             )
-        except (EvalError, StorageError) as exc:
-            print(f"eval-spec-approve failed: {exc}", file=sys.stderr)
+        except (CheckError, StorageError) as exc:
+            print(f"check-approve failed: {exc}", file=sys.stderr)
             return 1
         if args.json:
             print(json.dumps(report.to_json(), sort_keys=True))
         else:
-            print(f"eval_spec: {report.eval_spec_id}")
+            print(f"check_spec: {report.check_spec_id}")
             print(f"previous_trust_level: {report.previous_trust_level}")
             print(f"trust_level: {report.trust_level}")
             if report.reason:
@@ -6122,19 +6122,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 print(f"actor_agent_identity_id: {report.actor_agent_identity_id}")
         return 0
 
-    if args.command == "eval-detail":
+    if args.command == "check-detail":
         try:
-            detail = get_eval_detail(db_path=args.db, eval_spec_id=args.eval_spec_id)
+            detail = get_check_detail(db_path=args.db, check_spec_id=args.check_spec_id)
         except (DetailError, StorageError) as exc:
-            print(f"eval detail failed: {exc}", file=sys.stderr)
+            print(f"check detail failed: {exc}", file=sys.stderr)
             return 1
         if args.json:
             print(json.dumps(detail, sort_keys=True))
         else:
-            eval_spec = detail["eval_spec"]
+            check_spec = detail["check_spec"]
             summary = detail["summary"]
-            print(f"eval_spec: {eval_spec['id']}")
-            print(f"name: {eval_spec['name']}")
+            print(f"check_spec: {check_spec['id']}")
+            print(f"name: {check_spec['name']}")
             print(f"trust_level: {summary['trust_level']}")
             print(f"latest_status: {summary['latest_status']}")
             print(f"latest_comparison: {summary['latest_comparison'] or 'n/a'}")
@@ -6178,7 +6178,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(f"actual_side_effect_mode: {summary['actual_side_effect_mode'] or 'unknown'}")
             print(f"source_run: {summary['source_run_id'] or 'none'}")
             print(f"output_run: {summary['output_run_id'] or 'none'}")
-            print(f"eval_runs: {summary['eval_runs']}")
+            print(f"check_runs: {summary['check_runs']}")
             print(f"artifacts: {summary.get('artifacts', 0)}")
             for artifact in detail.get("artifacts", []):
                 print(
@@ -6195,19 +6195,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         try:
             report = create_replay_run(
                 db_path=args.db,
-                eval_spec_id=args.eval_spec_id,
+                check_spec_id=args.check_spec_id,
                 mode=args.mode,
                 side_effect_mode=args.side_effect_mode,
                 source_run_id=args.source_run_id,
             )
-        except (EvalError, StorageError) as exc:
+        except (CheckError, StorageError) as exc:
             print(f"replay failed: {exc}", file=sys.stderr)
             return 1
         payload = {
             "replay_run_id": report.replay_run_id,
             "profile_id": report.profile_id,
             "proposal_id": report.proposal_id,
-            "eval_spec_id": report.eval_spec_id,
+            "check_spec_id": report.check_spec_id,
             "source_run_id": report.source_run_id,
             "mode": report.mode,
             "side_effect_mode": report.side_effect_mode,
@@ -6218,7 +6218,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(json.dumps(payload, sort_keys=True))
         else:
             print(f"replay complete: {report.replay_run_id}")
-            print(f"eval_spec: {report.eval_spec_id}")
+            print(f"check_spec: {report.check_spec_id}")
             print(f"status: {report.status}")
             print(f"side_effect_mode: {report.side_effect_mode}")
         return 0
@@ -6230,13 +6230,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 replay_run_id=args.replay_run_id,
                 fixture_path=args.fixture,
             )
-        except (EvalError, StorageError) as exc:
+        except (CheckError, StorageError) as exc:
             print(f"replay completion failed: {exc}", file=sys.stderr)
             return 1
         payload = {
             "replay_run_id": report.replay_run_id,
             "profile_id": report.profile_id,
-            "eval_spec_id": report.eval_spec_id,
+            "check_spec_id": report.check_spec_id,
             "output_run_id": report.output_run_id,
             "status": report.status,
             "result": report.result,
@@ -6246,7 +6246,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(json.dumps(payload, sort_keys=True))
         else:
             print(f"replay completed: {report.replay_run_id}")
-            print(f"eval_spec: {report.eval_spec_id}")
+            print(f"check_spec: {report.check_spec_id}")
             print(f"output_run: {report.output_run_id}")
             print(f"status: {report.status}")
         return 0
@@ -6255,35 +6255,35 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         try:
             report = run_replay_command(
                 db_path=args.db,
-                eval_spec_id=args.eval_spec_id,
+                check_spec_id=args.check_spec_id,
                 output_dir=args.output_dir,
                 command=parse_replay_command(args.replay_command),
                 mode=args.mode,
                 side_effect_mode=args.side_effect_mode,
                 source_run_id=args.source_run_id,
                 timeout_seconds=args.timeout,
-                run_eval_after=args.run_eval,
+                run_check_after=args.run_check,
             )
-        except (EvalError, StorageError) as exc:
+        except (CheckError, StorageError) as exc:
             print(f"replay command failed: {exc}", file=sys.stderr)
             return 1
         payload = {
             "replay_run_id": report.replay_run_id,
             "profile_id": report.profile_id,
-            "eval_spec_id": report.eval_spec_id,
+            "check_spec_id": report.check_spec_id,
             "request_path": str(report.request_path),
             "result_path": str(report.result_path),
             "raw_output_path": str(report.raw_output_path),
             "output_run_id": report.completion.output_run_id,
             "status": report.completion.status,
             "result": report.completion.result,
-            "eval_run": {
-                "eval_run_id": report.eval_run.eval_run_id,
-                "status": report.eval_run.status,
-                "promoted_trust_level": report.eval_run.promoted_trust_level,
-                "result": report.eval_run.result,
+            "check_run": {
+                "check_run_id": report.check_run.check_run_id,
+                "status": report.check_run.status,
+                "promoted_trust_level": report.check_run.promoted_trust_level,
+                "result": report.check_run.result,
             }
-            if report.eval_run is not None
+            if report.check_run is not None
             else None,
         }
         if args.json:
@@ -6294,9 +6294,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(f"result: {report.result_path}")
             print(f"raw_output: {report.raw_output_path}")
             print(f"output_run: {report.completion.output_run_id}")
-            if report.eval_run is not None:
-                print(f"eval_run: {report.eval_run.eval_run_id}")
-                print(f"eval_status: {report.eval_run.status}")
+            if report.check_run is not None:
+                print(f"check_run: {report.check_run.check_run_id}")
+                print(f"check_status: {report.check_run.status}")
         return 0
 
     if args.command == "replay-server-health":
@@ -6326,7 +6326,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         try:
             report = run_replay_server(
                 db_path=args.db,
-                eval_spec_id=args.eval_spec_id,
+                check_spec_id=args.check_spec_id,
                 server_url=args.server_url,
                 health_path=args.health_path,
                 replay_path=args.replay_path,
@@ -6336,10 +6336,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 timeout_seconds=args.timeout,
                 trace_endpoint=args.trace_endpoint,
                 check_health=not args.skip_health,
-                run_eval_after=args.run_eval,
+                run_check_after=args.run_check,
                 allow_remote_server=args.allow_remote_server,
             )
-        except (EvalError, ReplayServerError, StorageError) as exc:
+        except (CheckError, ReplayServerError, StorageError) as exc:
             print(f"replay server run failed: {exc}", file=sys.stderr)
             return 1
         payload = _replay_run_report_payload(report, adapter_id=None)
@@ -6349,8 +6349,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(f"replay server run complete: {report.replay_run_id}")
             print(f"server: {report.server_url}")
             print(f"output_run: {report.completion.output_run_id}")
-            if report.eval_run is not None:
-                print(f"eval_status: {report.eval_run.status}")
+            if report.check_run is not None:
+                print(f"check_status: {report.check_run.status}")
         return 0
 
     if args.command == "replay-server-template":
@@ -6556,7 +6556,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     cwd=args.cwd,
                     log_max_bytes=args.log_max_bytes,
                 )
-            except (EvalError, IntegrationSmokeError) as exc:
+            except (CheckError, IntegrationSmokeError) as exc:
                 print(f"integration smoke failed: {exc}", file=sys.stderr)
                 return 1
             payload = report.to_json()
@@ -6750,15 +6750,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             report = run_registered_replay_adapter(
                 db_path=args.db,
                 adapter_id=args.adapter_id,
-                eval_spec_id=args.eval_spec_id,
+                check_spec_id=args.check_spec_id,
                 output_dir=args.output_dir,
                 mode=args.mode,
                 side_effect_mode=args.side_effect_mode,
                 source_run_id=args.source_run_id,
                 timeout_seconds=args.timeout,
-                run_eval_after=args.run_eval,
+                run_check_after=args.run_check,
             )
-        except (EvalError, ReplayAdapterError, ReplayServerError, StorageError) as exc:
+        except (CheckError, ReplayAdapterError, ReplayServerError, StorageError) as exc:
             print(f"replay adapter run failed: {exc}", file=sys.stderr)
             return 1
         payload = {
@@ -6770,25 +6770,25 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(f"replay adapter run complete: {args.adapter_id}")
             print(f"replay_run: {report.replay_run_id}")
             print(f"output_run: {report.completion.output_run_id}")
-            if report.eval_run is not None:
-                print(f"eval_status: {report.eval_run.status}")
+            if report.check_run is not None:
+                print(f"check_status: {report.check_run.status}")
         return 0
 
-    if args.command == "run-eval":
+    if args.command == "run-check":
         try:
-            report = run_eval(
+            report = run_check(
                 db_path=args.db,
-                eval_spec_id=args.eval_spec_id,
+                check_spec_id=args.check_spec_id,
                 replay_run_id=args.replay_run_id,
             )
-        except (EvalError, StorageError) as exc:
-            print(f"eval failed: {exc}", file=sys.stderr)
+        except (CheckError, StorageError) as exc:
+            print(f"check failed: {exc}", file=sys.stderr)
             return 1
         payload = {
-            "eval_run_id": report.eval_run_id,
+            "check_run_id": report.check_run_id,
             "profile_id": report.profile_id,
             "proposal_id": report.proposal_id,
-            "eval_spec_id": report.eval_spec_id,
+            "check_spec_id": report.check_spec_id,
             "replay_run_id": report.replay_run_id,
             "status": report.status,
             "result": report.result,
@@ -6797,8 +6797,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         if args.json:
             print(json.dumps(payload, sort_keys=True))
         else:
-            print(f"eval complete: {report.eval_run_id}")
-            print(f"eval_spec: {report.eval_spec_id}")
+            print(f"check complete: {report.check_run_id}")
+            print(f"check_spec: {report.check_spec_id}")
             print(f"status: {report.status}")
             if report.promoted_trust_level:
                 print(f"promoted_trust_level: {report.promoted_trust_level}")
@@ -6809,40 +6809,40 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             command = parse_judge_command(args.judge_command)
             report = run_judge_command(
                 db_path=args.db,
-                eval_spec_id=args.eval_spec_id,
+                check_spec_id=args.check_spec_id,
                 output_dir=args.output_dir,
                 command=command,
                 replay_run_id=args.replay_run_id,
                 timeout_seconds=args.timeout,
             )
-        except (EvalError, StorageError) as exc:
+        except (CheckError, StorageError) as exc:
             print(f"judge command failed: {exc}", file=sys.stderr)
             return 1
         payload = {
             "profile_id": report.profile_id,
             "proposal_id": report.proposal_id,
-            "eval_spec_id": report.eval_spec_id,
+            "check_spec_id": report.check_spec_id,
             "request_path": str(report.request_path),
             "result_path": str(report.result_path),
             "raw_output_path": str(report.raw_output_path),
             "judgment": report.judgment,
-            "eval_run": {
-                "eval_run_id": report.eval_run.eval_run_id,
-                "profile_id": report.eval_run.profile_id,
-                "proposal_id": report.eval_run.proposal_id,
-                "eval_spec_id": report.eval_run.eval_spec_id,
-                "replay_run_id": report.eval_run.replay_run_id,
-                "status": report.eval_run.status,
-                "result": report.eval_run.result,
-                "promoted_trust_level": report.eval_run.promoted_trust_level,
+            "check_run": {
+                "check_run_id": report.check_run.check_run_id,
+                "profile_id": report.check_run.profile_id,
+                "proposal_id": report.check_run.proposal_id,
+                "check_spec_id": report.check_run.check_spec_id,
+                "replay_run_id": report.check_run.replay_run_id,
+                "status": report.check_run.status,
+                "result": report.check_run.result,
+                "promoted_trust_level": report.check_run.promoted_trust_level,
             },
         }
         if args.json:
             print(json.dumps(payload, sort_keys=True))
         else:
-            print(f"judge eval complete: {report.eval_run.eval_run_id}")
-            print(f"eval_spec: {report.eval_spec_id}")
-            print(f"status: {report.eval_run.status}")
+            print(f"judge check complete: {report.check_run.check_run_id}")
+            print(f"check_spec: {report.check_spec_id}")
+            print(f"status: {report.check_run.status}")
             print(f"request: {report.request_path}")
             print(f"result: {report.result_path}")
             print(f"raw_output: {report.raw_output_path}")
@@ -6860,7 +6860,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 schema_path=args.schema,
                 timeout_seconds=args.timeout,
             )
-        except (JudgeSmokeError, EvalError, StorageError) as exc:
+        except (JudgeSmokeError, CheckError, StorageError) as exc:
             print(f"judge smoke failed: {exc}", file=sys.stderr)
             return 1
         payload = report.to_json()
@@ -6868,7 +6868,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(json.dumps(payload, sort_keys=True))
         else:
             action = "prepared" if report.prepare_only else "complete"
-            print(f"judge smoke {action}: {report.eval_spec_id}")
+            print(f"judge smoke {action}: {report.check_spec_id}")
             print(f"passed: {report.passed}")
             print(f"db: {report.db_path}")
             print(f"output_dir: {report.output_dir}")
@@ -6878,7 +6878,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(f"request: {report.request_path}")
             print(f"handoff: {report.handoff_path}")
             if not report.prepare_only:
-                print(f"status: {report.eval_status}")
+                print(f"status: {report.check_status}")
                 print(f"result: {report.result_path}")
                 print(f"raw_output: {report.raw_output_path}")
         return 0 if report.passed else 1
@@ -6961,23 +6961,23 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
 
 def _replay_run_report_payload(report: object, *, adapter_id: Optional[str]) -> dict[str, object]:
-    eval_run = getattr(report, "eval_run", None)
+    check_run = getattr(report, "check_run", None)
     completion = getattr(report, "completion")
     payload: dict[str, object] = {
         "adapter_id": adapter_id,
         "replay_run_id": getattr(report, "replay_run_id"),
         "profile_id": getattr(report, "profile_id"),
-        "eval_spec_id": getattr(report, "eval_spec_id"),
+        "check_spec_id": getattr(report, "check_spec_id"),
         "output_run_id": completion.output_run_id,
         "status": completion.status,
         "result": completion.result,
-        "eval_run": {
-            "eval_run_id": eval_run.eval_run_id,
-            "status": eval_run.status,
-            "promoted_trust_level": eval_run.promoted_trust_level,
-            "result": eval_run.result,
+        "check_run": {
+            "check_run_id": check_run.check_run_id,
+            "status": check_run.status,
+            "promoted_trust_level": check_run.promoted_trust_level,
+            "result": check_run.result,
         }
-        if eval_run is not None
+        if check_run is not None
         else None,
     }
     for attr in (

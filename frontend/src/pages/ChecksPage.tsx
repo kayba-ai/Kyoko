@@ -52,7 +52,7 @@ const DETAIL_FIELDS: { key: string; label: string }[] = [
   { key: "status", label: "Status" },
   { key: "mode", label: "Mode" },
   { key: "result", label: "Result" },
-  { key: "eval_spec_id", label: "Eval spec" },
+  { key: "check_spec_id", label: "Check spec" },
   { key: "proposal_id", label: "Proposal" },
   { key: "source_run_id", label: "Source run" },
   { key: "created_at", label: "Created" },
@@ -112,18 +112,18 @@ function MasterDetail({ items }: { items: Item[] }) {
   );
 }
 
-export function EvalsPage() {
-  const { data, error, loading } = useApi(() => api.evals(), []);
+export function ChecksPage() {
+  const { data, error, loading } = useApi(() => api.checks(), []);
   const [tab, setTab] = useState<TabKey>("specs");
 
-  const specs: Item[] = data?.eval_specs ?? [];
-  const runs: Item[] = data?.eval_runs ?? [];
+  const specs: Item[] = data?.check_specs ?? [];
+  const runs: Item[] = data?.check_runs ?? [];
   const replay: Item[] = data?.replay_runs ?? [];
   const allEmpty = specs.length === 0 && runs.length === 0 && replay.length === 0;
 
   const tabs = [
-    { value: "specs", label: `Eval specs (${specs.length})` },
-    { value: "runs", label: `Eval runs (${runs.length})` },
+    { value: "specs", label: `Check specs (${specs.length})` },
+    { value: "runs", label: `Check runs (${runs.length})` },
     { value: "replay", label: `Replay runs (${replay.length})` },
   ];
 
@@ -132,7 +132,7 @@ export function EvalsPage() {
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-12 shrink-0 items-center justify-between border-b border-white/[0.06] px-4">
-        <h1 className="text-md font-semibold">Evals &amp; replay</h1>
+        <h1 className="text-md font-semibold">Checks &amp; replay</h1>
         {!loading && !error && !allEmpty && (
           <Tabs tabs={tabs} value={tab} onChange={(v) => setTab(v as TabKey)} />
         )}
@@ -146,14 +146,14 @@ export function EvalsPage() {
           <ErrorNote error={error} />
         ) : allEmpty ? (
           <Empty
-            title="No evals or replays yet"
-            hint="Generate evals from a proposal, then run replay to gather gate evidence."
+            title="No checks or replays yet"
+            hint="Generate checks from a proposal, then run replay to gather gate evidence."
             icon={<FlaskConical className="h-6 w-6" />}
           />
         ) : (
           <div className="flex flex-col gap-3">
             <p className="text-xs text-muted-foreground/80">
-              Evals produce the evidence that gates autonomy; replay runs re-execute the agent to prove a
+              Checks produce the evidence that gates autonomy; replay runs re-execute the agent to prove a
               regression fix.
             </p>
             <MasterDetail items={active} />

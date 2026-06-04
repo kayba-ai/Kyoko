@@ -7,7 +7,7 @@ from typing import Any, Optional
 
 from .apply import ApplyError, apply_context_proposal, list_skills
 from .bundled_assets import AssetError, load_bundled_json
-from .evals import EvalError, generate_evals_for_proposal
+from .checks import CheckError, generate_checks_for_proposal
 from .proposals import ProposalError, list_learning_proposals, submit_learning_proposal_payload
 from .replay_adapters import ReplayAdapterError, register_replay_adapter, run_registered_replay_adapter
 from .storage import (
@@ -34,14 +34,14 @@ class DemoReport:
     profile_id: str
     proposal_id: str
     proposal_created: bool
-    eval_spec_ids: tuple[str, ...]
-    eval_spec_created_ids: tuple[str, ...]
-    eval_spec_existing_ids: tuple[str, ...]
+    check_spec_ids: tuple[str, ...]
+    check_spec_created_ids: tuple[str, ...]
+    check_spec_existing_ids: tuple[str, ...]
     adapter_id: str
     output_dir: Path
     replay_run_id: Optional[str]
-    eval_run_id: Optional[str]
-    eval_status: Optional[str]
+    check_run_id: Optional[str]
+    check_status: Optional[str]
     promoted_trust_level: Optional[str]
     applied_skill_ids: tuple[str, ...]
     status: dict[str, Any]
@@ -52,14 +52,14 @@ class DemoReport:
             "profile_id": self.profile_id,
             "proposal_id": self.proposal_id,
             "proposal_created": self.proposal_created,
-            "eval_spec_ids": list(self.eval_spec_ids),
-            "eval_spec_created_ids": list(self.eval_spec_created_ids),
-            "eval_spec_existing_ids": list(self.eval_spec_existing_ids),
+            "check_spec_ids": list(self.check_spec_ids),
+            "check_spec_created_ids": list(self.check_spec_created_ids),
+            "check_spec_existing_ids": list(self.check_spec_existing_ids),
             "adapter_id": self.adapter_id,
             "output_dir": str(self.output_dir),
             "replay_run_id": self.replay_run_id,
-            "eval_run_id": self.eval_run_id,
-            "eval_status": self.eval_status,
+            "check_run_id": self.check_run_id,
+            "check_status": self.check_status,
             "promoted_trust_level": self.promoted_trust_level,
             "applied_skill_ids": list(self.applied_skill_ids),
             "status": self.status,
@@ -95,13 +95,13 @@ def run_demo_setup(
             db_path=db_path,
             proposal=proposal_payload,
         )
-        eval_report = generate_evals_for_proposal(
+        check_report = generate_checks_for_proposal(
             db_path=db_path,
             proposal_id=DEMO_PROPOSAL_ID,
         )
-        eval_spec_ids = tuple(eval_report.eval_spec_ids + eval_report.existing_eval_spec_ids)
-        if not eval_spec_ids:
-            raise DemoError(f"demo_eval_not_available:{DEMO_PROPOSAL_ID}")
+        check_spec_ids = tuple(check_report.check_spec_ids + check_report.existing_check_spec_ids)
+        if not check_spec_ids:
+            raise DemoError(f"demo_check_not_available:{DEMO_PROPOSAL_ID}")
 
         register_replay_adapter(
             db_path=db_path,
@@ -118,33 +118,33 @@ def run_demo_setup(
         )
 
         replay_run_id = None
-        eval_run_id = None
-        eval_status = None
+        check_run_id = None
+        check_status = None
         promoted_trust_level = None
         if run_loop:
             replay_report = run_registered_replay_adapter(
                 db_path=db_path,
                 adapter_id=DEMO_ADAPTER_ID,
-                eval_spec_id=eval_spec_ids[0],
-                run_eval_after=True,
+                check_spec_id=check_spec_ids[0],
+                run_check_after=True,
             )
             replay_run_id = replay_report.replay_run_id
-            if replay_report.eval_run is None:
-                raise DemoError(f"demo_eval_not_run:{eval_spec_ids[0]}")
-            eval_run_id = replay_report.eval_run.eval_run_id
-            eval_status = replay_report.eval_run.status
-            promoted_trust_level = replay_report.eval_run.promoted_trust_level
+            if replay_report.check_run is None:
+                raise DemoError(f"demo_check_not_run:{check_spec_ids[0]}")
+            check_run_id = replay_report.check_run.check_run_id
+            check_status = replay_report.check_run.status
+            promoted_trust_level = replay_report.check_run.promoted_trust_level
 
         applied_skill_ids: tuple[str, ...] = ()
         if apply_context:
             if not run_loop:
                 raise DemoError("demo_apply_requires_run_loop")
-            if eval_status != "passed":
-                raise DemoError(f"demo_apply_requires_passing_eval:{eval_status}")
+            if check_status != "passed":
+                raise DemoError(f"demo_apply_requires_passing_check:{check_status}")
             applied_skill_ids = _ensure_demo_skill_applied(db_path)
 
         database_status = status_to_json(get_database_status(db_path))
-    except (ApplyError, EvalError, ProposalError, ReplayAdapterError, StorageError) as exc:
+    except (ApplyError, CheckError, ProposalError, ReplayAdapterError, StorageError) as exc:
         raise DemoError(str(exc)) from exc
 
     return DemoReport(
@@ -152,14 +152,14 @@ def run_demo_setup(
         profile_id=ingest_report.profile_id,
         proposal_id=DEMO_PROPOSAL_ID,
         proposal_created=proposal_created,
-        eval_spec_ids=eval_spec_ids,
-        eval_spec_created_ids=tuple(eval_report.eval_spec_ids),
-        eval_spec_existing_ids=tuple(eval_report.existing_eval_spec_ids),
+        check_spec_ids=check_spec_ids,
+        check_spec_created_ids=tuple(check_report.check_spec_ids),
+        check_spec_existing_ids=tuple(check_report.existing_check_spec_ids),
         adapter_id=DEMO_ADAPTER_ID,
         output_dir=selected_output_dir,
         replay_run_id=replay_run_id,
-        eval_run_id=eval_run_id,
-        eval_status=eval_status,
+        check_run_id=check_run_id,
+        check_status=check_status,
         promoted_trust_level=promoted_trust_level,
         applied_skill_ids=applied_skill_ids,
         status=database_status,

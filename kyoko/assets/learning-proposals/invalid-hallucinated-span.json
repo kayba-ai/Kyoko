@@ -30,7 +30,7 @@
       "name": "researcher"
     }
   },
-  "insight": "Reject proposals that cite missing evidence before they reach eval or autonomy gates.",
+  "insight": "Reject proposals that cite missing evidence before they reach check or autonomy gates.",
   "proposed_changes": [
     {
       "type": "skillbook_update",
@@ -50,7 +50,7 @@
   ],
   "gate_expectations": {
     "requires_human_review": true,
-    "requires_eval_level": "L1_repeated",
+    "requires_check_level": "L1_repeated",
     "requires_replay": false,
     "allowed_autonomy_section": "none",
     "notes": "Expected semantic validation error: evidence_ref_not_found."

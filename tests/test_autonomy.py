@@ -32,7 +32,7 @@ class AutonomyTests(unittest.TestCase):
             self.assertEqual(default_policy["context_mode"], "propose")
             self.assertEqual(default_policy["harness_mode"], "propose")
             self.assertFalse(default_policy["allow_repo_patch"])
-            self.assertIn("evals/**", default_policy["allowed_paths"])
+            self.assertIn("checks/**", default_policy["allowed_paths"])
             self.assertEqual(updated_policy["context_mode"], "autonomous")
             self.assertEqual(updated_policy["harness_mode"], "propose")
             self.assertTrue(updated_policy["allow_repo_patch"])

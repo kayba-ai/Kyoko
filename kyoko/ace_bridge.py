@@ -740,16 +740,16 @@ def _proposal_from_change(
                 "keywords": keywords,
                 "occurrence_refs": evidence_refs,
             },
-            _baseline_eval_change(section=section, operation=operation, title=title),
+            _baseline_check_change(section=section, operation=operation, title=title),
         ],
         "gate_expectations": {
             "requires_human_review": operation != "create",
-            "requires_eval_level": "L1_repeated",
+            "requires_check_level": "L1_repeated",
             "requires_replay": True,
             "allowed_autonomy_section": section,
             "notes": (
                 "Native ACE changes are imported as proposals; Kyoko owns "
-                "validation, eval/replay gates, and final writes."
+                "validation, check/replay gates, and final writes."
             ),
         },
         "created_at": now,
@@ -757,12 +757,12 @@ def _proposal_from_change(
     return proposal
 
 
-def _baseline_eval_change(*, section: str, operation: str, title: str) -> dict[str, Any]:
+def _baseline_check_change(*, section: str, operation: str, title: str) -> dict[str, Any]:
     side_effect_mode = "sandboxed_filesystem" if section == "harness" else "network_mocked"
     return {
-        "type": "eval_spec",
+        "type": "check_spec",
         "name": f"Regression replay for {title.lower()}",
-        "eval_type": "deterministic_assertion",
+        "check_type": "deterministic_assertion",
         "trust_level": "L0_generated",
         "side_effect_mode": side_effect_mode,
         "definition": {

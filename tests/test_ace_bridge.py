@@ -86,7 +86,7 @@ class AceBridgeTests(unittest.TestCase):
             self.assertEqual(proposal["evidence_refs"][0]["entity_id"], "run_research_topic_001")
             self.assertEqual(proposal["proposed_changes"][0]["operation"], "create")
             self.assertTrue(proposal["proposed_changes"][0]["skill_id"].startswith("skill_proposal_native_ace_"))
-            self.assertEqual(proposal["proposed_changes"][1]["type"], "eval_spec")
+            self.assertEqual(proposal["proposed_changes"][1]["type"], "check_spec")
             self.assertEqual(
                 proposal["proposed_changes"][1]["definition"]["assertions"][1]["type"],
                 "replay_no_failed_spans",

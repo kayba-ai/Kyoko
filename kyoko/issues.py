@@ -2,7 +2,7 @@
 
 An :class:`Issue` is an operator-authored (or agent-proposed via MCP) record of a
 problem worth tracking — independent from any learning proposal. Where a proposal is a
-*proposed fix* gated by evals/replay, an issue is pure **evidence**: it describes a
+*proposed fix* gated by checks/replay, an issue is pure **evidence**: it describes a
 category/severity of problem, links the affected canonical entities, and may backlink to
 the proposals that address it. Creating, listing, or resolving an issue never changes
 agent behavior, so issues sit entirely outside the autonomy/safety gate.

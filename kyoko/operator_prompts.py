@@ -73,7 +73,7 @@ def build_operator_prompt(
     schema_path: Optional[Path] = None,
 ) -> str:
     summary = bundle.get("summary", {})
-    capabilities = bundle.get("eval_capabilities") if isinstance(bundle.get("eval_capabilities"), dict) else {}
+    capabilities = bundle.get("check_capabilities") if isinstance(bundle.get("check_capabilities"), dict) else {}
     redaction = bundle.get("redaction") if isinstance(bundle.get("redaction"), dict) else {}
     redaction_policy = redaction.get("policy") if isinstance(redaction.get("policy"), dict) else {}
     payload_access = redaction_policy.get("payload_access", "unknown")
@@ -102,14 +102,14 @@ def build_operator_prompt(
             "- Cite only evidence IDs that exist in the evidence bundle.",
             "- Do not apply proposals, patch files, mutate the skillbook, or change autonomy policy.",
             "- Prefer a `context` proposal when a prompt/skillbook fix is enough.",
-            "- Use `harness` only when the proposed change is an eval, test, replay adapter, tool wrapper, or repository patch.",
-            "- Keep generated evals at `L0_generated`; Kyoko promotes trust only after replay/eval evidence.",
+            "- Use `harness` only when the proposed change is an check, test, replay adapter, tool wrapper, or repository patch.",
+            "- Keep generated checks at `L0_generated`; Kyoko promotes trust only after replay/check evidence.",
             "- If evidence is insufficient, propose the smallest useful context skill and mark confidence conservatively.",
-            "- Your `confidence` field is only an operator signal; Kyoko computes its own confidence from evidence coverage, eval/replay results, duplicate history, and validation state.",
+            "- Your `confidence` field is only an operator signal; Kyoko computes its own confidence from evidence coverage, check/replay results, duplicate history, and validation state.",
             "",
-            "## Eval Capabilities",
+            "## Check Capabilities",
             "",
-            *_eval_capability_lines(capabilities),
+            *_check_capability_lines(capabilities),
             "",
             "## Evidence Privacy And Audit",
             "",
@@ -128,7 +128,7 @@ def build_operator_prompt(
             f"- Handoffs: {summary.get('handoffs', 0)}",
             f"- Existing proposals: {len(bundle.get('learning_proposals', [])) if isinstance(bundle.get('learning_proposals'), list) else 0}",
             f"- Existing skills: {summary.get('skills', 0)}",
-            f"- Eval specs: {summary.get('eval_specs', 0)}",
+            f"- Check specs: {summary.get('check_specs', 0)}",
             f"- Replay runs: {summary.get('replay_runs', 0)}",
             "",
             "## Evidence Bundle JSON",
@@ -174,9 +174,9 @@ def resolve_operator_schema_path(schema_path: Optional[Path]) -> Optional[Path]:
     return schema_path
 
 
-def _eval_capability_lines(capabilities: dict[str, Any]) -> list[str]:
-    gateable = capabilities.get("gateable_eval_types") if isinstance(capabilities.get("gateable_eval_types"), list) else []
-    executable = capabilities.get("executable_eval_types") if isinstance(capabilities.get("executable_eval_types"), list) else []
+def _check_capability_lines(capabilities: dict[str, Any]) -> list[str]:
+    gateable = capabilities.get("gateable_check_types") if isinstance(capabilities.get("gateable_check_types"), list) else []
+    executable = capabilities.get("executable_check_types") if isinstance(capabilities.get("executable_check_types"), list) else []
     replay = capabilities.get("replay") if isinstance(capabilities.get("replay"), dict) else {}
     safe_modes = replay.get("safe_side_effect_modes") if isinstance(replay.get("safe_side_effect_modes"), list) else []
     presets = capabilities.get("assertion_presets") if isinstance(capabilities.get("assertion_presets"), list) else []
@@ -188,8 +188,8 @@ def _eval_capability_lines(capabilities: dict[str, Any]) -> list[str]:
         if isinstance(assertion, dict) and isinstance(assertion.get("name"), str)
     ]
     return [
-        f"- Executable eval types: `{_joined(executable)}`",
-        f"- Eval types that can gate autonomy: `{_joined(gateable)}`",
+        f"- Executable check types: `{_joined(executable)}`",
+        f"- Check types that can gate autonomy: `{_joined(gateable)}`",
         "- `judge` and `smoke_run` are informational only; do not rely on them as sole autonomy gates.",
         f"- Safe replay side-effect modes: `{_joined(safe_modes)}`",
         f"- Deterministic assertions: `{_joined(assertion_names)}`",
@@ -288,7 +288,7 @@ def _proposal_skeleton(profile_id: str) -> dict[str, Any]:
         ],
         "gate_expectations": {
             "requires_human_review": False,
-            "requires_eval_level": "L1_repeated",
+            "requires_check_level": "L1_repeated",
             "requires_replay": False,
             "allowed_autonomy_section": "context",
             "notes": "Explain what Kyoko should verify before apply.",

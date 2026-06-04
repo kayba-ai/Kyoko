@@ -215,8 +215,8 @@ def _improve_smoke_passed(report: ImproveReport) -> bool:
         return False
     replay_passed = all(
         replay.get("status") == "passed"
-        and isinstance(replay.get("eval_run"), dict)
-        and replay["eval_run"].get("status") == "passed"
+        and isinstance(replay.get("check_run"), dict)
+        and replay["check_run"].get("status") == "passed"
         for replay in report.replay_runs
     )
     applied = any(decision.action == "applied" for decision in report.autonomy.decisions)
@@ -409,7 +409,7 @@ FRAMEWORK = "__FRAMEWORK__"
 
 
 def replay(request: dict[str, Any]) -> dict[str, Any]:
-    target = request["input"]["eval_spec"]["target"]
+    target = request["input"]["check_spec"]["target"]
     source_span_id = target["entity_id"]
     output_span_id = "span_framework_fetch_retry_success_001"
     side_effect_mode = request["side_effect_mode"]

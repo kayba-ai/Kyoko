@@ -151,7 +151,7 @@ class CliTests(unittest.TestCase):
 
             payload = json.loads(status_out.getvalue())
             self.assertTrue(payload["initialized"])
-            self.assertEqual(payload["schema_version"], 24)
+            self.assertEqual(payload["schema_version"], 25)
             self.assertEqual(payload["counts"]["spans"], 2)
             self.assertEqual(payload["counts"]["issues"], 0)
 
@@ -231,7 +231,7 @@ class CliTests(unittest.TestCase):
             self.assertEqual([proposal["id"] for proposal in payload["proposals"]], ["proposal_second_context"])
             self.assertEqual(payload["proposals"][0]["section_label"], "Context fix")
 
-    def test_profile_next_flow_plans_and_runs_eval_generation(self) -> None:
+    def test_profile_next_flow_plans_and_runs_check_generation(self) -> None:
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
 
@@ -258,7 +258,7 @@ class CliTests(unittest.TestCase):
             self.assertEqual(dry_code, 0)
             dry_payload = json.loads(dry_out.getvalue())
             self.assertEqual(dry_payload["status"], "planned")
-            self.assertEqual(dry_payload["action"], "generate_evals")
+            self.assertEqual(dry_payload["action"], "generate_checks")
 
             run_out = io.StringIO()
             with redirect_stdout(run_out):
@@ -267,9 +267,9 @@ class CliTests(unittest.TestCase):
             self.assertEqual(run_code, 0)
             run_payload = json.loads(run_out.getvalue())
             self.assertEqual(run_payload["status"], "executed")
-            self.assertEqual(run_payload["reason"], "generated_eval_specs")
-            self.assertEqual(run_payload["result"]["eval_spec_ids"], ["eval_proposal_context_timeout_001_1"])
-            self.assertEqual(run_payload["routing_after"]["state"], "needs_replay_or_eval")
+            self.assertEqual(run_payload["reason"], "generated_check_specs")
+            self.assertEqual(run_payload["result"]["check_spec_ids"], ["check_proposal_context_timeout_001_1"])
+            self.assertEqual(run_payload["routing_after"]["state"], "needs_replay_or_check")
 
     def test_profile_next_flow_prepares_operator_prompt_for_analysis(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -427,7 +427,7 @@ class CliTests(unittest.TestCase):
             self.assertEqual(payload["result"]["proposal_id"], "proposal_command_span_fetch_timeout_001")
             self.assertTrue(payload["result"]["operator_run_id"])
             self.assertTrue(Path(payload["result"]["raw_output_path"]).exists())
-            self.assertEqual(payload["routing_after"]["state"], "needs_eval_generation")
+            self.assertEqual(payload["routing_after"]["state"], "needs_check_generation")
 
     def test_profile_next_rejects_unknown_all_profiles_flag(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -878,9 +878,9 @@ class CliTests(unittest.TestCase):
             self.assertEqual(payload["autonomy_gate"]["reason"], "context_policy_propose")
             self.assertEqual(payload["confidence_assessment"]["kyoko_confidence"], 0.66)
             self.assertEqual(len(payload["evidence"]), 2)
-            self.assertEqual(payload["eval_guidance"]["gateable_eval_types"], ["deterministic_assertion", "regression_replay"])
+            self.assertEqual(payload["check_guidance"]["gateable_check_types"], ["deterministic_assertion", "regression_replay"])
             self.assertEqual(
-                [preset["name"] for preset in payload["eval_guidance"]["assertion_presets"]],
+                [preset["name"] for preset in payload["check_guidance"]["assertion_presets"]],
                 ["replay_success_shape", "replay_handoff_present"],
             )
             self.assertEqual(payload["evidence_chain"]["steps"][0]["stage"], "observed_issue")
@@ -898,7 +898,7 @@ class CliTests(unittest.TestCase):
                 )
 
             self.assertEqual(text_code, 0)
-            self.assertIn("gateable_eval_types: deterministic_assertion, regression_replay", text_out.getvalue())
+            self.assertIn("gateable_check_types: deterministic_assertion, regression_replay", text_out.getvalue())
             self.assertIn("assertion_presets: replay_success_shape, replay_handoff_present", text_out.getvalue())
 
     def test_apply_and_skills_flow(self) -> None:
@@ -1045,10 +1045,10 @@ class CliTests(unittest.TestCase):
             payload = json.loads(autonomy_out.getvalue())
             self.assertEqual(payload["profile_id"], "profile_news_research_001")
             self.assertEqual(payload["decisions"][0]["action"], "gated")
-            self.assertEqual(payload["decisions"][0]["reason"], "missing_eval_run")
+            self.assertEqual(payload["decisions"][0]["reason"], "missing_check_run")
             self.assertEqual(
-                payload["decisions"][0]["eval_spec_ids"],
-                ["eval_proposal_context_timeout_001_1"],
+                payload["decisions"][0]["check_spec_ids"],
+                ["check_proposal_context_timeout_001_1"],
             )
 
             detail_out = io.StringIO()
@@ -1066,7 +1066,7 @@ class CliTests(unittest.TestCase):
             detail_payload = json.loads(detail_out.getvalue())
             self.assertEqual(detail_payload["gate_history"][-1]["kind"], "autonomy_decision")
             self.assertEqual(detail_payload["gate_history"][-1]["action"], "gated")
-            self.assertEqual(detail_payload["gate_history"][-1]["reason"], "missing_eval_run")
+            self.assertEqual(detail_payload["gate_history"][-1]["reason"], "missing_check_run")
 
             autonomy_events_out = io.StringIO()
             with redirect_stdout(autonomy_events_out):
@@ -1090,7 +1090,7 @@ class CliTests(unittest.TestCase):
             self.assertEqual(autonomy_events_payload["autonomy_events"][0]["kind"], "autonomy_decision")
             self.assertEqual(
                 autonomy_events_payload["autonomy_events"][0]["metadata"]["reason"],
-                "missing_eval_run",
+                "missing_check_run",
             )
 
             autonomy_events_text_out = io.StringIO()
@@ -1180,16 +1180,16 @@ class CliTests(unittest.TestCase):
             self.assertEqual(autonomy_code, 0)
             payload = json.loads(autonomy_out.getvalue())
             self.assertEqual(payload["decisions"][0]["action"], "gated")
-            self.assertEqual(payload["decisions"][0]["reason"], "missing_eval_run")
+            self.assertEqual(payload["decisions"][0]["reason"], "missing_check_run")
             self.assertEqual(
-                payload["decisions"][0]["eval_spec_ids"],
-                ["eval_proposal_harness_generated_eval_001_1"],
+                payload["decisions"][0]["check_spec_ids"],
+                ["check_proposal_harness_generated_check_001_1"],
             )
             self.assertEqual(
                 payload["decisions"][0]["patch_transaction_ids"],
-                ["patch_proposal_harness_generated_eval_001_1"],
+                ["patch_proposal_harness_generated_check_001_1"],
             )
-            self.assertFalse((workspace / "evals/generated_timeout_eval.py").exists())
+            self.assertFalse((workspace / "checks/generated_timeout_check.py").exists())
 
     def test_harness_target_lock_cli_flow(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -1205,7 +1205,7 @@ class CliTests(unittest.TestCase):
                         "harness-target-lock",
                         "--db",
                         str(db_path),
-                        "evals/generated_timeout_eval.py",
+                        "checks/generated_timeout_check.py",
                         "--reason",
                         "manual owner review",
                         "--actor-agent-identity-id",
@@ -1223,7 +1223,7 @@ class CliTests(unittest.TestCase):
                         "harness-target-unlock",
                         "--db",
                         str(db_path),
-                        "evals/generated_timeout_eval.py",
+                        "checks/generated_timeout_check.py",
                         "--actor-agent-identity-id",
                         "agent_researcher_001",
                         "--json",
@@ -1239,7 +1239,7 @@ class CliTests(unittest.TestCase):
             self.assertTrue(lock_payload["human_locked"])
             self.assertEqual(lock_payload["reason"], "manual owner review")
             self.assertEqual(lock_payload["actor_agent_identity_id"], "agent_researcher_001")
-            self.assertEqual(list_payload["harness_target_locks"][0]["target_path"], "evals/generated_timeout_eval.py")
+            self.assertEqual(list_payload["harness_target_locks"][0]["target_path"], "checks/generated_timeout_check.py")
             self.assertFalse(unlock_payload["human_locked"])
             self.assertEqual(unlock_payload["actor_agent_identity_id"], "agent_researcher_001")
 
@@ -1270,7 +1270,7 @@ class CliTests(unittest.TestCase):
                         "prepare-harness",
                         "--db",
                         str(db_path),
-                        "proposal_harness_timeout_eval_001",
+                        "proposal_harness_timeout_check_001",
                         "--json",
                     ]
                 )
@@ -1279,7 +1279,7 @@ class CliTests(unittest.TestCase):
             self.assertEqual(prepare_payload["state"], "pending")
             self.assertEqual(
                 prepare_payload["patch_transaction_ids"],
-                ["patch_proposal_harness_timeout_eval_001_1"],
+                ["patch_proposal_harness_timeout_check_001_1"],
             )
 
             patches_out = io.StringIO()
@@ -1290,7 +1290,7 @@ class CliTests(unittest.TestCase):
             self.assertEqual(patches_payload["patch_transactions"][0]["status"], "ready")
             self.assertEqual(
                 patches_payload["patch_transactions"][0]["target_paths"],
-                ["evals/news_research_timeout_replay.py"],
+                ["checks/news_research_timeout_replay.py"],
             )
 
     def test_apply_and_rollback_harness_flow(self) -> None:
@@ -1298,7 +1298,7 @@ class CliTests(unittest.TestCase):
             db_path = Path(tmpdir) / "kyoko.db"
             workspace = Path(tmpdir) / "workspace"
             workspace.mkdir()
-            target = workspace / "evals/generated_timeout_eval.py"
+            target = workspace / "checks/generated_timeout_check.py"
 
             with redirect_stdout(io.StringIO()):
                 self.assertEqual(main(["ingest-fixture", "--db", str(db_path), str(FIXTURE)]), 0)
@@ -1333,7 +1333,7 @@ class CliTests(unittest.TestCase):
                             "prepare-harness",
                             "--db",
                             str(db_path),
-                            "proposal_harness_generated_eval_001",
+                            "proposal_harness_generated_check_001",
                         ]
                     ),
                     0,
@@ -1346,7 +1346,7 @@ class CliTests(unittest.TestCase):
                         "apply-harness",
                         "--db",
                         str(db_path),
-                        "patch_proposal_harness_generated_eval_001_1",
+                        "patch_proposal_harness_generated_check_001_1",
                         "--workspace-root",
                         str(workspace),
                         "--json",
@@ -1364,7 +1364,7 @@ class CliTests(unittest.TestCase):
                         "rollback-harness",
                         "--db",
                         str(db_path),
-                        "patch_proposal_harness_generated_eval_001_1",
+                        "patch_proposal_harness_generated_check_001_1",
                         "--workspace-root",
                         str(workspace),
                         "--json",
@@ -1379,13 +1379,13 @@ class CliTests(unittest.TestCase):
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
             workspace = Path(tmpdir) / "workspace"
-            target = workspace / "evals/generated_timeout_eval.py"
+            target = workspace / "checks/generated_timeout_check.py"
             target.parent.mkdir(parents=True)
             target.write_text("old\n")
             diff_path = Path(tmpdir) / "patch.diff"
             diff_path.write_text(
-                "--- a/evals/generated_timeout_eval.py\n"
-                "+++ b/evals/generated_timeout_eval.py\n"
+                "--- a/checks/generated_timeout_check.py\n"
+                "+++ b/checks/generated_timeout_check.py\n"
                 "@@ -1 +1,2 @@\n"
                 "-old\n"
                 "+new\n"
@@ -1421,7 +1421,7 @@ class CliTests(unittest.TestCase):
             proposal["producer"]["session_id"] = "operator_session_harness_cli_unified_diff_001"
             proposal["proposed_changes"][0]["patch_kind"] = "unified_diff"
             proposal["proposed_changes"][0]["diff_ref"] = blob_payload["blob_id"]
-            proposal["proposed_changes"][0]["target_paths"] = ["evals/generated_timeout_eval.py"]
+            proposal["proposed_changes"][0]["target_paths"] = ["checks/generated_timeout_check.py"]
             proposal["proposed_changes"][0]["command_plan"] = []
             proposal_path = Path(tmpdir) / "unified-proposal.json"
             proposal_path.write_text(json.dumps(proposal))
@@ -1775,7 +1775,7 @@ class CliTests(unittest.TestCase):
             self.assertTrue(payload["persisted"])
             self.assertEqual(len(payload["proposal_ids"]), 1)
             self.assertEqual(payload["proposals"][0]["producer"]["kind"], "native_ace")
-            self.assertEqual(payload["proposals"][0]["proposed_changes"][1]["type"], "eval_spec")
+            self.assertEqual(payload["proposals"][0]["proposed_changes"][1]["type"], "check_spec")
 
     def test_ace_native_run_cli_flow(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -2012,9 +2012,9 @@ class CliTests(unittest.TestCase):
             self.assertEqual(improve_code, 0)
             payload = json.loads(improve_out.getvalue())
             self.assertEqual(payload["proposal_id"], "proposal_context_timeout_001")
-            self.assertEqual(payload["eval_spec_ids"], ["eval_proposal_context_timeout_001_1"])
+            self.assertEqual(payload["check_spec_ids"], ["check_proposal_context_timeout_001_1"])
             self.assertEqual(payload["replay_runs"][0]["adapter_id"], "fixture_replay")
-            self.assertEqual(payload["replay_runs"][0]["eval_run"]["status"], "passed")
+            self.assertEqual(payload["replay_runs"][0]["check_run"]["status"], "passed")
             self.assertEqual(payload["autonomy"]["decisions"][0]["action"], "applied")
 
     def test_improve_cli_applies_harness_patch_with_workspace_root(self) -> None:
@@ -2088,7 +2088,7 @@ class CliTests(unittest.TestCase):
                         "--db",
                         str(db_path),
                         "--proposal-id",
-                        "proposal_harness_generated_eval_001",
+                        "proposal_harness_generated_check_001",
                         "--replay-adapter",
                         "fixture_replay",
                         "--harness-workspace-root",
@@ -2099,12 +2099,12 @@ class CliTests(unittest.TestCase):
 
             self.assertEqual(improve_code, 0)
             payload = json.loads(improve_out.getvalue())
-            target = workspace / "evals/generated_timeout_eval.py"
+            target = workspace / "checks/generated_timeout_check.py"
             self.assertEqual(
-                payload["generated_eval_spec_ids"],
-                ["eval_proposal_harness_generated_eval_001_1"],
+                payload["generated_check_spec_ids"],
+                ["check_proposal_harness_generated_check_001_1"],
             )
-            self.assertEqual(payload["replay_runs"][0]["eval_run"]["status"], "passed")
+            self.assertEqual(payload["replay_runs"][0]["check_run"]["status"], "passed")
             self.assertEqual(payload["autonomy"]["decisions"][0]["action"], "applied")
             self.assertTrue(target.exists())
 
@@ -2138,11 +2138,11 @@ class CliTests(unittest.TestCase):
             self.assertEqual(payload["profile_id"], "profile_openclaw_main")
             self.assertEqual(payload["proposal_id"], "proposal_mock_span_openclaw_error_session_failure_1")
             self.assertEqual(
-                payload["generated_eval_spec_ids"],
-                ["eval_proposal_mock_span_openclaw_error_session_failure_1_1"],
+                payload["generated_check_spec_ids"],
+                ["check_proposal_mock_span_openclaw_error_session_failure_1_1"],
             )
 
-    def test_eval_and_replay_flow(self) -> None:
+    def test_check_and_replay_flow(self) -> None:
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
 
@@ -2166,7 +2166,7 @@ class CliTests(unittest.TestCase):
             with redirect_stdout(generate_out):
                 generate_code = main(
                     [
-                        "generate-evals",
+                        "generate-checks",
                         "--db",
                         str(db_path),
                         "proposal_context_timeout_001",
@@ -2176,8 +2176,8 @@ class CliTests(unittest.TestCase):
             self.assertEqual(generate_code, 0)
             generate_payload = json.loads(generate_out.getvalue())
             self.assertEqual(
-                generate_payload["eval_spec_ids"],
-                ["eval_proposal_context_timeout_001_1"],
+                generate_payload["check_spec_ids"],
+                ["check_proposal_context_timeout_001_1"],
             )
 
             replay_out = io.StringIO()
@@ -2187,7 +2187,7 @@ class CliTests(unittest.TestCase):
                         "replay",
                         "--db",
                         str(db_path),
-                        "eval_proposal_context_timeout_001_1",
+                        "check_proposal_context_timeout_001_1",
                         "--json",
                     ]
                 )
@@ -2212,38 +2212,38 @@ class CliTests(unittest.TestCase):
             complete_payload = json.loads(complete_out.getvalue())
             self.assertEqual(complete_payload["output_run_id"], "run_research_topic_replay_001")
 
-            eval_out = io.StringIO()
-            with redirect_stdout(eval_out):
-                eval_code = main(
+            check_out = io.StringIO()
+            with redirect_stdout(check_out):
+                check_code = main(
                     [
-                        "run-eval",
+                        "run-check",
                         "--db",
                         str(db_path),
-                        "eval_proposal_context_timeout_001_1",
+                        "check_proposal_context_timeout_001_1",
                         "--replay-run-id",
                         replay_payload["replay_run_id"],
                         "--json",
                     ]
                 )
-            self.assertEqual(eval_code, 0)
-            eval_payload = json.loads(eval_out.getvalue())
-            self.assertEqual(eval_payload["status"], "passed")
-            self.assertEqual(eval_payload["promoted_trust_level"], "L2_regression")
-            self.assertEqual(eval_payload["result"]["comparison"], "fail_before_pass_after")
+            self.assertEqual(check_code, 0)
+            check_payload = json.loads(check_out.getvalue())
+            self.assertEqual(check_payload["status"], "passed")
+            self.assertEqual(check_payload["promoted_trust_level"], "L2_regression")
+            self.assertEqual(check_payload["result"]["comparison"], "fail_before_pass_after")
 
-            evals_out = io.StringIO()
-            with redirect_stdout(evals_out):
-                evals_code = main(["evals", "--db", str(db_path), "--json"])
-            self.assertEqual(evals_code, 0)
-            evals_payload = json.loads(evals_out.getvalue())
-            self.assertEqual(len(evals_payload["eval_specs"]), 1)
-            self.assertEqual(len(evals_payload["eval_runs"]), 1)
-            self.assertEqual(len(evals_payload["replay_runs"]), 1)
-            self.assertFalse(evals_payload["eval_specs"][0]["human_locked"])
+            checks_out = io.StringIO()
+            with redirect_stdout(checks_out):
+                checks_code = main(["checks", "--db", str(db_path), "--json"])
+            self.assertEqual(checks_code, 0)
+            checks_payload = json.loads(checks_out.getvalue())
+            self.assertEqual(len(checks_payload["check_specs"]), 1)
+            self.assertEqual(len(checks_payload["check_runs"]), 1)
+            self.assertEqual(len(checks_payload["replay_runs"]), 1)
+            self.assertFalse(checks_payload["check_specs"][0]["human_locked"])
 
             preset_out = io.StringIO()
             with redirect_stdout(preset_out):
-                preset_code = main(["eval-assertion-presets", "--json"])
+                preset_code = main(["check-assertion-presets", "--json"])
             self.assertEqual(preset_code, 0)
             preset_payload = json.loads(preset_out.getvalue())
             self.assertEqual(
@@ -2261,11 +2261,11 @@ class CliTests(unittest.TestCase):
 
             capabilities_out = io.StringIO()
             with redirect_stdout(capabilities_out):
-                capabilities_code = main(["eval-capabilities", "--json"])
+                capabilities_code = main(["check-capabilities", "--json"])
             self.assertEqual(capabilities_code, 0)
             capabilities_payload = json.loads(capabilities_out.getvalue())
             self.assertEqual(
-                capabilities_payload["gateable_eval_types"],
+                capabilities_payload["gateable_check_types"],
                 ["deterministic_assertion", "regression_replay"],
             )
             self.assertFalse(capabilities_payload["judge"]["invokes_model"])
@@ -2277,14 +2277,14 @@ class CliTests(unittest.TestCase):
                 ["live_network", "unknown"],
             )
 
-            eval_lock_out = io.StringIO()
-            with redirect_stdout(eval_lock_out):
-                eval_lock_code = main(
+            check_lock_out = io.StringIO()
+            with redirect_stdout(check_lock_out):
+                check_lock_code = main(
                     [
-                        "eval-spec-lock",
+                        "check-lock",
                         "--db",
                         str(db_path),
-                        "eval_proposal_context_timeout_001_1",
+                        "check_proposal_context_timeout_001_1",
                         "--reason",
                         "manual review",
                         "--actor-agent-identity-id",
@@ -2292,29 +2292,29 @@ class CliTests(unittest.TestCase):
                         "--json",
                     ]
                 )
-            self.assertEqual(eval_lock_code, 0)
-            eval_lock_payload = json.loads(eval_lock_out.getvalue())
-            self.assertTrue(eval_lock_payload["human_locked"])
-            self.assertEqual(eval_lock_payload["actor_agent_identity_id"], "agent_researcher_001")
+            self.assertEqual(check_lock_code, 0)
+            check_lock_payload = json.loads(check_lock_out.getvalue())
+            self.assertTrue(check_lock_payload["human_locked"])
+            self.assertEqual(check_lock_payload["actor_agent_identity_id"], "agent_researcher_001")
 
-            eval_locks_out = io.StringIO()
-            with redirect_stdout(eval_locks_out):
-                eval_locks_code = main(["eval-spec-locks", "--db", str(db_path), "--json"])
-            self.assertEqual(eval_locks_code, 0)
-            eval_locks_payload = json.loads(eval_locks_out.getvalue())
+            check_locks_out = io.StringIO()
+            with redirect_stdout(check_locks_out):
+                check_locks_code = main(["check-locks", "--db", str(db_path), "--json"])
+            self.assertEqual(check_locks_code, 0)
+            check_locks_payload = json.loads(check_locks_out.getvalue())
             self.assertEqual(
-                eval_locks_payload["eval_spec_locks"][0]["eval_spec_id"],
-                "eval_proposal_context_timeout_001_1",
+                check_locks_payload["check_locks"][0]["check_spec_id"],
+                "check_proposal_context_timeout_001_1",
             )
 
             locked_approve_err = io.StringIO()
             with redirect_stderr(locked_approve_err):
                 locked_approve_code = main(
                     [
-                        "eval-spec-approve",
+                        "check-approve",
                         "--db",
                         str(db_path),
-                        "eval_proposal_context_timeout_001_1",
+                        "check_proposal_context_timeout_001_1",
                         "--reason",
                         "reviewed gate evidence",
                         "--actor-agent-identity-id",
@@ -2323,53 +2323,53 @@ class CliTests(unittest.TestCase):
                     ]
                 )
             self.assertEqual(locked_approve_code, 1)
-            self.assertIn("human_locked_eval_spec", locked_approve_err.getvalue())
+            self.assertIn("human_locked_check_spec", locked_approve_err.getvalue())
 
-            eval_detail_out = io.StringIO()
-            with redirect_stdout(eval_detail_out):
-                eval_detail_code = main(
+            check_detail_out = io.StringIO()
+            with redirect_stdout(check_detail_out):
+                check_detail_code = main(
                     [
-                        "eval-detail",
+                        "check-detail",
                         "--db",
                         str(db_path),
-                        "eval_proposal_context_timeout_001_1",
+                        "check_proposal_context_timeout_001_1",
                         "--json",
                     ]
                 )
-            self.assertEqual(eval_detail_code, 0)
-            eval_detail_payload = json.loads(eval_detail_out.getvalue())
-            self.assertEqual(eval_detail_payload["summary"]["latest_status"], "passed")
-            self.assertEqual(eval_detail_payload["summary"]["latest_comparison"], "fail_before_pass_after")
-            self.assertTrue(eval_detail_payload["eval_spec"]["human_locked"])
-            self.assertEqual(len(eval_detail_payload["summary"]["latest_assertions"]), 3)
-            self.assertEqual(eval_detail_payload["summary"]["latest_assertions"][1]["actual"], 1)
+            self.assertEqual(check_detail_code, 0)
+            check_detail_payload = json.loads(check_detail_out.getvalue())
+            self.assertEqual(check_detail_payload["summary"]["latest_status"], "passed")
+            self.assertEqual(check_detail_payload["summary"]["latest_comparison"], "fail_before_pass_after")
+            self.assertTrue(check_detail_payload["check_spec"]["human_locked"])
+            self.assertEqual(len(check_detail_payload["summary"]["latest_assertions"]), 3)
+            self.assertEqual(check_detail_payload["summary"]["latest_assertions"][1]["actual"], 1)
 
-            eval_unlock_out = io.StringIO()
-            with redirect_stdout(eval_unlock_out):
-                eval_unlock_code = main(
+            check_unlock_out = io.StringIO()
+            with redirect_stdout(check_unlock_out):
+                check_unlock_code = main(
                     [
-                        "eval-spec-unlock",
+                        "check-unlock",
                         "--db",
                         str(db_path),
-                        "eval_proposal_context_timeout_001_1",
+                        "check_proposal_context_timeout_001_1",
                         "--actor-agent-identity-id",
                         "agent_researcher_001",
                         "--json",
                     ]
                 )
-            self.assertEqual(eval_unlock_code, 0)
-            eval_unlock_payload = json.loads(eval_unlock_out.getvalue())
-            self.assertFalse(eval_unlock_payload["human_locked"])
-            self.assertEqual(eval_unlock_payload["actor_agent_identity_id"], "agent_researcher_001")
+            self.assertEqual(check_unlock_code, 0)
+            check_unlock_payload = json.loads(check_unlock_out.getvalue())
+            self.assertFalse(check_unlock_payload["human_locked"])
+            self.assertEqual(check_unlock_payload["actor_agent_identity_id"], "agent_researcher_001")
 
-            eval_approve_out = io.StringIO()
-            with redirect_stdout(eval_approve_out):
-                eval_approve_code = main(
+            check_approve_out = io.StringIO()
+            with redirect_stdout(check_approve_out):
+                check_approve_code = main(
                     [
-                        "eval-spec-approve",
+                        "check-approve",
                         "--db",
                         str(db_path),
-                        "eval_proposal_context_timeout_001_1",
+                        "check_proposal_context_timeout_001_1",
                         "--reason",
                         "reviewed gate evidence",
                         "--actor-agent-identity-id",
@@ -2377,26 +2377,26 @@ class CliTests(unittest.TestCase):
                         "--json",
                     ]
                 )
-            self.assertEqual(eval_approve_code, 0)
-            eval_approve_payload = json.loads(eval_approve_out.getvalue())
-            self.assertEqual(eval_approve_payload["previous_trust_level"], "L2_regression")
-            self.assertEqual(eval_approve_payload["trust_level"], "L3_human_approved")
-            self.assertEqual(eval_approve_payload["actor_agent_identity_id"], "agent_researcher_001")
+            self.assertEqual(check_approve_code, 0)
+            check_approve_payload = json.loads(check_approve_out.getvalue())
+            self.assertEqual(check_approve_payload["previous_trust_level"], "L2_regression")
+            self.assertEqual(check_approve_payload["trust_level"], "L3_human_approved")
+            self.assertEqual(check_approve_payload["actor_agent_identity_id"], "agent_researcher_001")
 
-            eval_detail_text_out = io.StringIO()
-            with redirect_stdout(eval_detail_text_out):
-                eval_detail_text_code = main(
+            check_detail_text_out = io.StringIO()
+            with redirect_stdout(check_detail_text_out):
+                check_detail_text_code = main(
                     [
-                        "eval-detail",
+                        "check-detail",
                         "--db",
                         str(db_path),
-                        "eval_proposal_context_timeout_001_1",
+                        "check_proposal_context_timeout_001_1",
                     ]
                 )
-            self.assertEqual(eval_detail_text_code, 0)
+            self.assertEqual(check_detail_text_code, 0)
             self.assertIn(
                 "pass replay_target_field_equals: field_equals",
-                eval_detail_text_out.getvalue(),
+                check_detail_text_out.getvalue(),
             )
 
             replay_detail_out = io.StringIO()
@@ -2438,7 +2438,7 @@ class CliTests(unittest.TestCase):
                 self.assertEqual(
                     main(
                         [
-                            "generate-evals",
+                            "generate-checks",
                             "--db",
                             str(db_path),
                             "proposal_context_timeout_001",
@@ -2448,7 +2448,7 @@ class CliTests(unittest.TestCase):
                 )
             with sqlite3.connect(db_path) as connection:
                 connection.execute(
-                    "UPDATE eval_specs SET eval_type = ?, definition_json = ? WHERE id = ?",
+                    "UPDATE check_specs SET check_type = ?, definition_json = ? WHERE id = ?",
                     (
                         "judge",
                         json.dumps(
@@ -2463,7 +2463,7 @@ class CliTests(unittest.TestCase):
                             },
                             sort_keys=True,
                         ),
-                        "eval_proposal_context_timeout_001_1",
+                        "check_proposal_context_timeout_001_1",
                     ),
                 )
 
@@ -2474,7 +2474,7 @@ class CliTests(unittest.TestCase):
                         "judge-command",
                         "--db",
                         str(db_path),
-                        "eval_proposal_context_timeout_001_1",
+                        "check_proposal_context_timeout_001_1",
                         "--command",
                         f"{shlex.quote(sys.executable)} {shlex.quote(str(JUDGE_COMMAND))}",
                         "--output-dir",
@@ -2485,10 +2485,10 @@ class CliTests(unittest.TestCase):
 
             self.assertEqual(code, 0)
             payload = json.loads(judge_out.getvalue())
-            self.assertEqual(payload["eval_run"]["status"], "passed")
-            self.assertEqual(payload["eval_run"]["result"]["judge_backend"], "external_command")
-            self.assertFalse(payload["eval_run"]["result"]["gateable"])
-            self.assertIsNone(payload["eval_run"]["promoted_trust_level"])
+            self.assertEqual(payload["check_run"]["status"], "passed")
+            self.assertEqual(payload["check_run"]["result"]["judge_backend"], "external_command")
+            self.assertFalse(payload["check_run"]["result"]["gateable"])
+            self.assertIsNone(payload["check_run"]["promoted_trust_level"])
             self.assertEqual(payload["judgment"]["judge"], "fixture_external_judge")
             self.assertTrue(Path(payload["request_path"]).exists())
             self.assertTrue(Path(payload["result_path"]).exists())
@@ -2516,7 +2516,7 @@ class CliTests(unittest.TestCase):
             self.assertTrue(prepare_payload["passed"])
             self.assertTrue(prepare_payload["prepare_only"])
             self.assertFalse(prepare_payload["external_command_invoked"])
-            self.assertEqual(prepare_payload["eval_status"], "prepared")
+            self.assertEqual(prepare_payload["check_status"], "prepared")
             self.assertTrue(Path(prepare_payload["request_path"]).exists())
             self.assertTrue(Path(prepare_payload["handoff_path"]).exists())
 
@@ -2539,7 +2539,7 @@ class CliTests(unittest.TestCase):
             self.assertFalse(run_payload["prepare_only"])
             self.assertTrue(run_payload["external_command_invoked"])
             self.assertFalse(run_payload["provider_backed"])
-            self.assertEqual(run_payload["eval_status"], "passed")
+            self.assertEqual(run_payload["check_status"], "passed")
             self.assertEqual(run_payload["judgment"]["judge"], "fixture_external_judge")
             self.assertIsNone(run_payload["promoted_trust_level"])
             self.assertTrue(Path(run_payload["result_path"]).exists())
@@ -2568,7 +2568,7 @@ class CliTests(unittest.TestCase):
                 self.assertEqual(
                     main(
                         [
-                            "generate-evals",
+                            "generate-checks",
                             "--db",
                             str(db_path),
                             "proposal_context_timeout_001",
@@ -2584,12 +2584,12 @@ class CliTests(unittest.TestCase):
                         "replay-command",
                         "--db",
                         str(db_path),
-                        "eval_proposal_context_timeout_001_1",
+                        "check_proposal_context_timeout_001_1",
                         "--command",
                         f"{shlex.quote(sys.executable)} {shlex.quote(str(REPLAY_COMMAND))}",
                         "--output-dir",
                         str(output_dir),
-                        "--run-eval",
+                        "--run-check",
                         "--json",
                     ]
                 )
@@ -2598,8 +2598,8 @@ class CliTests(unittest.TestCase):
             payload = json.loads(replay_command_out.getvalue())
             self.assertEqual(payload["status"], "passed")
             self.assertEqual(payload["output_run_id"], "run_research_topic_replay_001")
-            self.assertEqual(payload["eval_run"]["status"], "passed")
-            self.assertEqual(payload["eval_run"]["promoted_trust_level"], "L2_regression")
+            self.assertEqual(payload["check_run"]["status"], "passed")
+            self.assertEqual(payload["check_run"]["promoted_trust_level"], "L2_regression")
             self.assertTrue(Path(payload["request_path"]).exists())
             self.assertTrue(Path(payload["result_path"]).exists())
 
@@ -2656,7 +2656,7 @@ class CliTests(unittest.TestCase):
                 self.assertEqual(
                     main(
                         [
-                            "generate-evals",
+                            "generate-checks",
                             "--db",
                             str(db_path),
                             "proposal_context_timeout_001",
@@ -2701,8 +2701,8 @@ class CliTests(unittest.TestCase):
                         "--db",
                         str(db_path),
                         "fixture_replay",
-                        "eval_proposal_context_timeout_001_1",
-                        "--run-eval",
+                        "check_proposal_context_timeout_001_1",
+                        "--run-check",
                         "--json",
                     ]
                 )
@@ -2710,7 +2710,7 @@ class CliTests(unittest.TestCase):
             run_payload = json.loads(run_out.getvalue())
             self.assertEqual(run_payload["adapter_id"], "fixture_replay")
             self.assertEqual(run_payload["status"], "passed")
-            self.assertEqual(run_payload["eval_run"]["promoted_trust_level"], "L2_regression")
+            self.assertEqual(run_payload["check_run"]["promoted_trust_level"], "L2_regression")
 
     def test_replay_server_flow(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -2734,7 +2734,7 @@ class CliTests(unittest.TestCase):
                 self.assertEqual(
                     main(
                         [
-                            "generate-evals",
+                            "generate-checks",
                             "--db",
                             str(db_path),
                             "proposal_context_timeout_001",
@@ -2759,8 +2759,8 @@ class CliTests(unittest.TestCase):
                             "--db",
                             str(db_path),
                             server.base_url,
-                            "eval_proposal_context_timeout_001_1",
-                            "--run-eval",
+                            "check_proposal_context_timeout_001_1",
+                            "--run-check",
                             "--json",
                         ]
                     )
@@ -2769,8 +2769,8 @@ class CliTests(unittest.TestCase):
 
             self.assertEqual(run_payload["server_url"], server.base_url)
             self.assertEqual(run_payload["output_run_id"], "run_research_topic_replay_001")
-            self.assertEqual(run_payload["eval_run"]["status"], "passed")
-            self.assertEqual(run_payload["eval_run"]["promoted_trust_level"], "L2_regression")
+            self.assertEqual(run_payload["check_run"]["status"], "passed")
+            self.assertEqual(run_payload["check_run"]["promoted_trust_level"], "L2_regression")
 
     def test_managed_replay_adapter_cli_flow(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -2797,7 +2797,7 @@ class CliTests(unittest.TestCase):
                 self.assertEqual(
                     main(
                         [
-                            "generate-evals",
+                            "generate-checks",
                             "--db",
                             str(db_path),
                             "proposal_context_timeout_001",
@@ -2839,8 +2839,8 @@ class CliTests(unittest.TestCase):
                         "--db",
                         str(db_path),
                         "managed_http_replay",
-                        "eval_proposal_context_timeout_001_1",
-                        "--run-eval",
+                        "check_proposal_context_timeout_001_1",
+                        "--run-check",
                         "--json",
                     ]
                 )
@@ -2848,7 +2848,7 @@ class CliTests(unittest.TestCase):
             run_payload = json.loads(run_out.getvalue())
             self.assertEqual(run_payload["server_url"], server_url)
             self.assertEqual(run_payload["status"], "passed")
-            self.assertEqual(run_payload["eval_run"]["promoted_trust_level"], "L2_regression")
+            self.assertEqual(run_payload["check_run"]["promoted_trust_level"], "L2_regression")
             self.assertTrue(Path(run_payload["stdout_path"]).exists())
             self.assertTrue(Path(run_payload["stderr_path"]).exists())
 
@@ -2877,7 +2877,7 @@ class CliTests(unittest.TestCase):
                 self.assertEqual(
                     main(
                         [
-                            "generate-evals",
+                            "generate-checks",
                             "--db",
                             str(db_path),
                             "proposal_context_timeout_001",
@@ -2999,7 +2999,7 @@ class CliTests(unittest.TestCase):
             payload = json.loads(demo_out.getvalue())
             self.assertEqual(payload["profile_id"], "profile_news_research_001")
             self.assertEqual(payload["proposal_id"], "proposal_context_timeout_001")
-            self.assertEqual(payload["eval_status"], "passed")
+            self.assertEqual(payload["check_status"], "passed")
             self.assertEqual(payload["promoted_trust_level"], "L2_regression")
             self.assertEqual(payload["applied_skill_ids"], ["skill_proposal_context_timeout_001_1"])
             self.assertEqual(payload["status"]["counts"]["replay_adapters"], 1)

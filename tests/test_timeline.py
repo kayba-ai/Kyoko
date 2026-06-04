@@ -50,7 +50,7 @@ class TimelineTests(unittest.TestCase):
             self.assertEqual(len(decision_events), 1)
             self.assertEqual(decision_events[0]["kind"], "autonomy_decision")
             self.assertEqual(decision_events[0]["metadata"]["action"], "gated")
-            self.assertEqual(decision_events[0]["metadata"]["reason"], "missing_eval_run")
+            self.assertEqual(decision_events[0]["metadata"]["reason"], "missing_check_run")
 
 
 if __name__ == "__main__":

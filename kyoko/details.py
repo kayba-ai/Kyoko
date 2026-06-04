@@ -7,7 +7,7 @@ from typing import Any, Optional
 
 from .autonomy_runner import AutonomyRunError, inspect_proposal_autonomy_gate
 from .confidence import assess_proposal_confidence
-from .evals import list_eval_capabilities
+from .checks import list_check_capabilities
 from .issues import get_issue
 from .storage import StorageError, connect, initialize_database
 from .vocabulary import section_description, section_label
@@ -28,8 +28,8 @@ ENTITY_TABLES = {
     "learning_proposal": "learning_proposals",
     "proposal": "learning_proposals",
     "skill": "skills",
-    "eval_spec": "eval_specs",
-    "eval_run": "eval_runs",
+    "check_spec": "check_specs",
+    "check_run": "check_runs",
     "replay_run": "replay_runs",
     "patch_transaction": "patch_transactions",
 }
@@ -169,83 +169,83 @@ def get_run_detail(*, db_path: Path, run_id: str) -> dict[str, Any]:
     }
 
 
-def get_eval_detail(*, db_path: Path, eval_spec_id: str) -> dict[str, Any]:
+def get_check_detail(*, db_path: Path, check_spec_id: str) -> dict[str, Any]:
     initialize_database(db_path)
     with connect(db_path) as connection:
-        eval_spec = _get_eval_spec(connection, eval_spec_id)
-        decoded_eval_spec = _decode_row(eval_spec)
-        decoded_eval_spec.update(
-            _eval_spec_lock_state(
+        check_spec = _get_check_spec(connection, check_spec_id)
+        decoded_check_spec = _decode_row(check_spec)
+        decoded_check_spec.update(
+            _check_lock_state(
                 connection,
-                profile_id=str(eval_spec["profile_id"]),
-                eval_spec_id=eval_spec_id,
+                profile_id=str(check_spec["profile_id"]),
+                check_spec_id=check_spec_id,
             )
         )
-        target = decoded_eval_spec.get("target", {})
+        target = decoded_check_spec.get("target", {})
         resolved_target = _resolve_target_ref(connection, target)
         source_run_id = _source_run_id_for_target(connection, target)
         source_run = _resolve_entity(connection, "run", source_run_id) if source_run_id else None
-        eval_runs = _rows(
+        check_runs = _rows(
             connection,
             """
             SELECT *
-            FROM eval_runs
-            WHERE eval_spec_id = ?
+            FROM check_runs
+            WHERE check_spec_id = ?
             ORDER BY created_at, id
             """,
-            (eval_spec_id,),
+            (check_spec_id,),
         )
         replay_runs = _rows(
             connection,
             """
             SELECT *
             FROM replay_runs
-            WHERE eval_spec_id = ?
+            WHERE check_spec_id = ?
             ORDER BY created_at, id
             """,
-            (eval_spec_id,),
+            (check_spec_id,),
         )
         proposal = (
             _decode_row(
                 connection.execute(
                     "SELECT * FROM learning_proposals WHERE id = ?",
-                    (eval_spec["proposal_id"],),
+                    (check_spec["proposal_id"],),
                 ).fetchone()
             )
-            if eval_spec["proposal_id"] is not None
+            if check_spec["proposal_id"] is not None
             else None
         )
         timeline_events = _timeline_events_for_entities(
             connection,
-            str(eval_spec["profile_id"]),
-            {eval_spec_id, *[str(row["id"]) for row in eval_runs], *[str(row["id"]) for row in replay_runs]},
+            str(check_spec["profile_id"]),
+            {check_spec_id, *[str(row["id"]) for row in check_runs], *[str(row["id"]) for row in replay_runs]},
         )
 
-    latest_eval_run = eval_runs[-1] if eval_runs else None
+    latest_check_run = check_runs[-1] if check_runs else None
     latest_replay_run = replay_runs[-1] if replay_runs else None
     return {
-        "eval_spec": decoded_eval_spec,
+        "check_spec": decoded_check_spec,
         "proposal": proposal,
         "target": resolved_target,
         "source_run": source_run,
-        "eval_runs": eval_runs,
-        "latest_eval_run": latest_eval_run,
+        "check_runs": check_runs,
+        "latest_check_run": latest_check_run,
         "replay_runs": replay_runs,
         "latest_replay_run": latest_replay_run,
         "timeline_events": timeline_events,
         "summary": {
-            "eval_runs": len(eval_runs),
-            "passed_eval_runs": len([run for run in eval_runs if run.get("status") == "passed"]),
-            "failed_eval_runs": len([run for run in eval_runs if run.get("status") == "failed"]),
+            "check_runs": len(check_runs),
+            "passed_check_runs": len([run for run in check_runs if run.get("status") == "passed"]),
+            "failed_check_runs": len([run for run in check_runs if run.get("status") == "failed"]),
             "replay_runs": len(replay_runs),
             "passed_replay_runs": len([run for run in replay_runs if run.get("status") == "passed"]),
-            "latest_status": latest_eval_run.get("status") if latest_eval_run else "not_run",
+            "latest_status": latest_check_run.get("status") if latest_check_run else "not_run",
             "latest_replay_status": latest_replay_run.get("status") if latest_replay_run else "none",
-            "latest_comparison": _latest_eval_comparison(latest_eval_run),
-            "latest_assertion_counts": _latest_assertion_counts(latest_eval_run),
-            "latest_assertions": _latest_assertions(latest_eval_run),
-            "trust_level": decoded_eval_spec.get("trust_level"),
-            "side_effect_mode": decoded_eval_spec.get("side_effect_mode"),
+            "latest_comparison": _latest_check_comparison(latest_check_run),
+            "latest_assertion_counts": _latest_assertion_counts(latest_check_run),
+            "latest_assertions": _latest_assertions(latest_check_run),
+            "trust_level": decoded_check_spec.get("trust_level"),
+            "side_effect_mode": decoded_check_spec.get("side_effect_mode"),
         },
     }
 
@@ -255,28 +255,28 @@ def get_replay_detail(*, db_path: Path, replay_run_id: str) -> dict[str, Any]:
     with connect(db_path) as connection:
         replay_run = _get_replay_run(connection, replay_run_id)
         decoded_replay = _decode_row(replay_run)
-        eval_spec = (
+        check_spec = (
             _decode_row(
                 connection.execute(
                     """
                     SELECT
-                      eval_specs.*,
-                      COALESCE(eval_spec_locks.human_locked, 0) AS human_locked,
-                      eval_spec_locks.reason AS human_lock_reason
-                    FROM eval_specs
-                    LEFT JOIN eval_spec_locks
-                      ON eval_spec_locks.eval_spec_id = eval_specs.id
-                     AND eval_spec_locks.profile_id = eval_specs.profile_id
-                    WHERE eval_specs.id = ?
+                      check_specs.*,
+                      COALESCE(check_locks.human_locked, 0) AS human_locked,
+                      check_locks.reason AS human_lock_reason
+                    FROM check_specs
+                    LEFT JOIN check_locks
+                      ON check_locks.check_spec_id = check_specs.id
+                     AND check_locks.profile_id = check_specs.profile_id
+                    WHERE check_specs.id = ?
                     """,
-                    (replay_run["eval_spec_id"],),
+                    (replay_run["check_spec_id"],),
                 ).fetchone()
             )
-            if replay_run["eval_spec_id"] is not None
+            if replay_run["check_spec_id"] is not None
             else None
         )
-        if isinstance(eval_spec, dict):
-            eval_spec["human_locked"] = bool(eval_spec.get("human_locked"))
+        if isinstance(check_spec, dict):
+            check_spec["human_locked"] = bool(check_spec.get("human_locked"))
         proposal = (
             _decode_row(
                 connection.execute(
@@ -293,11 +293,11 @@ def get_replay_detail(*, db_path: Path, replay_run_id: str) -> dict[str, Any]:
         output_run = _resolve_entity(connection, "run", output_run_id) if output_run_id else None
         source_spans = _spans_for_run(connection, source_run_id)
         output_spans = _spans_for_run(connection, output_run_id)
-        eval_runs = _rows(
+        check_runs = _rows(
             connection,
             """
             SELECT *
-            FROM eval_runs
+            FROM check_runs
             WHERE replay_run_id = ?
             ORDER BY created_at, id
             """,
@@ -306,7 +306,7 @@ def get_replay_detail(*, db_path: Path, replay_run_id: str) -> dict[str, Any]:
         timeline_events = _timeline_events_for_entities(
             connection,
             str(replay_run["profile_id"]),
-            {replay_run_id, *[str(row["id"]) for row in eval_runs]},
+            {replay_run_id, *[str(row["id"]) for row in check_runs]},
         )
 
     result = decoded_replay.get("result", {})
@@ -315,13 +315,13 @@ def get_replay_detail(*, db_path: Path, replay_run_id: str) -> dict[str, Any]:
     artifacts = _replay_artifact_details(decoded_replay.get("artifact_refs", []))
     return {
         "replay_run": decoded_replay,
-        "eval_spec": eval_spec,
+        "check_spec": check_spec,
         "proposal": proposal,
         "source_run": source_run,
         "output_run": output_run,
         "source_spans": source_spans,
         "output_spans": output_spans,
-        "eval_runs": eval_runs,
+        "check_runs": check_runs,
         "artifacts": artifacts,
         "timeline_events": timeline_events,
         "summary": {
@@ -334,8 +334,8 @@ def get_replay_detail(*, db_path: Path, replay_run_id: str) -> dict[str, Any]:
             "output_run_id": output_run_id,
             "source_spans": len(source_spans),
             "output_spans": len(output_spans),
-            "eval_runs": len(eval_runs),
-            "passed_eval_runs": len([run for run in eval_runs if run.get("status") == "passed"]),
+            "check_runs": len(check_runs),
+            "passed_check_runs": len([run for run in check_runs if run.get("status") == "passed"]),
             "artifacts": len(artifacts),
         },
     }
@@ -350,29 +350,29 @@ def get_proposal_detail(*, db_path: Path, proposal_id: str) -> dict[str, Any]:
         decoded_proposal["section_description"] = section_description(decoded_proposal.get("section"))
         evidence = _resolve_evidence_refs(connection, decoded_proposal.get("evidence_refs", []))
         target = _resolve_target(connection, decoded_proposal.get("problem", {}))
-        eval_specs = _rows(
+        check_specs = _rows(
             connection,
             """
             SELECT
-              eval_specs.*,
-              COALESCE(eval_spec_locks.human_locked, 0) AS human_locked,
-              eval_spec_locks.reason AS human_lock_reason
-            FROM eval_specs
-            LEFT JOIN eval_spec_locks
-              ON eval_spec_locks.eval_spec_id = eval_specs.id
-             AND eval_spec_locks.profile_id = eval_specs.profile_id
-            WHERE eval_specs.proposal_id = ?
-            ORDER BY eval_specs.created_at, eval_specs.id
+              check_specs.*,
+              COALESCE(check_locks.human_locked, 0) AS human_locked,
+              check_locks.reason AS human_lock_reason
+            FROM check_specs
+            LEFT JOIN check_locks
+              ON check_locks.check_spec_id = check_specs.id
+             AND check_locks.profile_id = check_specs.profile_id
+            WHERE check_specs.proposal_id = ?
+            ORDER BY check_specs.created_at, check_specs.id
             """,
             (proposal_id,),
         )
-        for eval_spec_payload in eval_specs:
-            eval_spec_payload["human_locked"] = bool(eval_spec_payload.get("human_locked"))
-        eval_runs = _rows(
+        for check_spec_payload in check_specs:
+            check_spec_payload["human_locked"] = bool(check_spec_payload.get("human_locked"))
+        check_runs = _rows(
             connection,
             """
             SELECT *
-            FROM eval_runs
+            FROM check_runs
             WHERE proposal_id = ?
             ORDER BY created_at, id
             """,
@@ -425,8 +425,8 @@ def get_proposal_detail(*, db_path: Path, proposal_id: str) -> dict[str, Any]:
         evidence=evidence,
         autonomy_gate=autonomy_gate,
         gate_history=gate_history,
-        eval_specs=eval_specs,
-        eval_runs=eval_runs,
+        check_specs=check_specs,
+        check_runs=check_runs,
         replay_runs=replay_runs,
         patch_transactions=patch_transactions,
     )
@@ -439,9 +439,9 @@ def get_proposal_detail(*, db_path: Path, proposal_id: str) -> dict[str, Any]:
         "autonomy_gate": autonomy_gate,
         "gate_history": gate_history,
         "evidence_chain": evidence_chain,
-        "eval_guidance": _proposal_eval_guidance(),
-        "eval_specs": eval_specs,
-        "eval_runs": eval_runs,
+        "check_guidance": _proposal_check_guidance(),
+        "check_specs": check_specs,
+        "check_runs": check_runs,
         "replay_runs": replay_runs,
         "patch_transactions": patch_transactions,
         "timeline_events": timeline_events,
@@ -574,30 +574,30 @@ def _resolve_affected(
     return resolved
 
 
-def _proposal_eval_guidance() -> dict[str, Any]:
-    capabilities = list_eval_capabilities()
-    eval_types = capabilities.get("eval_types") if isinstance(capabilities.get("eval_types"), list) else []
+def _proposal_check_guidance() -> dict[str, Any]:
+    capabilities = list_check_capabilities()
+    check_types = capabilities.get("check_types") if isinstance(capabilities.get("check_types"), list) else []
     replay = capabilities.get("replay") if isinstance(capabilities.get("replay"), dict) else {}
     presets = capabilities.get("assertion_presets") if isinstance(capabilities.get("assertion_presets"), list) else []
     judge = capabilities.get("judge") if isinstance(capabilities.get("judge"), dict) else {}
-    informational_eval_types = [
+    informational_check_types = [
         item.get("name")
-        for item in eval_types
+        for item in check_types
         if isinstance(item, dict)
         and item.get("executable") is True
         and item.get("gateable") is False
         and isinstance(item.get("name"), str)
     ]
     return {
-        "executable_eval_types": _string_list(capabilities.get("executable_eval_types")),
-        "gateable_eval_types": _string_list(capabilities.get("gateable_eval_types")),
-        "informational_eval_types": informational_eval_types,
+        "executable_check_types": _string_list(capabilities.get("executable_check_types")),
+        "gateable_check_types": _string_list(capabilities.get("gateable_check_types")),
+        "informational_check_types": informational_check_types,
         "safe_replay_side_effect_modes": _string_list(replay.get("safe_side_effect_modes")),
         "assertion_presets": [
             {
                 "name": preset["name"],
                 "assertions": _string_list(preset.get("assertions")),
-                "gateable_eval_types": _string_list(preset.get("gateable_eval_types")),
+                "gateable_check_types": _string_list(preset.get("gateable_check_types")),
             }
             for preset in presets
             if isinstance(preset, dict) and isinstance(preset.get("name"), str)
@@ -625,16 +625,16 @@ def _get_run(connection: sqlite3.Connection, run_id: str) -> sqlite3.Row:
     return row
 
 
-def _get_eval_spec(connection: sqlite3.Connection, eval_spec_id: str) -> sqlite3.Row:
+def _get_check_spec(connection: sqlite3.Connection, check_spec_id: str) -> sqlite3.Row:
     try:
         row = connection.execute(
-            "SELECT * FROM eval_specs WHERE id = ?",
-            (eval_spec_id,),
+            "SELECT * FROM check_specs WHERE id = ?",
+            (check_spec_id,),
         ).fetchone()
     except sqlite3.OperationalError as exc:
-        raise StorageError("eval_specs table is missing") from exc
+        raise StorageError("check_specs table is missing") from exc
     if row is None:
-        raise DetailError(f"eval_spec_not_found:{eval_spec_id}")
+        raise DetailError(f"check_spec_not_found:{check_spec_id}")
     return row
 
 
@@ -651,20 +651,20 @@ def _get_replay_run(connection: sqlite3.Connection, replay_run_id: str) -> sqlit
     return row
 
 
-def _eval_spec_lock_state(
+def _check_lock_state(
     connection: sqlite3.Connection,
     *,
     profile_id: str,
-    eval_spec_id: str,
+    check_spec_id: str,
 ) -> dict[str, Any]:
     try:
         row = connection.execute(
             """
             SELECT human_locked, reason
-            FROM eval_spec_locks
-            WHERE profile_id = ? AND eval_spec_id = ?
+            FROM check_locks
+            WHERE profile_id = ? AND check_spec_id = ?
             """,
-            (profile_id, eval_spec_id),
+            (profile_id, check_spec_id),
         ).fetchone()
     except sqlite3.OperationalError:
         return {"human_locked": False, "human_lock_reason": None}
@@ -821,20 +821,20 @@ def _spans_for_run(connection: sqlite3.Connection, run_id: Any) -> list[dict[str
     )
 
 
-def _latest_eval_comparison(latest_eval_run: Optional[dict[str, Any]]) -> Optional[str]:
-    if not isinstance(latest_eval_run, dict):
+def _latest_check_comparison(latest_check_run: Optional[dict[str, Any]]) -> Optional[str]:
+    if not isinstance(latest_check_run, dict):
         return None
-    result = latest_eval_run.get("result")
+    result = latest_check_run.get("result")
     if not isinstance(result, dict):
         return None
     comparison = result.get("comparison")
     return comparison if isinstance(comparison, str) else None
 
 
-def _latest_assertion_counts(latest_eval_run: Optional[dict[str, Any]]) -> dict[str, int]:
-    if not isinstance(latest_eval_run, dict):
+def _latest_assertion_counts(latest_check_run: Optional[dict[str, Any]]) -> dict[str, int]:
+    if not isinstance(latest_check_run, dict):
         return {"total": 0, "passed": 0, "failed": 0}
-    result = latest_eval_run.get("result")
+    result = latest_check_run.get("result")
     if not isinstance(result, dict):
         return {"total": 0, "passed": 0, "failed": 0}
     counts = result.get("assertion_counts")
@@ -847,10 +847,10 @@ def _latest_assertion_counts(latest_eval_run: Optional[dict[str, Any]]) -> dict[
     }
 
 
-def _latest_assertions(latest_eval_run: Optional[dict[str, Any]]) -> list[dict[str, Any]]:
-    if not isinstance(latest_eval_run, dict):
+def _latest_assertions(latest_check_run: Optional[dict[str, Any]]) -> list[dict[str, Any]]:
+    if not isinstance(latest_check_run, dict):
         return []
-    result = latest_eval_run.get("result")
+    result = latest_check_run.get("result")
     if not isinstance(result, dict):
         return []
     assertions = result.get("assertions")
@@ -944,9 +944,9 @@ def _gate_history(timeline_events: list[dict[str, Any]]) -> list[dict[str, Any]]
                 "reason": metadata.get("reason"),
                 "state_before": metadata.get("state_before"),
                 "state_after": metadata.get("state_after"),
-                "required_eval_level": metadata.get("required_eval_level"),
-                "eval_spec_ids": metadata.get("eval_spec_ids", []),
-                "eval_run_ids": metadata.get("eval_run_ids", []),
+                "required_check_level": metadata.get("required_check_level"),
+                "check_spec_ids": metadata.get("check_spec_ids", []),
+                "check_run_ids": metadata.get("check_run_ids", []),
                 "applied_skill_ids": metadata.get("applied_skill_ids", []),
                 "applied_context_rule_ids": metadata.get("applied_context_rule_ids", []),
                 "patch_transaction_ids": metadata.get("patch_transaction_ids", []),
@@ -964,8 +964,8 @@ def _proposal_evidence_chain(
     evidence: list[dict[str, Any]],
     autonomy_gate: dict[str, Any],
     gate_history: list[dict[str, Any]],
-    eval_specs: list[dict[str, Any]],
-    eval_runs: list[dict[str, Any]],
+    check_specs: list[dict[str, Any]],
+    check_runs: list[dict[str, Any]],
     replay_runs: list[dict[str, Any]],
     patch_transactions: list[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -977,15 +977,15 @@ def _proposal_evidence_chain(
     )
     target_ref = target.get("ref") if isinstance(target.get("ref"), dict) else {}
     target_label = _target_label(target_ref)
-    latest_eval_runs = _latest_rows_by_key(eval_runs, "eval_spec_id")
-    latest_replay_runs = _latest_rows_by_key(replay_runs, "eval_spec_id")
-    eval_status = _combined_status(latest_eval_runs, empty_status="not_run")
+    latest_check_runs = _latest_rows_by_key(check_runs, "check_spec_id")
+    latest_replay_runs = _latest_rows_by_key(replay_runs, "check_spec_id")
+    check_status = _combined_status(latest_check_runs, empty_status="not_run")
     replay_status = _combined_status(latest_replay_runs, empty_status="not_run")
-    if not eval_specs:
-        eval_status = "not_generated"
+    if not check_specs:
+        check_status = "not_generated"
     if not replay_runs and gate_expectations.get("requires_replay") is False:
         replay_status = "not_required"
-    latest_eval = latest_eval_runs[-1] if latest_eval_runs else None
+    latest_check = latest_check_runs[-1] if latest_check_runs else None
     latest_replay = latest_replay_runs[-1] if latest_replay_runs else None
     autonomy_action = autonomy_gate.get("action") or "unknown"
     autonomy_reason = autonomy_gate.get("reason") or "unknown"
@@ -1013,17 +1013,17 @@ def _proposal_evidence_chain(
             "change_count": _proposal_change_count(proposal),
         },
         {
-            "stage": "eval_gate",
-            "title": "Eval gate",
-            "status": eval_status,
-            "description": _eval_gate_description(eval_status, latest_eval),
-            "required_eval_level": autonomy_gate.get("required_eval_level")
-            or gate_expectations.get("requires_eval_level"),
-            "eval_spec_ids": [spec.get("id") for spec in eval_specs if spec.get("id")],
-            "latest_eval_run_id": latest_eval.get("id") if isinstance(latest_eval, dict) else None,
-            "latest_eval_status": latest_eval.get("status") if isinstance(latest_eval, dict) else None,
-            "latest_trust_level": _latest_trust_level(eval_specs),
-            "latest_assertion_counts": _latest_assertion_counts(latest_eval),
+            "stage": "check_gate",
+            "title": "Check gate",
+            "status": check_status,
+            "description": _check_gate_description(check_status, latest_check),
+            "required_check_level": autonomy_gate.get("required_check_level")
+            or gate_expectations.get("requires_check_level"),
+            "check_spec_ids": [spec.get("id") for spec in check_specs if spec.get("id")],
+            "latest_check_run_id": latest_check.get("id") if isinstance(latest_check, dict) else None,
+            "latest_check_status": latest_check.get("status") if isinstance(latest_check, dict) else None,
+            "latest_trust_level": _latest_trust_level(check_specs),
+            "latest_assertion_counts": _latest_assertion_counts(latest_check),
         },
         {
             "stage": "replay",
@@ -1034,7 +1034,7 @@ def _proposal_evidence_chain(
             "replay_run_ids": [run.get("id") for run in replay_runs if run.get("id")],
             "latest_replay_run_id": latest_replay.get("id") if isinstance(latest_replay, dict) else None,
             "latest_replay_status": latest_replay.get("status") if isinstance(latest_replay, dict) else None,
-            "side_effect_mode": _latest_side_effect_mode(eval_specs, latest_replay),
+            "side_effect_mode": _latest_side_effect_mode(check_specs, latest_replay),
         },
     ]
     if patch_transactions:
@@ -1067,7 +1067,7 @@ def _proposal_evidence_chain(
         "summary": _evidence_chain_summary(
             proposal=proposal,
             evidence_status=steps[0]["status"],
-            eval_status=eval_status,
+            check_status=check_status,
             replay_status=replay_status,
             autonomy_action=autonomy_action,
             autonomy_reason=autonomy_reason,
@@ -1133,36 +1133,36 @@ def _primary_evidence_summary(resolved_evidence: list[dict[str, Any]]) -> Option
     }
 
 
-def _latest_trust_level(eval_specs: list[dict[str, Any]]) -> Optional[str]:
-    if not eval_specs:
+def _latest_trust_level(check_specs: list[dict[str, Any]]) -> Optional[str]:
+    if not check_specs:
         return None
-    trust_levels = [spec.get("trust_level") for spec in eval_specs if isinstance(spec.get("trust_level"), str)]
+    trust_levels = [spec.get("trust_level") for spec in check_specs if isinstance(spec.get("trust_level"), str)]
     return trust_levels[-1] if trust_levels else None
 
 
 def _latest_side_effect_mode(
-    eval_specs: list[dict[str, Any]],
+    check_specs: list[dict[str, Any]],
     latest_replay: Optional[dict[str, Any]],
 ) -> Optional[str]:
     if isinstance(latest_replay, dict) and isinstance(latest_replay.get("side_effect_mode"), str):
         return latest_replay["side_effect_mode"]
-    if eval_specs and isinstance(eval_specs[-1].get("side_effect_mode"), str):
-        return eval_specs[-1]["side_effect_mode"]
+    if check_specs and isinstance(check_specs[-1].get("side_effect_mode"), str):
+        return check_specs[-1]["side_effect_mode"]
     return None
 
 
-def _eval_gate_description(status: str, latest_eval: Optional[dict[str, Any]]) -> str:
+def _check_gate_description(status: str, latest_check: Optional[dict[str, Any]]) -> str:
     if status == "not_generated":
-        return "No eval spec has been generated for this proposal yet."
+        return "No check spec has been generated for this proposal yet."
     if status == "not_run":
-        return "Eval specs exist, but no eval run has completed yet."
+        return "Check specs exist, but no check run has completed yet."
     if status == "passed":
-        trust = latest_eval.get("promoted_trust_level") if isinstance(latest_eval, dict) else None
+        trust = latest_check.get("promoted_trust_level") if isinstance(latest_check, dict) else None
         suffix = f" with {trust}" if isinstance(trust, str) and trust else ""
-        return f"The latest eval gate passed{suffix}."
+        return f"The latest check gate passed{suffix}."
     if status == "failed":
-        return "At least one latest eval run failed."
-    return f"Eval gate status is {status}."
+        return "At least one latest check run failed."
+    return f"Check gate status is {status}."
 
 
 def _replay_description(status: str, latest_replay: Optional[dict[str, Any]]) -> str:
@@ -1197,14 +1197,14 @@ def _evidence_chain_summary(
     *,
     proposal: dict[str, Any],
     evidence_status: str,
-    eval_status: str,
+    check_status: str,
     replay_status: str,
     autonomy_action: str,
     autonomy_reason: str,
 ) -> str:
     title = proposal.get("title") or proposal.get("id") or "proposal"
     return (
-        f"{title}: evidence {evidence_status}, eval {eval_status}, "
+        f"{title}: evidence {evidence_status}, check {check_status}, "
         f"replay {replay_status}, autonomy {autonomy_action} ({autonomy_reason})."
     )
 

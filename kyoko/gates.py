@@ -156,7 +156,7 @@ def missing_evidence_refs(proposal: dict[str, Any], ids: dict[str, set[str]]) ->
             missing.append(f"{entity_type}:{entity_id}")
             continue
         if entity_type not in ids:
-            # Types such as blob, issue, eval_run, replay_run, and patch_transaction
+            # Types such as blob, issue, check_run, replay_run, and patch_transaction
             # are valid evidence targets but are not included in this source fixture.
             continue
         if entity_id not in ids[entity_type]:

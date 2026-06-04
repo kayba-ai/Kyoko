@@ -578,7 +578,7 @@ def mock_learning_proposal(bundle: dict[str, Any]) -> dict[str, Any]:
         ],
         "gate_expectations": {
             "requires_human_review": False,
-            "requires_eval_level": "L1_repeated",
+            "requires_check_level": "L1_repeated",
             "requires_replay": False,
             "allowed_autonomy_section": "context",
             "notes": "Mock operator output is for deterministic bridge validation.",

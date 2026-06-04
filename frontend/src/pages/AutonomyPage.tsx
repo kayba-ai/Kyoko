@@ -9,7 +9,7 @@ import { Spinner, ErrorNote } from "@/components/ui/misc";
 
 // Read-only view of the single profile's autonomy policy + recent autonomy
 // timeline. The gate lives server-side — no editors here. SCOPE: context autonomy
-// gates on an L1 eval (no replay); harness autonomy needs L2 + replay.
+// gates on an L1 check (no replay); harness autonomy needs L2 + replay.
 
 function modeTone(mode: string | null | undefined): NonNullable<BadgeProps["tone"]> {
   const m = (mode ?? "").toLowerCase();
@@ -61,7 +61,7 @@ function PathChips({ paths }: { paths: string[] }) {
 function PolicyView({ policy }: { policy: AutonomyPolicy }) {
   const perms: Array<[string, boolean]> = [
     ["Repo patch", policy.allow_repo_patch],
-    ["Eval write", policy.allow_eval_write],
+    ["Check write", policy.allow_check_write],
     ["Skillbook write", policy.allow_skillbook_write],
     ["Profile config write", policy.allow_profile_config_write],
     ["Replay server patch", policy.allow_replay_server_patch],
@@ -188,7 +188,7 @@ export function AutonomyPage() {
         ) : (
           <div className="space-y-4">
             <p className="text-xs text-muted-foreground/80">
-              Context autonomy needs an L1 eval (no replay); harness autonomy needs L2 + replay.
+              Context autonomy needs an L1 check (no replay); harness autonomy needs L2 + replay.
             </p>
             {policyState.data && <PolicyView policy={policyState.data} />}
             <ActivityCard events={eventsState.data ?? []} />

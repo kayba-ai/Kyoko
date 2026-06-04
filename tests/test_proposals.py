@@ -91,11 +91,11 @@ class ProposalTests(unittest.TestCase):
             )
             proposals = list_learning_proposals(db_path)
 
-            self.assertEqual(report.proposal_id, "proposal_harness_timeout_eval_001")
+            self.assertEqual(report.proposal_id, "proposal_harness_timeout_check_001")
             self.assertEqual(report.section, "harness")
             self.assertEqual(proposals[0]["section"], "harness")
             self.assertEqual(proposals[0]["section_label"], "Harness fix")
-            self.assertIn("eval", proposals[0]["section_description"])
+            self.assertIn("check", proposals[0]["section_description"])
 
     def test_submit_hermes_operator_proposal_fixture_persists_transaction(self) -> None:
         with TemporaryDirectory() as tmpdir:
