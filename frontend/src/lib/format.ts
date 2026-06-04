@@ -64,6 +64,14 @@ export function fmtTokens(n: number | null | undefined): string {
   return n.toLocaleString();
 }
 
+/** Percentage like "12%" / "4.5%"; "—" when null/undefined. Sub-10 keeps one
+ *  decimal so a small-but-nonzero rate doesn't round to a flat integer. */
+export function fmtPercent(n: number | null | undefined): string {
+  if (n === null || n === undefined || Number.isNaN(n)) return "—";
+  if (n > 0 && n < 10) return `${n.toFixed(1)}%`;
+  return `${Math.round(n)}%`;
+}
+
 /** USD cost like "$0.0075"; "—" when null/undefined. */
 export function fmtCost(n: number | null | undefined): string {
   if (n === null || n === undefined) return "—";
