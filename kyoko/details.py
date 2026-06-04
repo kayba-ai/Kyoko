@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
@@ -9,6 +10,8 @@ from .autonomy_runner import AutonomyRunError, inspect_proposal_autonomy_gate
 from .confidence import assess_proposal_confidence
 from .checks import list_check_capabilities
 from .issues import get_issue
+from .pricing import estimate_cost
+from .span_normalize import normalize_span
 from .storage import StorageError, connect, initialize_database
 from .vocabulary import section_description, section_label
 
@@ -75,7 +78,9 @@ def list_runs(
             """,
             (selected_profile_id, max(1, min(limit, 500))),
         ).fetchall()
-    return [_decode_run_summary(row) for row in rows]
+        summaries = [_decode_run_summary(row) for row in rows]
+        _attach_run_metrics(connection, summaries)
+    return summaries
 
 
 def get_run_detail(*, db_path: Path, run_id: str) -> dict[str, Any]:
@@ -1282,7 +1287,87 @@ def _decode_run_summary(row: sqlite3.Row) -> dict[str, Any]:
     payload["span_count"] = int(payload.get("span_count") or 0)
     payload["failed_span_count"] = int(payload.get("failed_span_count") or 0)
     payload["handoff_count"] = int(payload.get("handoff_count") or 0)
+    payload["duration_ms"] = _run_duration_ms(payload.get("started_at"), payload.get("ended_at"))
+    # Token/cost totals are filled by _attach_run_metrics (one grouped span pass).
+    payload["input_tokens"] = 0
+    payload["output_tokens"] = 0
+    payload["total_tokens"] = 0
+    payload["llm_span_count"] = 0
+    payload["cost_usd"] = None
     return payload
+
+
+def _attach_run_metrics(connection: sqlite3.Connection, summaries: list[dict[str, Any]]) -> None:
+    """Sum token usage / llm-span counts / cost across each run's spans in one pass."""
+    run_ids = [str(s["id"]) for s in summaries]
+    if not run_ids:
+        return
+    placeholders = ",".join("?" for _ in run_ids)
+    rows = connection.execute(
+        f"SELECT run_id, kind, name, usage_json, attributes_json FROM spans "
+        f"WHERE run_id IN ({placeholders})",
+        tuple(run_ids),
+    ).fetchall()
+    agg: dict[str, dict[str, Any]] = {
+        rid: {"input": 0, "output": 0, "llm": 0, "cost": None} for rid in run_ids
+    }
+    for row in rows:
+        bucket = agg.get(str(row["run_id"]))
+        if bucket is None:
+            continue
+        attributes = _json_loads(row["attributes_json"], {})
+        usage = _json_loads(row["usage_json"], {})
+        inp, out = _span_token_counts(usage, attributes, row["kind"], row["name"])
+        bucket["input"] += inp or 0
+        bucket["output"] += out or 0
+        if str(row["kind"] or "") == "llm":
+            bucket["llm"] += 1
+        cost = estimate_cost(_model_from_attributes(attributes), inp, out)
+        if cost is not None:
+            bucket["cost"] = round((bucket["cost"] or 0.0) + cost, 6)
+    for summary in summaries:
+        bucket = agg[str(summary["id"])]
+        summary["input_tokens"] = bucket["input"]
+        summary["output_tokens"] = bucket["output"]
+        summary["total_tokens"] = bucket["input"] + bucket["output"]
+        summary["llm_span_count"] = bucket["llm"]
+        summary["cost_usd"] = bucket["cost"]
+
+
+def _span_token_counts(
+    usage: Any, attributes: dict, kind: Any, name: Any
+) -> tuple[Optional[int], Optional[int]]:
+    usage = usage if isinstance(usage, dict) else {}
+    inp = usage.get("input_tokens")
+    out = usage.get("output_tokens")
+    if inp is None or out is None:
+        normalized = normalize_span(name=str(name or ""), kind=kind, attributes=attributes or {})
+        if inp is None:
+            inp = normalized.get("input_tokens")
+        if out is None:
+            out = normalized.get("output_tokens")
+    inp = inp if isinstance(inp, int) and not isinstance(inp, bool) else None
+    out = out if isinstance(out, int) and not isinstance(out, bool) else None
+    return inp, out
+
+
+def _model_from_attributes(attributes: dict) -> Optional[str]:
+    for key in ("gen_ai.request.model", "gen_ai.response.model", "model", "kyoko.model"):
+        value = attributes.get(key)
+        if isinstance(value, str) and value:
+            return value
+    return None
+
+
+def _run_duration_ms(started_at: Any, ended_at: Any) -> Optional[float]:
+    if not isinstance(started_at, str) or not isinstance(ended_at, str):
+        return None
+    try:
+        start = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+        end = datetime.fromisoformat(ended_at.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return round((end - start).total_seconds() * 1000, 3)
 
 
 def _json_loads(value: Any, default: Any) -> Any:

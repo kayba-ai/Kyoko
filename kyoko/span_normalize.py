@@ -367,7 +367,58 @@ def _llm_result(
         "output_tokens": _int_maybe(
             _first_present(attrs, "gen_ai.usage.output_tokens", "ai.usage.completionTokens", "llm.usage.completion_tokens")
         ),
+        "params": _llm_params(attrs),
     }
+
+
+def _llm_params(attrs: dict) -> Optional[dict]:
+    """Request/response model parameters from OTel GenAI semantic conventions
+    (and AI-SDK / Traceloop equivalents). Only keys actually present are kept;
+    returns None when none are found so the UI can hide the section."""
+    params: dict[str, Any] = {}
+    temperature = _num_maybe(
+        _first_present(attrs, "gen_ai.request.temperature", "ai.settings.temperature", "llm.request.temperature")
+    )
+    if temperature is not None:
+        params["temperature"] = temperature
+    top_p = _num_maybe(_first_present(attrs, "gen_ai.request.top_p", "ai.settings.topP", "llm.request.top_p"))
+    if top_p is not None:
+        params["top_p"] = top_p
+    max_tokens = _int_maybe(
+        _first_present(attrs, "gen_ai.request.max_tokens", "ai.settings.maxTokens", "llm.request.max_tokens")
+    )
+    if max_tokens is not None:
+        params["max_tokens"] = max_tokens
+    frequency_penalty = _num_maybe(_first_present(attrs, "gen_ai.request.frequency_penalty"))
+    if frequency_penalty is not None:
+        params["frequency_penalty"] = frequency_penalty
+    presence_penalty = _num_maybe(_first_present(attrs, "gen_ai.request.presence_penalty"))
+    if presence_penalty is not None:
+        params["presence_penalty"] = presence_penalty
+    response_model = _first_str(attrs, "gen_ai.response.model", "ai.response.model")
+    if response_model is not None:
+        params["response_model"] = response_model
+    finish_reasons = _first_present(attrs, "gen_ai.response.finish_reasons", "ai.response.finishReason")
+    if finish_reasons is not None:
+        params["finish_reasons"] = finish_reasons
+    response_id = _first_str(attrs, "gen_ai.response.id", "ai.response.id")
+    if response_id is not None:
+        params["response_id"] = response_id
+    return params or None
+
+
+def _num_maybe(value: Any) -> Optional[float]:
+    """Coerce to float when sensible, otherwise None."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return None
+    return None
 
 
 def _json_maybe(value: Any) -> Any:

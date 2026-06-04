@@ -22,9 +22,11 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
+from .pricing import estimate_cost
 from .redaction import RedactionError, get_redaction_policy, redact_evidence_bundle
 from .span_normalize import normalize_span
 from .storage import connect, initialize_database, spans_fts_ready
@@ -98,6 +100,37 @@ def _model_of(span: dict[str, Any]) -> Optional[str]:
     return None
 
 
+def _duration_ms(started_at: Any, ended_at: Any) -> Optional[float]:
+    """Milliseconds between two ISO timestamps, or None if either is missing/unparseable."""
+    if not isinstance(started_at, str) or not isinstance(ended_at, str):
+        return None
+    try:
+        start = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+        end = datetime.fromisoformat(ended_at.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return round((end - start).total_seconds() * 1000, 3)
+
+
+def _span_tokens(span: dict[str, Any]) -> tuple[Optional[int], Optional[int]]:
+    """(input_tokens, output_tokens) for a span, preferring usage_json then attributes."""
+    usage = span.get("usage") or {}
+    inp = usage.get("input_tokens")
+    out = usage.get("output_tokens")
+    normalized = normalize_span(
+        name=str(span.get("name") or ""),
+        kind=span.get("kind"),
+        attributes=span.get("attributes") or {},
+    )
+    if inp is None:
+        inp = normalized.get("input_tokens")
+    if out is None:
+        out = normalized.get("output_tokens")
+    inp = inp if isinstance(inp, int) and not isinstance(inp, bool) else None
+    out = out if isinstance(out, int) and not isinstance(out, bool) else None
+    return inp, out
+
+
 def _span_skeleton(span: dict[str, Any], *, preview_chars: int = 0, previews: Optional[dict[str, str]] = None) -> dict[str, Any]:
     skeleton = {
         "id": span["id"],
@@ -110,6 +143,7 @@ def _span_skeleton(span: dict[str, Any], *, preview_chars: int = 0, previews: Op
         "agent_identity_id": span.get("agent_identity_id"),
         "model": _model_of(span),
         "usage": span.get("usage") or {},
+        "duration_ms": _duration_ms(span.get("started_at"), span.get("ended_at")),
         "normalized": normalize_span(
             name=str(span.get("name") or ""),
             kind=span.get("kind"),
@@ -222,6 +256,7 @@ def get_run_outline(
 
     failed = [s for s in skeletons if str(s.get("status")) in _FAILED_STATUSES]
     detected_subagents = detect_subagents(spans)
+    metrics = _trace_metrics(spans, decoded_run)
     return {
         "run": {
             "id": decoded_run["id"],
@@ -232,6 +267,7 @@ def get_run_outline(
         },
         "span_tree": _tree(skeletons),
         "subagents": detected_subagents,
+        "metrics": metrics,
         "summary": {
             "spans": len(skeletons),
             "failed_spans": len(failed),
@@ -241,6 +277,93 @@ def get_run_outline(
             "subagents": len(detected_subagents),
         },
     }
+
+
+def _trace_metrics(spans: list[dict[str, Any]], run: dict[str, Any]) -> dict[str, Any]:
+    """Aggregate token/latency/cost across a run's spans for the trace header."""
+    input_tokens = 0
+    output_tokens = 0
+    llm_spans = 0
+    tool_spans = 0
+    cost_usd: Optional[float] = None
+    for span in spans:
+        kind = str(span.get("kind") or "")
+        if kind == "llm":
+            llm_spans += 1
+        elif kind == "tool":
+            tool_spans += 1
+        inp, out = _span_tokens(span)
+        input_tokens += inp or 0
+        output_tokens += out or 0
+        span_cost = estimate_cost(_model_of(span), inp, out)
+        if span_cost is not None:
+            cost_usd = round((cost_usd or 0.0) + span_cost, 6)
+    total_duration_ms = _duration_ms(run.get("started_at"), run.get("ended_at"))
+    return {
+        "total_duration_ms": total_duration_ms,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": input_tokens + output_tokens,
+        "llm_spans": llm_spans,
+        "tool_spans": tool_spans,
+        "cost_usd": cost_usd,
+    }
+
+
+def get_run_scores(*, db_path: Path, run_id: str) -> dict[str, Any]:
+    """Eval/judge measurement results attached to this run or any of its spans.
+
+    The measurement plane records results keyed by ``unit_type`` + ``unit_ref``
+    (run_id / span_id / event_id). This groups them so the trace view can show
+    trace-level scores and per-span scores (Langfuse "scores")."""
+
+    initialize_database(db_path)
+    with connect(db_path) as connection:
+        _get_run_row(connection, run_id)  # validates the run exists
+        span_ids = [
+            str(row["id"])
+            for row in connection.execute(
+                "SELECT id FROM spans WHERE run_id = ?", (run_id,)
+            ).fetchall()
+        ]
+        refs = [run_id, *span_ids]
+        if not refs:
+            return {"trace": [], "by_span": {}}
+        placeholders = ",".join("?" for _ in refs)
+        rows = connection.execute(
+            f"""
+            SELECT r.id, r.eval_run_id, r.unit_type, r.unit_ref, r.status,
+                   r.score_numeric, r.score_bool, r.reasoning, r.detail_json,
+                   d.name AS definition_name, d.kind AS definition_kind
+            FROM eval_measure_results r
+            LEFT JOIN eval_measure_runs mr ON mr.id = r.eval_run_id
+            LEFT JOIN eval_definitions d ON d.id = mr.eval_definition_id
+            WHERE r.unit_ref IN ({placeholders})
+            ORDER BY r.id
+            """,
+            tuple(refs),
+        ).fetchall()
+
+    trace_scores: list[dict[str, Any]] = []
+    by_span: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        score = {
+            "id": row["id"],
+            "eval_run_id": row["eval_run_id"],
+            "name": row["definition_name"],
+            "kind": row["definition_kind"],
+            "unit_type": row["unit_type"],
+            "status": row["status"],
+            "score_numeric": row["score_numeric"],
+            "score_bool": (None if row["score_bool"] is None else bool(row["score_bool"])),
+            "reasoning": row["reasoning"],
+        }
+        unit_ref = str(row["unit_ref"])
+        if unit_ref == run_id:
+            trace_scores.append(score)
+        else:
+            by_span.setdefault(unit_ref, []).append(score)
+    return {"trace": trace_scores, "by_span": by_span}
 
 
 # Characters that carry special meaning inside an FTS5 MATCH query, plus whitespace.
@@ -566,6 +689,74 @@ def get_span_payload(
     truncated = (start + bounded_max) < len(content) or start > 0
     return {
         "span_id": span_id,
+        "target": target,
+        "available": True,
+        "media_type": media_type,
+        "size_bytes": size_bytes,
+        "path_applied": path,
+        "offset": start,
+        "truncated": truncated,
+        "content": sliced,
+    }
+
+
+def get_run_payload(
+    *,
+    db_path: Path,
+    run_id: str,
+    target: str = "input",
+    path: Optional[str] = None,
+    max_chars: int = 4000,
+    offset: int = 0,
+) -> dict[str, Any]:
+    """Trace-level input/output payload (run.input_ref/output_ref), redacted, sliced.
+
+    Mirrors :func:`get_span_payload` for the run's own I/O so the trace header can show
+    the overall input/output like Langfuse's trace-level I/O."""
+
+    initialize_database(db_path)
+    if target not in {"input", "output"}:
+        raise InspectionError(f"unsupported_target:{target}")
+    bounded_max = max(1, min(int(max_chars), 200000))
+    start = max(0, int(offset))
+    with connect(db_path) as connection:
+        run = connection.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
+        if run is None:
+            raise InspectionError(f"run_not_found:{run_id}")
+        profile_id = str(run["profile_id"])
+        ref = run["input_ref"] if target == "input" else run["output_ref"]
+        if not isinstance(ref, str) or not ref:
+            return {"run_id": run_id, "target": target, "available": False}
+        blob = connection.execute("SELECT * FROM payload_blobs WHERE id = ?", (ref,)).fetchone()
+        if blob is None:
+            return {"run_id": run_id, "target": target, "available": False}
+        media_type = str(blob["media_type"])
+        size_bytes = int(blob["size_bytes"])
+        try:
+            raw = Path(blob["path"]).read_text(errors="replace")
+        except OSError:
+            raw = str(blob["preview"] or "")
+
+    policy = _resolve_policy(db_path, profile_id)
+    parsed = _json_loads(raw, None) if "json" in media_type else None
+    if parsed is not None:
+        if path:
+            parsed = _extract_path(parsed, path)
+        redacted = redact_evidence_bundle({"v": parsed}, policy).payload.get("v")
+        content = (
+            redacted
+            if isinstance(redacted, str)
+            else json.dumps(redacted, ensure_ascii=False, sort_keys=True, indent=2)
+        )
+    else:
+        if path:
+            raise InspectionError("path_requires_json_payload")
+        content = raw
+
+    sliced = content[start : start + bounded_max]
+    truncated = (start + bounded_max) < len(content) or start > 0
+    return {
+        "run_id": run_id,
         "target": target,
         "available": True,
         "media_type": media_type,

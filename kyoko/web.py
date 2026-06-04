@@ -127,6 +127,8 @@ from .inspection import (
     InspectionError,
     get_current_run,
     get_run_outline,
+    get_run_payload,
+    get_run_scores,
     get_span_context,
     get_span_payload,
     search_run,
@@ -416,6 +418,32 @@ def make_handler(
                                 path=_query_param(self.path, "path"),
                                 max_chars=_optional_int(_query_param(self.path, "max_chars"), 4000),
                                 offset=_optional_int(_query_param(self.path, "offset"), 0),
+                            )
+                        )
+                    except InspectionError as exc:
+                        self._send_json({"error": str(exc)}, status=HTTPStatus.NOT_FOUND)
+                    return
+                if path == "/api/run-payload":
+                    try:
+                        self._send_json(
+                            get_run_payload(
+                                db_path=resolved_db_path,
+                                run_id=_query_param(self.path, "run_id") or "",
+                                target=_query_param(self.path, "target") or "input",
+                                path=_query_param(self.path, "path"),
+                                max_chars=_optional_int(_query_param(self.path, "max_chars"), 4000),
+                                offset=_optional_int(_query_param(self.path, "offset"), 0),
+                            )
+                        )
+                    except InspectionError as exc:
+                        self._send_json({"error": str(exc)}, status=HTTPStatus.NOT_FOUND)
+                    return
+                if path == "/api/run-scores":
+                    try:
+                        self._send_json(
+                            get_run_scores(
+                                db_path=resolved_db_path,
+                                run_id=_query_param(self.path, "run_id") or "",
                             )
                         )
                     except InspectionError as exc:
