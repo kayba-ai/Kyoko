@@ -55,7 +55,10 @@ build step" guidance wherever they conflict.**
   - **Transport:** push is **SSE, not WebSocket** (the threaded server's natural fit);
     `src/hooks/useLiveBus.ts` wraps a single `EventSource` over the `run_upsert` /
     `live_event` / `mcp_log` / `annotation` / `analysis_run` events. Client→server actions are plain POSTs.
-  - **Pages:** Overview, Runs (list + span-tree/flame/live-tail/payload/annotations detail),
+  - **Pages:** Overview, Traces (Langfuse-style: a full-width sortable/filterable traces
+    table → a dedicated `/traces/:id` page with header metrics + Tree⇄Timeline + a span-detail
+    panel — chat-style messages, tokens/latency/model-params, pretty/raw I/O, per-span scores,
+    annotations, live tail),
     Agent ↔ Kyoko (live MCP log), Proposals, Autonomy, Analysis (trigger an analyzer —
     ace/codex/claude/openclaw/hermes — and manage recurring openclaw/hermes schedules),
     Evals & Replay, Settings.
