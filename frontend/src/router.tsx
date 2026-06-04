@@ -5,6 +5,7 @@ import { McpLogPage } from "./pages/McpLogPage";
 import { ProposalsPage } from "./pages/ProposalsPage";
 import { IssuesPage } from "./pages/IssuesPage";
 import { AutonomyPage } from "./pages/AutonomyPage";
+import { AnalysisPage } from "./pages/AnalysisPage";
 import { ChecksPage } from "./pages/ChecksPage";
 import { DetectorsPage } from "./pages/DetectorsPage";
 import { JudgesPage } from "./pages/JudgesPage";
@@ -22,6 +23,7 @@ export const router = createBrowserRouter([
       { path: "runs/:runId", element: <RunsPage /> },
       { path: "runs/:runId/span/:spanId", element: <RunsPage /> },
       { path: "mcp-log", element: <McpLogPage /> },
+      { path: "analysis", element: <AnalysisPage /> },
       { path: "proposals", element: <ProposalsPage /> },
       { path: "issues", element: <IssuesPage /> },
       { path: "autonomy", element: <AutonomyPage /> },

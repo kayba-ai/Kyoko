@@ -401,3 +401,123 @@ export interface LlmEvalRunDetailBundle {
   eval_run: MeasureRun;
   results: MeasureResult[];
 }
+
+// ---- Analysis plane (operator/import analyzers, schedules, runs) -------------
+
+export type AnalyzerKind = "ace" | "codex" | "claude" | "openclaw" | "hermes";
+
+export interface Analyzer {
+  analyzer: AnalyzerKind;
+  installed: boolean;
+  command: string;
+  adapter_registered: boolean;
+  schedulable: boolean;
+}
+
+export interface AnalyzersBundle {
+  analyzers: Analyzer[];
+  schedulable: string[];
+}
+
+export type AnalysisRunStatus = "running" | "succeeded" | "failed";
+
+export interface AnalysisRun {
+  id: string;
+  status: AnalysisRunStatus;
+  operator_label: string | null;
+  operator_kind: string | null;
+  started_at: string | null;
+  ended_at: string | null;
+  proposal_id: string | null;
+  error: string | null;
+  schedule_id: string | null;
+  analyzed_since: string | null;
+}
+
+export interface AnalysisSchedule {
+  id: string;
+  analyzer_kind: string;
+  adapter_id: string | null;
+  source_kind: string | null;
+  source_path: string | null;
+  refresh_import: boolean;
+  interval_hours: number;
+  at_time: string | null;
+  enabled: boolean;
+  run_autonomy: boolean;
+  watermark: string | null;
+  last_run_at: string | null;
+  next_run_at: string | null;
+  last_status: string | null;
+  last_operator_run_id: string | null;
+  last_error: string | null;
+}
+
+export type AnalysisRunScope = "all" | "new" | "run";
+
+export interface RunAnalysisBody {
+  analyzer: AnalyzerKind;
+  adapter_id?: string;
+  scope: AnalysisRunScope;
+  run_id?: string;
+  since?: string;
+  refresh_import?: boolean;
+  source_kind?: string;
+  source_path?: string;
+  run_autonomy?: boolean;
+  ace_command?: string[];
+  operator_command?: string[];
+  timeout_seconds?: number;
+  max_retries?: number;
+  profile_id?: string;
+}
+
+export interface RunAnalysisResult {
+  job_id: string;
+  analyzer: string;
+  status: string;
+}
+
+export interface CreateScheduleBody {
+  analyzer: "openclaw" | "hermes";
+  source_path?: string;
+  adapter_id?: string;
+  interval_hours?: number;
+  at_time?: string;
+  refresh_import?: boolean;
+  enabled?: boolean;
+  run_autonomy?: boolean;
+}
+
+export interface UpdateScheduleBody {
+  id: string;
+  enabled?: boolean;
+  interval_hours?: number;
+  at_time?: string;
+  refresh_import?: boolean;
+  run_autonomy?: boolean;
+  source_path?: string;
+  adapter_id?: string;
+}
+
+// SSE `analysis_run` event payload (live progress for run analysis + schedules).
+export type AnalysisRunPhase =
+  | "running"
+  | "importing"
+  | "analyzing"
+  | "skipped"
+  | "succeeded"
+  | "failed";
+
+export interface AnalysisRunEvent {
+  job_id: string;
+  schedule_id: string | null;
+  analyzer: string;
+  scope: string;
+  status: AnalysisRunPhase;
+  proposal_ids?: string[];
+  operator_run_id?: string;
+  error?: string;
+  reason?: string;
+  at: string;
+}

@@ -3,12 +3,19 @@
 // server's CSRF content-type guard requires it.
 
 import type {
+  AnalysisRun,
+  AnalysisSchedule,
+  AnalyzersBundle,
   Annotation,
   AnnotationKind,
   AutonomyPolicy,
   Comparison,
+  CreateScheduleBody,
   DashboardMetrics,
   ChecksBundle,
+  RunAnalysisBody,
+  RunAnalysisResult,
+  UpdateScheduleBody,
   EvalDetailBundle,
   EvalRunDetailBundle,
   EvalRunsBundle,
@@ -196,6 +203,25 @@ export const api = {
     getJson<LlmEvalRunDetailBundle>("/api/llm-eval-runs/detail", { id }),
   llmEvalCompare: (baseline: string, compare: string) =>
     getJson<Comparison>("/api/llm-eval-compare", { baseline, compare }),
+
+  // ---- Analysis plane (operator/import analyzers, schedules, runs) ----------
+  listAnalyzers: () => getJson<AnalyzersBundle>("/api/analysis/analyzers"),
+  listAnalysisRuns: () =>
+    getJson<{ runs: AnalysisRun[] }>("/api/analysis/runs").then((d) => d.runs ?? []),
+  listSchedules: () =>
+    getJson<{ schedules: AnalysisSchedule[] }>("/api/analysis/schedules").then((d) => d.schedules ?? []),
+  runAnalysis: (body: RunAnalysisBody) =>
+    postJson<RunAnalysisResult>("/api/analysis/run", body),
+  bootstrapAdapters: (target: "all" | "codex" | "claude" | "openclaw" | "hermes") =>
+    postJson<Record<string, unknown>>("/api/operator-adapters/bootstrap", { target }),
+  createSchedule: (body: CreateScheduleBody) =>
+    postJson<{ schedule: AnalysisSchedule }>("/api/analysis/schedules/create", body).then((d) => d.schedule),
+  updateSchedule: (body: UpdateScheduleBody) =>
+    postJson<{ schedule: AnalysisSchedule }>("/api/analysis/schedules/update", body).then((d) => d.schedule),
+  deleteSchedule: (id: string) =>
+    postJson<{ deleted: boolean; id: string }>("/api/analysis/schedules/delete", { id }),
+  runSchedule: (id: string) =>
+    postJson<{ job_id: string; schedule_id: string; status: string }>("/api/analysis/schedules/run", { id }),
 
   // Redaction is a fixed global default and retention is a manual prune (SCOPE
   // simplification) — neither has a policy endpoint anymore; Settings shows them

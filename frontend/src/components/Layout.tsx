@@ -9,6 +9,7 @@ import {
   FlaskConical,
   ScanSearch,
   Scale,
+  Sparkles,
   Settings as SettingsIcon,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -47,6 +48,7 @@ const SECTIONS: NavSection[] = [
     heading: "Improve",
     items: [
       { to: "/issues", label: "Review", icon: CircleDot },
+      { to: "/analysis", label: "Analysis", icon: Sparkles },
       { to: "/proposals", label: "Proposals", icon: GitPullRequestArrow },
       { to: "/autonomy", label: "Autonomy", icon: ShieldCheck },
     ],

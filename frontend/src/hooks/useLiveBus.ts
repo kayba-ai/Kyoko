@@ -6,12 +6,25 @@
 
 import { useEffect, useRef, useState } from "react";
 
-export type LiveEventName = "run_upsert" | "live_event" | "mcp_log" | "annotation" | "clear";
+export type LiveEventName =
+  | "run_upsert"
+  | "live_event"
+  | "mcp_log"
+  | "annotation"
+  | "analysis_run"
+  | "clear";
 export type ConnectionStatus = "connecting" | "open" | "closed";
 
 type Handler = (data: any) => void;
 
-const EVENT_NAMES: LiveEventName[] = ["run_upsert", "live_event", "mcp_log", "annotation", "clear"];
+const EVENT_NAMES: LiveEventName[] = [
+  "run_upsert",
+  "live_event",
+  "mcp_log",
+  "annotation",
+  "analysis_run",
+  "clear",
+];
 
 class LiveBusClient {
   private source: EventSource | null = null;

@@ -220,12 +220,23 @@ from .source_templates import (
 from .storage import (
     StorageError,
     checkpoint_database,
+    create_analysis_schedule,
     default_db_path,
+    delete_analysis_schedule,
     get_database_status,
     ingest_source_json,
     ingest_source_fixture,
     initialize_database,
+    list_analysis_schedules,
     status_to_json,
+)
+from .analysis_runner import (
+    SCHEDULABLE_ANALYZERS,
+    AnalysisJob,
+    AnalysisRunError,
+    execute_analysis_job,
+    job_from_schedule,
+    next_run_at_iso,
 )
 from .timeline import AUTONOMY_EVENT_KINDS, list_timeline_events
 from .web import DEFAULT_HOST, DEFAULT_PORT, WebError, serve
@@ -2262,6 +2273,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional run id to analyze.",
     )
     analyze.add_argument(
+        "--since",
+        help=(
+            "Only analyze traces newer than this ISO timestamp (scopes the evidence "
+            "bundle to runs with started_at > SINCE). Ignored when --run-id is set."
+        ),
+    )
+    analyze.add_argument(
         "--output-dir",
         type=Path,
         required=True,
@@ -2376,6 +2394,81 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print machine-readable JSON.",
     )
+
+    analysis_run = subcommands.add_parser(
+        "analysis-run",
+        help="Run a dashboard-style analysis (ace/codex/claude/openclaw/hermes) through the gate.",
+    )
+    _add_db_argument(analysis_run)
+    analysis_run.add_argument(
+        "--analyzer",
+        required=True,
+        help="ace | codex | claude | openclaw | hermes (or mock/command for testing).",
+    )
+    analysis_run.add_argument("--adapter-id", help="Operator adapter id (defaults to the analyzer name).")
+    analysis_run.add_argument(
+        "--scope", choices=("all", "new", "run"), default="all", help="Trace scope to analyze."
+    )
+    analysis_run.add_argument("--run-id", help="Run id when --scope run.")
+    analysis_run.add_argument("--since", help="Cutoff ISO timestamp when --scope new.")
+    analysis_run.add_argument(
+        "--refresh-import", action="store_true", help="Re-import from --source-path before analyzing."
+    )
+    analysis_run.add_argument("--source-kind", choices=("openclaw_sessions", "hermes_kanban"))
+    analysis_run.add_argument("--source-path", help="Source path to re-import when --refresh-import.")
+    analysis_run.add_argument(
+        "--no-autonomy", action="store_true", help="Stop before the policy-gated autonomy evaluator."
+    )
+    analysis_run.add_argument(
+        "--ace-command", help="External ACE command (required when --analyzer ace), e.g. 'ace run'."
+    )
+    analysis_run.add_argument("--command", dest="operator_command", help="Command for --analyzer command.")
+    analysis_run.add_argument("--timeout", type=int, default=120, help="External operator timeout (seconds).")
+    analysis_run.add_argument("--max-retries", type=int, default=0, help="Retry invalid operator output N times.")
+    analysis_run.add_argument("--profile-id", help="Profile id. Defaults to the first profile.")
+    analysis_run.add_argument("--output-dir", type=Path, help="Artifact output directory.")
+    analysis_run.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+
+    analysis_schedule_add = subcommands.add_parser(
+        "analysis-schedule-add",
+        help="Create a recurring openclaw/hermes analysis schedule (fires while `kyoko serve` runs).",
+    )
+    _add_db_argument(analysis_schedule_add)
+    analysis_schedule_add.add_argument(
+        "--analyzer", required=True, choices=tuple(SCHEDULABLE_ANALYZERS), help="openclaw | hermes."
+    )
+    analysis_schedule_add.add_argument("--adapter-id", help="Operator adapter id (defaults to the analyzer).")
+    analysis_schedule_add.add_argument("--source-path", help="Source path re-imported on each fire.")
+    analysis_schedule_add.add_argument("--interval-hours", type=int, default=24, help="Cadence in hours.")
+    analysis_schedule_add.add_argument("--at-time", help="Local anchor time 'HH:MM' (e.g. 03:30).")
+    analysis_schedule_add.add_argument(
+        "--no-refresh-import", action="store_true", help="Do not re-import before analyzing."
+    )
+    analysis_schedule_add.add_argument(
+        "--no-autonomy", action="store_true", help="Scheduled runs stop before autonomy."
+    )
+    analysis_schedule_add.add_argument("--profile-id", help="Profile id. Defaults to the first profile.")
+    analysis_schedule_add.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+
+    analysis_schedules = subcommands.add_parser(
+        "analysis-schedules", help="List recurring analysis schedules."
+    )
+    _add_db_argument(analysis_schedules)
+    analysis_schedules.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+
+    analysis_schedule_remove = subcommands.add_parser(
+        "analysis-schedule-remove", help="Delete a recurring analysis schedule."
+    )
+    _add_db_argument(analysis_schedule_remove)
+    analysis_schedule_remove.add_argument("schedule_id", help="Schedule id to delete.")
+    analysis_schedule_remove.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+
+    analysis_schedule_run = subcommands.add_parser(
+        "analysis-schedule-run", help="Fire a recurring analysis schedule immediately."
+    )
+    _add_db_argument(analysis_schedule_run)
+    analysis_schedule_run.add_argument("schedule_id", help="Schedule id to run now.")
+    analysis_schedule_run.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
 
     operator_adapter_register = subcommands.add_parser(
         "operator-adapter-register",
@@ -5861,14 +5954,133 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(f"target: {report.target}")
         return 0
 
+    if args.command == "analysis-run":
+        ace_command = None
+        operator_command = None
+        if args.analyzer == "ace":
+            if not args.ace_command:
+                print("analysis failed: ace_command_required", file=sys.stderr)
+                return 1
+            ace_command = parse_operator_command(args.ace_command)
+        if args.analyzer == "command":
+            if not args.operator_command:
+                print("analysis failed: operator_command_required", file=sys.stderr)
+                return 1
+            operator_command = parse_operator_command(args.operator_command)
+        try:
+            result = execute_analysis_job(
+                args.db,
+                AnalysisJob(
+                    analyzer=args.analyzer,
+                    adapter_id=args.adapter_id,
+                    scope=args.scope,
+                    run_id=args.run_id,
+                    since=args.since,
+                    refresh_import=bool(args.refresh_import),
+                    source_kind=args.source_kind,
+                    source_path=args.source_path,
+                    run_autonomy=not args.no_autonomy,
+                    ace_command=ace_command,
+                    operator_command=operator_command,
+                    timeout_seconds=args.timeout,
+                    max_retries=args.max_retries,
+                    profile_id=args.profile_id,
+                    output_dir=args.output_dir,
+                ),
+            )
+        except AnalysisRunError as exc:
+            print(f"analysis failed: {exc}", file=sys.stderr)
+            return 1
+        if args.json:
+            print(json.dumps(result, sort_keys=True))
+        else:
+            print(f"analysis {result['status']}: {result.get('job_id')}")
+            if result.get("proposal_ids"):
+                print(f"proposals: {', '.join(result['proposal_ids'])}")
+            if result.get("reason"):
+                print(f"reason: {result['reason']}")
+            if result.get("error"):
+                print(f"error: {result['error']}")
+        return 0 if result.get("status") in {"succeeded", "skipped"} else 1
+
+    if args.command == "analysis-schedule-add":
+        try:
+            schedule = create_analysis_schedule(
+                db_path=args.db,
+                analyzer_kind=args.analyzer,
+                adapter_id=args.adapter_id,
+                source_path=args.source_path,
+                refresh_import=not args.no_refresh_import,
+                interval_hours=args.interval_hours,
+                at_time=args.at_time,
+                run_autonomy=not args.no_autonomy,
+                next_run_at=next_run_at_iso(args.interval_hours, args.at_time),
+                profile_id=args.profile_id,
+            )
+        except (StorageError, AnalysisRunError) as exc:
+            print(f"schedule add failed: {exc}", file=sys.stderr)
+            return 1
+        if args.json:
+            print(json.dumps(schedule, sort_keys=True))
+        else:
+            print(f"schedule added: {schedule['id']}")
+            print(f"analyzer: {schedule['analyzer_kind']}")
+            print(f"every {schedule['interval_hours']}h" + (f" at {schedule['at_time']}" if schedule['at_time'] else ""))
+            print(f"next_run_at: {schedule['next_run_at']}")
+        return 0
+
+    if args.command == "analysis-schedules":
+        schedules = list_analysis_schedules(args.db)
+        if args.json:
+            print(json.dumps({"schedules": schedules}, sort_keys=True))
+        else:
+            if not schedules:
+                print("no analysis schedules")
+            for s in schedules:
+                state = "enabled" if s["enabled"] else "disabled"
+                print(
+                    f"{s['id']} {s['analyzer_kind']} every {s['interval_hours']}h"
+                    + (f" at {s['at_time']}" if s.get("at_time") else "")
+                    + f" [{state}] next={s.get('next_run_at')} last={s.get('last_status')}"
+                )
+        return 0
+
+    if args.command == "analysis-schedule-remove":
+        deleted = delete_analysis_schedule(db_path=args.db, schedule_id=args.schedule_id)
+        if args.json:
+            print(json.dumps({"deleted": deleted, "id": args.schedule_id}, sort_keys=True))
+        else:
+            print("deleted" if deleted else "not found", args.schedule_id)
+        return 0 if deleted else 1
+
+    if args.command == "analysis-schedule-run":
+        from .storage import get_analysis_schedule
+
+        schedule = get_analysis_schedule(db_path=args.db, schedule_id=args.schedule_id)
+        if schedule is None:
+            print(f"analysis_schedule_not_found:{args.schedule_id}", file=sys.stderr)
+            return 1
+        result = execute_analysis_job(args.db, job_from_schedule(schedule))
+        if args.json:
+            print(json.dumps(result, sort_keys=True))
+        else:
+            print(f"schedule {args.schedule_id} {result['status']}")
+            if result.get("proposal_ids"):
+                print(f"proposals: {', '.join(result['proposal_ids'])}")
+            if result.get("error"):
+                print(f"error: {result['error']}")
+        return 0 if result.get("status") in {"succeeded", "skipped"} else 1
+
     if args.command == "analyze":
         try:
+            since = getattr(args, "since", None)
             if args.operator == "mock":
                 report = analyze_with_mock_operator(
                     db_path=args.db,
                     output_dir=args.output_dir,
                     profile_id=args.profile_id,
                     run_id=args.run_id,
+                    since=since,
                     schema_path=args.schema,
                 )
             elif args.operator == "command":
@@ -5881,6 +6093,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     operator_label="command",
                     profile_id=args.profile_id,
                     run_id=args.run_id,
+                    since=since,
                     schema_path=args.schema,
                     timeout_seconds=args.timeout,
                     max_retries=args.max_retries,
@@ -5895,6 +6108,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     output_dir=args.output_dir,
                     profile_id=args.profile_id,
                     run_id=args.run_id,
+                    since=since,
                     schema_path=args.schema,
                     timeout_seconds=args.timeout,
                     max_retries=args.max_retries,
