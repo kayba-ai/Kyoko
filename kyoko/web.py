@@ -47,6 +47,7 @@ from .llm_evals import (
     set_llm_eval_status,
 )
 from .issues import IssueError, create_issue, list_issues, set_issue_comment, update_issue_status
+from .issue_guard import GuardError, mint_guard_for_issue
 from .doctor import DEFAULT_SMOKE_EVIDENCE_DIR, run_doctor
 from .evidence import build_evidence_bundle
 from .checks import (
@@ -1286,6 +1287,25 @@ def make_handler(
                         self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
                         return
                     self._send_json({"issue": issue})
+                    return
+                if path == "/api/issues/mint-guard":
+                    payload = self._read_json()
+                    issue_id = _optional_str(payload.get("id")) or _optional_str(
+                        payload.get("issue_id")
+                    )
+                    if not issue_id:
+                        self._send_json(
+                            {"error": "id_required"}, status=HTTPStatus.BAD_REQUEST
+                        )
+                        return
+                    try:
+                        report = mint_guard_for_issue(
+                            db_path=resolved_db_path, issue_id=issue_id
+                        )
+                    except (GuardError, IssueError) as exc:
+                        self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                        return
+                    self._send_json({"guard": report.to_json()})
                     return
                 # ---- eval (Python detector) measurement plane ----
                 if path == "/api/run-eval":

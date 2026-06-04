@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { GitPullRequestArrow } from "lucide-react";
+import { CircleDot, GitPullRequestArrow } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Proposal } from "@/lib/types";
 import { ago, humanize } from "@/lib/format";
@@ -56,6 +56,7 @@ function ProposalDetail({ id }: { id: string }) {
 
   const title = String(data.title ?? id);
   const state = (data.state as string | undefined) ?? null;
+  const issueId = (data.issue_id as string | undefined) ?? null;
   const sectionLabel = (data.section_label as string | undefined) ?? (data.section as string | undefined) ?? null;
   const summary = (data.summary as string | undefined) ?? null;
   const sectionDescription = (data.section_description as string | undefined) ?? null;
@@ -73,6 +74,13 @@ function ProposalDetail({ id }: { id: string }) {
           {state && <Badge tone={statusTone(state)}>{humanize(state)}</Badge>}
           {sectionLabel && <Badge tone="neutral">{sectionLabel}</Badge>}
         </div>
+        {issueId && (
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <CircleDot className="h-3.5 w-3.5" />
+            <span>Origin issue:</span>
+            <span className="font-mono text-foreground">{issueId}</span>
+          </div>
+        )}
         {sectionDescription && <p className="text-sm text-muted-foreground">{sectionDescription}</p>}
       </div>
 
@@ -173,6 +181,15 @@ export function ProposalsPage() {
                     <div className="flex flex-wrap items-center gap-1.5">
                       <Badge tone={statusTone(p.state)}>{humanize(p.state)}</Badge>
                       {sectionLabel && <Badge tone="neutral">{sectionLabel}</Badge>}
+                      {p.issue_id && (
+                        <span
+                          className="inline-flex items-center gap-1 text-label text-muted-foreground"
+                          title={`Origin issue: ${p.issue_id}`}
+                        >
+                          <CircleDot className="h-3 w-3" />
+                          Issue
+                        </span>
+                      )}
                       {conf && (
                         <span className="font-mono text-label tabular-nums text-muted-foreground">{conf}</span>
                       )}

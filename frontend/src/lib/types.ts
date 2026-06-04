@@ -245,13 +245,30 @@ export interface Proposal {
   confidence_delta?: number | null;
   kyoko_confidence?: number | null;
   operator_confidence?: number | null;
+  // The originating Issue this proposal addresses (Issue-as-spine), when known.
+  issue_id?: string | null;
   created_at: string;
   profile_id: string;
 }
 
 export type IssueSection = "context" | "harness";
 export type IssueSeverity = "low" | "medium" | "high";
-export type IssueStatus = "open" | "resolved" | "dismissed";
+// Expanded lifecycle: an Issue is the spine of the optimization loop and moves
+// through prioritized → diagnosed → proposed → applied → resolved, can be
+// guarded (a regression check now protects the fix), or dismissed. The original
+// "open"|"resolved"|"dismissed" remain valid.
+export type IssueStatus =
+  | "open"
+  | "prioritized"
+  | "diagnosed"
+  | "proposed"
+  | "applied"
+  | "resolved"
+  | "guarded"
+  | "dismissed";
+
+// Where an Issue came from.
+export type IssueSource = "analysis" | "eval" | "llm_eval" | "manual";
 
 export interface Issue {
   id: string;
@@ -262,6 +279,15 @@ export interface Issue {
   category: string | null;
   severity: IssueSeverity | null;
   status: IssueStatus;
+  // Priority rank assigned during prioritization (lower = more important); null
+  // until prioritized.
+  rank?: number | null;
+  // Diagnosed root cause, when known.
+  root_cause?: string | null;
+  // Provenance of the issue.
+  source?: IssueSource | null;
+  // The evaluator/guard that now protects a resolved fix, when guarded.
+  evaluator_id?: string | null;
   evidence_refs: Record<string, unknown>[];
   affected_agent_identity_ids: string[];
   affected_workflow_node_ids: string[];
@@ -271,6 +297,16 @@ export interface Issue {
   review_comment?: string | null;
   created_at: string;
   updated_at: string | null;
+}
+
+// A guard installed by `improve` so a resolved Issue cannot silently regress.
+// Surfaced in the improve --json response (POST /api/improve `guards`).
+export interface GuardReport {
+  issue_id: string;
+  evaluator_id: string;
+  evaluator_kind: string;
+  deterministic: boolean;
+  affected_span_names: string[];
 }
 
 export interface AutonomyPolicy {

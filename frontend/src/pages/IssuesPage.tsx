@@ -8,6 +8,8 @@ import {
   MessageSquare,
   RotateCcw,
   Search,
+  Shield,
+  Stethoscope,
   X,
 } from "lucide-react";
 import { api } from "@/lib/api";
@@ -30,7 +32,7 @@ import { cn } from "@/lib/utils";
 // record — it never changes agent behavior, mutates a skillbook/harness/repo, or
 // bypasses the check/replay gate.
 
-type StatusFilter = IssueStatus | "all";
+type StatusFilter = "open" | "resolved" | "dismissed" | "all";
 
 const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
   { value: "open", label: "Pending" },
@@ -39,11 +41,43 @@ const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
   { value: "all", label: "All" },
 ];
 
-// open → Pending, resolved → Accepted, dismissed → Rejected.
+// Bucket any lifecycle status into the three review-queue filters.
+function bucket(status: string): "open" | "resolved" | "dismissed" {
+  if (status === "resolved" || status === "applied" || status === "guarded") return "resolved";
+  if (status === "dismissed") return "dismissed";
+  return "open";
+}
+
+// Review-queue decision bucket: resolved/applied/guarded → Accepted,
+// dismissed → Rejected, everything in-flight → Pending.
 function decision(status: string): { label: string; tone: NonNullable<BadgeProps["tone"]> } {
-  if (status === "resolved") return { label: "Accepted", tone: "ok" };
+  if (status === "resolved" || status === "applied" || status === "guarded")
+    return { label: "Accepted", tone: "ok" };
   if (status === "dismissed") return { label: "Rejected", tone: "danger" };
   return { label: "Pending", tone: "warn" };
+}
+
+// Precise lifecycle badge for every status in the Issue spine. Returns null for
+// plain "open" (the decision badge already reads "Pending" there).
+function lifecycle(status: string): { label: string; tone: NonNullable<BadgeProps["tone"]> } | null {
+  switch (status) {
+    case "prioritized":
+      return { label: "Prioritized", tone: "warn" };
+    case "diagnosed":
+      return { label: "Diagnosed", tone: "warn" };
+    case "proposed":
+      return { label: "Proposed", tone: "primary" };
+    case "applied":
+      return { label: "Applied", tone: "ok" };
+    case "resolved":
+      return { label: "Resolved", tone: "ok" };
+    case "guarded":
+      return { label: "Guarded", tone: "primary" };
+    case "dismissed":
+      return { label: "Dismissed", tone: "danger" };
+    default:
+      return null;
+  }
 }
 
 function severityTone(severity: string | null | undefined): NonNullable<BadgeProps["tone"]> {
@@ -263,6 +297,7 @@ function IssueDetail({
   if (!issue) return <Empty title="Issue not found" />;
 
   const dec = decision(issue.status);
+  const life = lifecycle(issue.status);
   const sectionDescription = (data.section_description as string | undefined) ?? null;
   const affected = (data.affected as Record<string, { entity_id: string; found: boolean }[]>) ?? {};
   const linkedProposals =
@@ -284,9 +319,20 @@ function IssueDetail({
       <div className="flex items-start justify-between gap-4">
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           <Badge tone={dec.tone}>{dec.label}</Badge>
+          {life && <Badge tone={life.tone}>{life.label}</Badge>}
+          {typeof issue.rank === "number" && (
+            <Badge tone="neutral" className="tabular-nums">{`Rank ${issue.rank}`}</Badge>
+          )}
           {issue.severity && <Badge tone={severityTone(issue.severity)}>{humanize(issue.severity)}</Badge>}
           {issue.section && <Badge tone="neutral">{humanize(issue.section)}</Badge>}
           {issue.category && <Badge tone="neutral">{humanize(issue.category)}</Badge>}
+          {issue.source && <Badge tone="neutral">{humanize(issue.source)}</Badge>}
+          {issue.evaluator_id && (
+            <Badge tone="primary" title={`Guarded by ${issue.evaluator_id}`}>
+              <Shield className="h-3 w-3" />
+              {`Guard: ${issue.evaluator_id}`}
+            </Badge>
+          )}
         </div>
         <div className="shrink-0">
           <ReviewActions issue={issue} onReviewed={onReviewed} />
@@ -306,6 +352,13 @@ function IssueDetail({
             <SkillDeliverable key={s.id} skill={s} />
           ))}
         </div>
+      )}
+
+      {/* Root cause (diagnosis) */}
+      {issue.root_cause && (
+        <Section label="Root cause" icon={<Stethoscope className="h-3.5 w-3.5" />}>
+          <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{issue.root_cause}</p>
+        </Section>
       )}
 
       {/* Justification */}
@@ -412,6 +465,7 @@ function ReviewCard({
   onReviewed: () => void;
 }) {
   const dec = decision(issue.status);
+  const life = lifecycle(issue.status);
   return (
     <div
       role="button"
@@ -431,8 +485,15 @@ function ReviewCard({
       <div className="mb-2 line-clamp-2 text-sm font-semibold leading-snug text-foreground">{issue.title}</div>
       <div className="flex flex-wrap items-center gap-1.5">
         <Badge tone={dec.tone}>{dec.label}</Badge>
+        {life && <Badge tone={life.tone}>{life.label}</Badge>}
         {issue.severity && <Badge tone={severityTone(issue.severity)}>{humanize(issue.severity)}</Badge>}
         {issue.section && <Badge tone="neutral">{humanize(issue.section)}</Badge>}
+        {issue.evaluator_id && (
+          <Badge tone="primary" title={`Guarded by ${issue.evaluator_id}`}>
+            <Shield className="h-3 w-3" />
+            Guard
+          </Badge>
+        )}
         <span className="ml-auto text-label text-muted-foreground">{ago(issue.created_at)}</span>
       </div>
       {issue.status === "open" && (
@@ -471,17 +532,13 @@ export function IssuesPage() {
 
   const counts = useMemo(() => {
     const c = { open: 0, resolved: 0, dismissed: 0, all: issues.length };
-    for (const i of issues) {
-      if (i.status === "open") c.open += 1;
-      else if (i.status === "resolved") c.resolved += 1;
-      else if (i.status === "dismissed") c.dismissed += 1;
-    }
+    for (const i of issues) c[bucket(i.status)] += 1;
     return c;
   }, [issues]);
 
   const q = query.trim().toLowerCase();
   const filtered = useMemo(
-    () => issues.filter((i) => (statusFilter === "all" || i.status === statusFilter) && matchesQuery(i, q)),
+    () => issues.filter((i) => (statusFilter === "all" || bucket(i.status) === statusFilter) && matchesQuery(i, q)),
     [issues, statusFilter, q],
   );
 

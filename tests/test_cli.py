@@ -128,6 +128,28 @@ class CliTests(unittest.TestCase):
         self.assertEqual(error_code, 1)
         self.assertIn("bundled_asset_invalid_path", error_out.getvalue())
 
+    def test_mint_guard_command_guards_issue(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "kyoko.db"
+            with redirect_stdout(io.StringIO()):
+                main(["ingest-fixture", "--db", str(db_path), str(FIXTURE)])
+                create_code = main(
+                    ["issue-create", "--db", str(db_path), "Fetch step times out", "--json"]
+                )
+            self.assertEqual(create_code, 0)
+            from kyoko.issues import list_issues
+
+            issue_id = list_issues(db_path=db_path)[0]["id"]
+
+            out = io.StringIO()
+            with redirect_stdout(out):
+                code = main(["mint-guard", "--db", str(db_path), issue_id, "--json"])
+            self.assertEqual(code, 0)
+            guard = json.loads(out.getvalue())["guard"]
+            self.assertEqual(guard["issue_id"], issue_id)
+            self.assertTrue(guard["deterministic"])
+            self.assertEqual(guard["evaluator_id"], f"guard_{issue_id}")
+
     def test_init_ingest_status_flow(self) -> None:
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"

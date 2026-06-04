@@ -315,6 +315,7 @@ def list_learning_proposals(db_path: Path, *, profile_id: Optional[str] = None) 
                 {
                     "id": proposal["id"],
                     "profile_id": proposal["profile_id"],
+                    "issue_id": proposal.get("issue_id"),
                     "state": proposal["state"],
                     "section": proposal["section"],
                     "section_label": section_label(proposal["section"]),

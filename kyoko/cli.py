@@ -65,6 +65,7 @@ from .details import (
     list_runs,
 )
 from .issues import IssueError, create_issue, list_issues, set_issue_comment, update_issue_status
+from .issue_guard import GuardError, mint_guard_for_issue
 from .eval_detectors import (
     DetectorError,
     get_detector,
@@ -1035,6 +1036,15 @@ def build_parser() -> argparse.ArgumentParser:
         "status", choices=["open", "resolved", "dismissed"], help="New triage status."
     )
     issue_status.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+
+    mint_guard = subcommands.add_parser(
+        "mint-guard",
+        help="Mint a standing deterministic guard evaluator for a (resolved) issue and "
+        "advance it to `guarded` — closes the loop so recurrence is caught (job step 08).",
+    )
+    _add_db_argument(mint_guard)
+    mint_guard.add_argument("issue_id", help="Issue id to guard.")
+    mint_guard.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
 
     issue_comment = subcommands.add_parser(
         "issue-comment",
@@ -4659,6 +4669,21 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                   f"section={issue.get('section') or '-'}")
             print(f"linked_proposals={detail['summary']['linked_proposals']} "
                   f"evidence_refs={detail['summary']['evidence_refs']}")
+        return 0
+
+    if args.command == "mint-guard":
+        try:
+            report = mint_guard_for_issue(db_path=args.db, issue_id=args.issue_id)
+        except (GuardError, IssueError, StorageError) as exc:
+            print(f"mint-guard failed: {exc}", file=sys.stderr)
+            return 1
+        if args.json:
+            print(json.dumps({"guard": report.to_json()}, sort_keys=True))
+        else:
+            print(
+                f"guarded {report.issue_id} -> {report.evaluator_id} "
+                f"({'deterministic' if report.deterministic else report.evaluator_kind})"
+            )
         return 0
 
     if args.command == "issue-create":
