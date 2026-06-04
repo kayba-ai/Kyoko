@@ -151,7 +151,7 @@ class CliTests(unittest.TestCase):
 
             payload = json.loads(status_out.getvalue())
             self.assertTrue(payload["initialized"])
-            self.assertEqual(payload["schema_version"], 25)
+            self.assertEqual(payload["schema_version"], 26)
             self.assertEqual(payload["counts"]["spans"], 2)
             self.assertEqual(payload["counts"]["issues"], 0)
 

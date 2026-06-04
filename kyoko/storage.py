@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 
-SCHEMA_VERSION = 25
+SCHEMA_VERSION = 26
 
 
 class StorageError(Exception):
@@ -653,6 +653,79 @@ CREATE TABLE IF NOT EXISTS issues (
 CREATE INDEX IF NOT EXISTS idx_issues_profile_id ON issues(profile_id);
 CREATE INDEX IF NOT EXISTS idx_issues_status ON issues(status);
 CREATE INDEX IF NOT EXISTS idx_issues_section ON issues(section);
+
+-- v26: measurement plane (evidence only). `eval` = deterministic Python
+-- detector over a trace corpus; `llm_eval` = LLM-as-judge template. Neither
+-- writes a check_run, mutates a skill, or edits a harness file. Discriminated
+-- by `kind` (python | llm). See docs/specs/0014, 0015.
+CREATE TABLE IF NOT EXISTS eval_definitions (
+  id TEXT PRIMARY KEY,
+  profile_id TEXT NOT NULL,
+  kind TEXT NOT NULL,                   -- python | llm
+  name TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  partner TEXT,                         -- "ragas" for ported llm_evals, else NULL
+  source TEXT NOT NULL,                 -- bundled | user
+  unit_type TEXT NOT NULL,              -- event | llm_span | run
+  output_type TEXT NOT NULL,            -- numeric | boolean
+  direction TEXT NOT NULL,              -- lower_is_better | higher_is_better | true_is_notable | false_is_notable
+  problem_statement TEXT,
+  detector_ref TEXT,                    -- python: blob sha of detector .py (NULL for llm)
+  prompt TEXT,                          -- llm only
+  vars_json TEXT,                       -- llm only
+  bindings_json TEXT,                   -- llm only
+  output_json TEXT,                     -- llm only: {type, range}
+  severity_bands_json TEXT,
+  status TEXT NOT NULL,                 -- active | archived
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (profile_id) REFERENCES profiles(id)
+);
+
+CREATE TABLE IF NOT EXISTS eval_measure_runs (
+  id TEXT PRIMARY KEY,
+  profile_id TEXT NOT NULL,
+  eval_definition_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  definition_snapshot_json TEXT NOT NULL,   -- frozen def used this run
+  corpus_json TEXT NOT NULL,                -- selector
+  unit_type TEXT NOT NULL,
+  status TEXT NOT NULL,                     -- pending | running | complete | failed
+  unit_total INTEGER NOT NULL DEFAULT 0,
+  unit_scored INTEGER NOT NULL DEFAULT 0,
+  unit_skipped INTEGER NOT NULL DEFAULT 0,
+  aggregate_json TEXT,                      -- {value, numerator, denominator, mean?, ...}
+  baseline_run_id TEXT,                     -- compare lineage (optional)
+  started_at TEXT,
+  ended_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (profile_id) REFERENCES profiles(id),
+  FOREIGN KEY (eval_definition_id) REFERENCES eval_definitions(id),
+  FOREIGN KEY (baseline_run_id) REFERENCES eval_measure_runs(id)
+);
+
+CREATE TABLE IF NOT EXISTS eval_measure_results (
+  id TEXT PRIMARY KEY,
+  eval_run_id TEXT NOT NULL,
+  profile_id TEXT NOT NULL,
+  unit_type TEXT NOT NULL,
+  unit_ref TEXT NOT NULL,               -- event_id | span_id | run_id
+  status TEXT NOT NULL,                 -- scored | skipped | error
+  score_numeric REAL,                   -- llm numeric
+  score_bool INTEGER,                   -- python has_problem, or llm boolean
+  reasoning TEXT,                       -- llm only, redacted one-liner
+  degraded INTEGER NOT NULL DEFAULT 0,
+  detail_json TEXT NOT NULL,            -- raw detector/judge output, skip/err reason
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (eval_run_id) REFERENCES eval_measure_runs(id),
+  FOREIGN KEY (profile_id) REFERENCES profiles(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_eval_definitions_profile_id ON eval_definitions(profile_id);
+CREATE INDEX IF NOT EXISTS idx_eval_measure_runs_profile_id ON eval_measure_runs(profile_id);
+CREATE INDEX IF NOT EXISTS idx_eval_measure_runs_definition_id ON eval_measure_runs(eval_definition_id);
+CREATE INDEX IF NOT EXISTS eval_measure_results_run ON eval_measure_results(eval_run_id);
 """
 
 
