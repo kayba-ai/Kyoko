@@ -4,6 +4,21 @@ import type { SpanNode } from "@/lib/types";
 import { durationMs, fmtDuration } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
+/** duration_ms when the server provides it, else derive from timestamps. */
+function spanDuration(node: SpanNode): number | null {
+  return node.duration_ms ?? durationMs(node.started_at, node.ended_at);
+}
+
+/** Combined in+out token count for an llm span, or null when unknown/zero. */
+function spanTokens(node: SpanNode): number | null {
+  const n = node.normalized ?? {};
+  const usage = node.usage ?? {};
+  const inTok = (n.input_tokens as number | null | undefined) ?? (usage.input_tokens as number | undefined);
+  const outTok = (n.output_tokens as number | null | undefined) ?? (usage.output_tokens as number | undefined);
+  const total = (inTok ?? 0) + (outTok ?? 0);
+  return total > 0 ? total : null;
+}
+
 const FAILED = new Set(["failed", "errored", "error", "timed_out"]);
 
 function kindIcon(kind: string) {
@@ -27,7 +42,8 @@ function Row({
   const hasChildren = node.children.length > 0;
   const kind = node.normalized?.kind ?? "other";
   const failed = FAILED.has((node.status ?? "").toLowerCase());
-  const dur = durationMs(node.started_at, node.ended_at);
+  const dur = spanDuration(node);
+  const tokens = kind === "llm" ? spanTokens(node) : null;
   const selected = selectedId === node.id;
 
   return (
@@ -61,7 +77,17 @@ function Row({
         </span>
         {failed && <AlertTriangle className="h-3 w-3 shrink-0 text-danger" />}
         {node.model && (
-          <span className="shrink-0 truncate font-mono text-label text-muted-foreground">{node.model}</span>
+          <span className="shrink-0 truncate rounded border border-llm/25 bg-llm/10 px-1 font-mono text-label text-llm">
+            {node.model}
+          </span>
+        )}
+        {tokens !== null && (
+          <span
+            className="shrink-0 rounded border border-border bg-muted/60 px-1 font-mono text-label text-muted-foreground"
+            title="input + output tokens"
+          >
+            {tokens.toLocaleString()} tok
+          </span>
         )}
         <span className="ml-auto shrink-0 font-mono text-label text-muted-foreground">{fmtDuration(dur)}</span>
       </div>

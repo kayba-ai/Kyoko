@@ -32,7 +32,7 @@ const SECTIONS: NavSection[] = [
     heading: "Monitor",
     items: [
       { to: "/overview", label: "Overview", icon: LayoutDashboard },
-      { to: "/runs", label: "Runs", icon: ListTree },
+      { to: "/traces", label: "Traces", icon: ListTree },
       { to: "/mcp-log", label: "Agent ↔ Kyoko", icon: Radio },
     ],
   },

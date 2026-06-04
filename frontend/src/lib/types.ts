@@ -22,15 +22,50 @@ export interface RunSummary {
   output_ref: string | null;
   task_attempt_id: string | null;
   metadata: Record<string, unknown>;
+  // Trace-level metrics (added with the Traces explorer; may be absent on older
+  // payloads, so treat as optional and render "—" when null/undefined).
+  duration_ms?: number | null;
+  input_tokens?: number | null;
+  output_tokens?: number | null;
+  total_tokens?: number | null;
+  llm_span_count?: number | null;
+  cost_usd?: number | null;
 }
 
 export type NormalizedKind = "llm" | "tool" | "other";
+
+export interface ChatMessage {
+  role: string;
+  content: unknown;
+}
+
+export interface NormalizedParams {
+  temperature?: number | null;
+  top_p?: number | null;
+  max_tokens?: number | null;
+  frequency_penalty?: number | null;
+  presence_penalty?: number | null;
+  response_model?: string | null;
+  finish_reasons?: unknown;
+  response_id?: string | null;
+  [k: string]: unknown;
+}
 
 export interface NormalizedSpan {
   kind: NormalizedKind;
   adapter: string;
   model?: string;
-  // Adapters attach extra fields (messages, tool name, args, etc.); keep open.
+  system?: string | null;
+  messages?: ChatMessage[];
+  output_text?: string | null;
+  input_tokens?: number | null;
+  output_tokens?: number | null;
+  params?: NormalizedParams;
+  tool_name?: string | null;
+  args?: unknown;
+  result?: unknown;
+  is_error?: boolean;
+  // Adapters attach extra fields; keep open.
   [k: string]: unknown;
 }
 
@@ -45,6 +80,7 @@ export interface SpanNode {
   agent_identity_id: string | null;
   model: string | null;
   usage: Record<string, unknown>;
+  duration_ms?: number | null;
   normalized: NormalizedSpan;
   input_preview?: string | null;
   output_preview?: string | null;
@@ -63,6 +99,16 @@ export interface SubAgent {
   trigger: string;
 }
 
+export interface TraceMetrics {
+  total_duration_ms: number | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  total_tokens: number | null;
+  llm_spans: number | null;
+  tool_spans: number | null;
+  cost_usd: number | null;
+}
+
 export interface RunOutline {
   run: {
     id: string;
@@ -73,6 +119,7 @@ export interface RunOutline {
   };
   span_tree: SpanNode[];
   subagents: SubAgent[];
+  metrics?: TraceMetrics;
   summary: {
     spans: number;
     failed_spans: number;
@@ -93,6 +140,35 @@ export interface SpanPayload {
   offset?: number;
   truncated?: boolean;
   content?: string;
+}
+
+export interface RunPayload {
+  run_id: string;
+  target: "input" | "output";
+  available: boolean;
+  media_type?: string;
+  size_bytes?: number;
+  path_applied?: string | null;
+  offset?: number;
+  truncated?: boolean;
+  content?: string;
+}
+
+export interface Score {
+  id: string;
+  eval_run_id: string;
+  name: string | null;
+  kind: string | null;
+  unit_type: string;
+  status: string;
+  score_numeric: number | null;
+  score_bool: boolean | null;
+  reasoning: string | null;
+}
+
+export interface RunScores {
+  trace: Score[];
+  by_span: { [span_id: string]: Score[] };
 }
 
 export type LiveEventKind =

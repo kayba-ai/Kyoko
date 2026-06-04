@@ -52,6 +52,27 @@ export function fmtTime(ts: string | null | undefined): string {
   return new Date(ms).toLocaleString();
 }
 
+/** Compact integer count (1234 -> "1,234"); "—" for null/undefined. */
+export function fmtCount(n: number | null | undefined): string {
+  if (n === null || n === undefined) return "—";
+  return n.toLocaleString();
+}
+
+/** Token count: "—" when null/undefined/0 (we never fabricate zero metrics). */
+export function fmtTokens(n: number | null | undefined): string {
+  if (n === null || n === undefined || n === 0) return "—";
+  return n.toLocaleString();
+}
+
+/** USD cost like "$0.0075"; "—" when null/undefined. */
+export function fmtCost(n: number | null | undefined): string {
+  if (n === null || n === undefined) return "—";
+  if (n === 0) return "$0";
+  if (n < 0.01) return `$${n.toFixed(4)}`;
+  if (n < 1) return `$${n.toFixed(3)}`;
+  return `$${n.toFixed(2)}`;
+}
+
 export function tryParseJson(s: string | null | undefined): unknown {
   if (!s) return null;
   try {

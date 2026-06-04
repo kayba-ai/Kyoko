@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate } from "react-router-dom";
 import { Layout } from "./components/Layout";
-import { RunsPage } from "./pages/RunsPage";
+import { TracesPage } from "./pages/TracesPage";
+import { TraceDetailPage } from "./pages/TraceDetailPage";
 import { McpLogPage } from "./pages/McpLogPage";
 import { ProposalsPage } from "./pages/ProposalsPage";
 import { IssuesPage } from "./pages/IssuesPage";
@@ -17,11 +18,11 @@ export const router = createBrowserRouter([
     path: "/",
     element: <Layout />,
     children: [
-      { index: true, element: <Navigate to="/runs" replace /> },
+      { index: true, element: <Navigate to="/traces" replace /> },
       { path: "overview", element: <OverviewPage /> },
-      { path: "runs", element: <RunsPage /> },
-      { path: "runs/:runId", element: <RunsPage /> },
-      { path: "runs/:runId/span/:spanId", element: <RunsPage /> },
+      { path: "traces", element: <TracesPage /> },
+      { path: "traces/:traceId", element: <TraceDetailPage /> },
+      { path: "traces/:traceId/span/:spanId", element: <TraceDetailPage /> },
       { path: "mcp-log", element: <McpLogPage /> },
       { path: "analysis", element: <AnalysisPage /> },
       { path: "proposals", element: <ProposalsPage /> },
@@ -32,7 +33,7 @@ export const router = createBrowserRouter([
       { path: "judges", element: <JudgesPage /> },
       { path: "evaluation", element: <Navigate to="/detectors" replace /> },
       { path: "settings", element: <SettingsPage /> },
-      { path: "*", element: <Navigate to="/runs" replace /> },
+      { path: "*", element: <Navigate to="/traces" replace /> },
     ],
   },
 ]);

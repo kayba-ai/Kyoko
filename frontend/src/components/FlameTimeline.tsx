@@ -48,14 +48,39 @@ export function FlameTimeline({
     return <div className="p-4 text-xs text-muted-foreground">No timed spans to chart.</div>;
   }
 
+  // Time-axis ticks: 0%, 25%, 50%, 75%, 100% of the trace's total span.
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => ({
+    pct: f * 100,
+    label: f === 0 ? "0s" : fmtDuration(Math.round(span * f)),
+  }));
+
   return (
     <div className="space-y-1 p-2">
+      {/* Time axis */}
+      <div className="sticky top-0 z-10 mb-1 flex h-5 items-center bg-background/95 px-1 backdrop-blur">
+        <div className="relative h-full flex-1">
+          {ticks.map((t) => (
+            <span
+              key={t.pct}
+              className="absolute top-1/2 -translate-y-1/2 font-mono text-label text-muted-foreground"
+              style={{
+                left: `${t.pct}%`,
+                transform: t.pct >= 100 ? "translate(-100%, -50%)" : "translate(0, -50%)",
+              }}
+            >
+              {t.label}
+            </span>
+          ))}
+        </div>
+      </div>
       {rows.map(({ node, depth, start, end }) => {
         const left = ((start - t0) / span) * 100;
         const width = Math.max(0.6, ((end - start) / span) * 100);
         const kind = node.normalized?.kind ?? "other";
         const failed = ["failed", "errored", "error", "timed_out"].includes((node.status ?? "").toLowerCase());
         const selected = selectedId === node.id;
+        const dur = node.duration_ms ?? durationMs(node.started_at, node.ended_at);
+        const pctOfTotal = span > 0 ? Math.round(((end - start) / span) * 100) : 0;
         return (
           <div
             key={node.id}
@@ -64,7 +89,7 @@ export function FlameTimeline({
               selected ? "bg-accent" : "hover:bg-muted",
             )}
             onClick={() => onSelect(node.id)}
-            title={`${node.name ?? "span"} · ${fmtDuration(durationMs(node.started_at, node.ended_at))}`}
+            title={`${node.name ?? "span"}\n${fmtDuration(dur)} · ${pctOfTotal}% of trace`}
           >
             <div className="relative h-full flex-1" style={{ paddingLeft: depth * 8 }}>
               <div className="relative h-full w-full rounded-md bg-muted/50">

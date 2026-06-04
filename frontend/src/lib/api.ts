@@ -33,6 +33,8 @@ import type {
   PolicyUpdate,
   Proposal,
   RunOutline,
+  RunPayload,
+  RunScores,
   RunSummary,
   Skill,
   SpanPayload,
@@ -126,6 +128,18 @@ export const api = {
       max_chars: opts.maxChars,
       offset: opts.offset,
     }),
+  runPayload: (
+    runId: string,
+    opts: { target?: "input" | "output"; path?: string; maxChars?: number; offset?: number } = {},
+  ) =>
+    getJson<RunPayload>("/api/run-payload", {
+      run_id: runId,
+      target: opts.target ?? "input",
+      path: opts.path,
+      max_chars: opts.maxChars,
+      offset: opts.offset,
+    }),
+  runScores: (runId: string) => getJson<RunScores>("/api/run-scores", { run_id: runId }),
 
   liveEvents: (opts: { runId?: string; afterSeq?: number; kinds?: string; limit?: number } = {}) =>
     getJson<{ events: LiveEvent[] } | LiveEvent[]>("/api/live-events", {
