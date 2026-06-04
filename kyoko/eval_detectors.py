@@ -319,6 +319,7 @@ class DetectorRunReport:
     events: list[dict[str, Any]]
     corpus_resolution: dict[str, Any]
     status: str
+    raised_issue_id: Optional[str] = None
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -329,6 +330,7 @@ class DetectorRunReport:
             "events": self.events,
             "corpus_resolution": self.corpus_resolution,
             "status": self.status,
+            "raised_issue_id": self.raised_issue_id,
         }
 
 
@@ -338,6 +340,8 @@ def run_detector(
     detector_id: str,
     corpus: dict[str, Any],
     persist: bool = False,
+    raise_issues: bool = False,
+    issue_threshold: Optional[float] = None,
     profile_id: Optional[str] = None,
     timeout_seconds: int = _DEFAULT_TIMEOUT_SECONDS,
     python_executable: Optional[str] = None,
@@ -349,6 +353,10 @@ def run_detector(
     (folder mode) or per-trace. With ``persist=True`` the result is recorded as an
     ``eval_measure_runs`` row plus per-event ``eval_measure_results``.
     """
+    if raise_issues and issue_threshold is None:
+        raise DetectorError("raise_issues_requires_threshold")
+    if raise_issues:
+        persist = True  # an Issue references a persisted run
     definition = get_detector(db_path=db_path, detector_id=detector_id, profile_id=profile_id)
     resolution = resolve_corpus(
         db_path=db_path, corpus=corpus, profile_id=profile_id, default_unit="event"
@@ -416,6 +424,22 @@ def run_detector(
             )
         complete_measure_run(db_path=db_path, eval_run_id=eval_run_id, aggregate=aggregate)
 
+    raised_issue_id: Optional[str] = None
+    if raise_issues and eval_run_id is not None:
+        from .eval_issues import raise_issue_for_run
+
+        worst = [e["event_id"] for e in events if e["has_problem"]][:5]
+        issue = raise_issue_for_run(
+            db_path=db_path,
+            definition=definition,
+            eval_run_id=eval_run_id,
+            aggregate=aggregate,
+            worst_unit_refs=worst,
+            threshold=float(issue_threshold),
+            profile_id=profile_id,
+        )
+        raised_issue_id = issue["id"] if issue else None
+
     return DetectorRunReport(
         detector_id=detector_id,
         persisted=persist,
@@ -424,6 +448,7 @@ def run_detector(
         events=events,
         corpus_resolution=resolution.to_json(),
         status="complete",
+        raised_issue_id=raised_issue_id,
     )
 
 

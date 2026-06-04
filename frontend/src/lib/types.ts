@@ -255,3 +255,107 @@ export interface DashboardMetrics {
   before_after?: unknown;
   [k: string]: unknown;
 }
+
+// ---- Evaluation plane (measurement) ----------------------------------------
+
+export type EvalKind = "python" | "llm";
+export type EvalOutputType = "numeric" | "boolean";
+export type EvalDirection = "higher_is_better" | "lower_is_better";
+
+export interface EvalDefinition {
+  id: string;
+  kind: EvalKind;
+  name: string;
+  version: string;
+  partner: string | null;
+  source: string;
+  unit_type: string;
+  output_type: EvalOutputType;
+  direction: EvalDirection;
+  problem_statement: string | null;
+  vars?: string[] | null;
+  severity_bands?: Record<string, unknown> | null;
+  status: string;
+}
+
+export interface MeasureAggregate {
+  type: string;
+  value: number | null;
+  numerator?: number;
+  denominator?: number;
+  scored?: number;
+  skipped?: number;
+  histogram?: Record<string, unknown>;
+}
+
+export interface MeasureRun {
+  id: string;
+  eval_definition_id: string;
+  kind: EvalKind;
+  status: string;
+  unit_total: number;
+  unit_scored: number;
+  unit_skipped: number;
+  aggregate: MeasureAggregate | null;
+  created_at: string;
+}
+
+export interface MeasureResult {
+  id: string;
+  unit_type: string;
+  unit_ref: string;
+  status: "scored" | "skipped" | "error";
+  score_numeric: number | null;
+  score_bool: boolean | null;
+  reasoning: string | null;
+  degraded: boolean;
+  detail: Record<string, unknown>;
+}
+
+export type ComparisonDirection = "improved" | "regressed" | "unchanged";
+
+export interface Comparison {
+  eval_id: string;
+  kind: EvalKind;
+  baseline: string;
+  compare: string;
+  baseline_value: number | null;
+  compare_value: number | null;
+  delta: number | null;
+  direction: ComparisonDirection;
+  metric_direction: EvalDirection;
+}
+
+export interface EvalsBundle {
+  detectors: EvalDefinition[];
+}
+
+export interface EvalDetailBundle {
+  detector: EvalDefinition;
+}
+
+export interface EvalRunsBundle {
+  eval_runs: MeasureRun[];
+}
+
+export interface EvalRunDetailBundle {
+  eval_run: MeasureRun;
+  results: MeasureResult[];
+}
+
+export interface LlmEvalsBundle {
+  llm_evals: EvalDefinition[];
+}
+
+export interface LlmEvalDetailBundle {
+  llm_eval: EvalDefinition;
+}
+
+export interface LlmEvalRunsBundle {
+  eval_runs: MeasureRun[];
+}
+
+export interface LlmEvalRunDetailBundle {
+  eval_run: MeasureRun;
+  results: MeasureResult[];
+}

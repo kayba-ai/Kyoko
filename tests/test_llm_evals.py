@@ -212,6 +212,28 @@ class RunTests(unittest.TestCase):
                 del os.environ["MOCK_SCORE"]
 
 
+class SseProgressTests(unittest.TestCase):
+    def test_bus_emits_progress_and_complete(self) -> None:
+        from kyoko.live import LiveBus
+
+        with TemporaryDirectory() as tmp:
+            db = Path(tmp) / "k.db"
+            _seed(db, runs=2)
+            bus = LiveBus()
+            sub = bus.subscribe()
+            run_llm_eval(
+                db_path=db, llm_eval_id="hallucination", corpus={"unit": "llm_span"},
+                command=JUDGE, persist=True, bus=bus,
+            )
+            kinds = []
+            while not sub.empty():
+                msg = sub.get_nowait()
+                kinds.append(msg["data"]["kind"])
+            # progress per scored unit (2) + a terminal complete
+            self.assertEqual(kinds.count("eval_progress"), 2)
+            self.assertEqual(kinds.count("eval_complete"), 1)
+
+
 class CliTests(unittest.TestCase):
     def test_cli_flow(self) -> None:
         with TemporaryDirectory() as tmp:

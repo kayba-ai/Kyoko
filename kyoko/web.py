@@ -37,7 +37,7 @@ from .details import (
     list_runs,
 )
 from .eval_detectors import DetectorError, get_detector, list_detectors, run_detector
-from .evals_measure import EvalMeasureError, get_measure_results, get_measure_run, list_measure_runs
+from .evals_measure import EvalMeasureError, compare_eval_runs, get_measure_results, get_measure_run, list_measure_runs
 from .llm_evals import LlmEvalError, get_llm_eval, list_llm_evals, run_llm_eval
 from .issues import IssueError, create_issue, list_issues
 from .doctor import DEFAULT_SMOKE_EVIDENCE_DIR, run_doctor
@@ -678,6 +678,46 @@ def make_handler(
                     except EvalMeasureError as exc:
                         self._send_json({"error": str(exc)}, status=HTTPStatus.NOT_FOUND)
                     return
+                if path == "/api/eval-compare":
+                    baseline = _query_param(self.path, "baseline")
+                    compare = _query_param(self.path, "compare")
+                    if not baseline or not compare:
+                        self._send_json(
+                            {"error": "baseline_and_compare_run_ids_required"},
+                            status=HTTPStatus.BAD_REQUEST,
+                        )
+                        return
+                    try:
+                        self._send_json(
+                            compare_eval_runs(
+                                db_path=resolved_db_path,
+                                baseline_run_id=baseline,
+                                compare_run_id=compare,
+                            )
+                        )
+                    except EvalMeasureError as exc:
+                        self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                    return
+                if path == "/api/llm-eval-compare":
+                    baseline = _query_param(self.path, "baseline")
+                    compare = _query_param(self.path, "compare")
+                    if not baseline or not compare:
+                        self._send_json(
+                            {"error": "baseline_and_compare_run_ids_required"},
+                            status=HTTPStatus.BAD_REQUEST,
+                        )
+                        return
+                    try:
+                        self._send_json(
+                            compare_eval_runs(
+                                db_path=resolved_db_path,
+                                baseline_run_id=baseline,
+                                compare_run_id=compare,
+                            )
+                        )
+                    except EvalMeasureError as exc:
+                        self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                    return
                 if path == "/api/skills":
                     profile_id = _query_param(self.path, "profile_id")
                     self._send_json(
@@ -1144,6 +1184,10 @@ def make_handler(
                         return
                     persist = bool(payload.get("persist", False))
                     timeout_seconds = payload.get("timeout_seconds", 120)
+                    raise_issues_raw = payload.get("raise_issues")
+                    raise_issues = bool(raise_issues_raw) if raise_issues_raw is not None else False
+                    threshold_raw = payload.get("threshold")
+                    issue_threshold = float(threshold_raw) if threshold_raw is not None else None
                     try:
                         report = run_detector(
                             db_path=resolved_db_path,
@@ -1152,6 +1196,8 @@ def make_handler(
                             persist=persist,
                             profile_id=_optional_str(payload.get("profile_id")),
                             timeout_seconds=timeout_seconds if isinstance(timeout_seconds, int) else 120,
+                            raise_issues=raise_issues,
+                            issue_threshold=issue_threshold,
                         )
                     except DetectorError as exc:
                         self._send_json(
@@ -1188,6 +1234,10 @@ def make_handler(
                     persist = bool(payload.get("persist", False))
                     prepare_only = bool(payload.get("prepare_only", False))
                     timeout_seconds = payload.get("timeout_seconds", 120)
+                    raise_issues_raw = payload.get("raise_issues")
+                    raise_issues = bool(raise_issues_raw) if raise_issues_raw is not None else False
+                    threshold_raw = payload.get("threshold")
+                    issue_threshold = float(threshold_raw) if threshold_raw is not None else None
                     try:
                         report = run_llm_eval(
                             db_path=resolved_db_path,
@@ -1199,6 +1249,9 @@ def make_handler(
                             output_dir=None,
                             profile_id=_optional_str(payload.get("profile_id")),
                             timeout_seconds=timeout_seconds if isinstance(timeout_seconds, int) else 120,
+                            raise_issues=raise_issues,
+                            issue_threshold=issue_threshold,
+                            bus=global_bus(),
                         )
                     except LlmEvalError as exc:
                         self._send_json(

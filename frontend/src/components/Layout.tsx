@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from "react-router-dom";
 import {
   Activity,
+  BarChart2,
   CircleDot,
   GitPullRequestArrow,
   LayoutDashboard,
@@ -21,6 +22,7 @@ const NAV = [
   { to: "/issues", label: "Issues", icon: CircleDot },
   { to: "/autonomy", label: "Autonomy", icon: ShieldCheck },
   { to: "/checks", label: "Checks & Replay", icon: FlaskConical },
+  { to: "/evaluation", label: "Evaluation", icon: BarChart2 },
   { to: "/settings", label: "Settings", icon: SettingsIcon },
 ];
 

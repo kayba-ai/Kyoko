@@ -624,6 +624,57 @@ def aggregate_boolean(numerator: int, denominator: int) -> dict[str, Any]:
     return {"type": "boolean", "numerator": num, "denominator": den, "value": value}
 
 
+# Directions where a LOWER value is better (less problem). Numeric
+# `higher_is_better` is the only "up is good" case; everything else — including
+# boolean *_is_notable and python detectors, whose value is problem prevalence —
+# improves as the value falls. Used to orient before/after compare + severity.
+_LOWER_IS_BETTER = {"lower_is_better", "true_is_notable", "false_is_notable"}
+_COMPARE_EPSILON = 0.02
+
+
+def compare_eval_runs(
+    *,
+    db_path: Path,
+    baseline_run_id: str,
+    compare_run_id: str,
+) -> dict[str, Any]:
+    """Before/after delta between two completed runs of the same definition.
+
+    ``direction`` is ``improved|regressed|unchanged`` (``|delta| < 0.02`` →
+    unchanged), oriented by the definition's ``direction``.
+    """
+    baseline = get_measure_run(db_path=db_path, eval_run_id=baseline_run_id)
+    compare = get_measure_run(db_path=db_path, eval_run_id=compare_run_id)
+    if baseline["eval_definition_id"] != compare["eval_definition_id"]:
+        raise EvalMeasureError(
+            f"compare_definition_mismatch:{baseline['eval_definition_id']}!={compare['eval_definition_id']}"
+        )
+    for run in (baseline, compare):
+        if run["status"] != "complete":
+            raise EvalMeasureError(f"compare_requires_complete_run:{run['id']}:{run['status']}")
+    base_value = float((baseline.get("aggregate") or {}).get("value") or 0.0)
+    comp_value = float((compare.get("aggregate") or {}).get("value") or 0.0)
+    delta = comp_value - base_value
+    metric_direction = (baseline.get("definition_snapshot") or {}).get("direction", "higher_is_better")
+    if abs(delta) < _COMPARE_EPSILON:
+        verdict = "unchanged"
+    elif metric_direction in _LOWER_IS_BETTER:
+        verdict = "improved" if delta < 0 else "regressed"
+    else:
+        verdict = "improved" if delta > 0 else "regressed"
+    return {
+        "eval_id": baseline["eval_definition_id"],
+        "kind": baseline["kind"],
+        "baseline": baseline_run_id,
+        "compare": compare_run_id,
+        "baseline_value": base_value,
+        "compare_value": comp_value,
+        "delta": delta,
+        "direction": verdict,
+        "metric_direction": metric_direction,
+    }
+
+
 def aggregate_numeric(scores: list[float], *, skipped: int = 0) -> dict[str, Any]:
     """Mean + histogram aggregate over numeric judge scores (§5)."""
     valid = [float(s) for s in scores if s is not None]

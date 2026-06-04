@@ -75,6 +75,7 @@ from .eval_detectors import (
 )
 from .evals_measure import (
     EvalMeasureError,
+    compare_eval_runs,
     get_measure_results,
     get_measure_run,
     list_measure_runs,
@@ -1047,7 +1048,24 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Record the run + per-event results (default: ephemeral).",
     )
+    run_eval.add_argument(
+        "--raise-issues",
+        action="store_true",
+        help="Raise a first-class Issue when the problem level exceeds --threshold (implies --persist; evidence only).",
+    )
+    run_eval.add_argument(
+        "--threshold", type=float, help="Manual problem-level threshold (0-1) for --raise-issues."
+    )
     run_eval.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+
+    eval_compare = subcommands.add_parser(
+        "eval-compare",
+        help="Before/after delta between two detector measurement runs of the same detector.",
+    )
+    _add_db_argument(eval_compare)
+    eval_compare.add_argument("baseline_run_id", help="Baseline measurement run id.")
+    eval_compare.add_argument("compare_run_id", help="Comparison measurement run id.")
+    eval_compare.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
 
     eval_runs = subcommands.add_parser(
         "eval-runs",
@@ -1106,7 +1124,24 @@ def build_parser() -> argparse.ArgumentParser:
     run_llm_eval_cmd.add_argument(
         "--persist", action="store_true", help="Record the run + per-unit results."
     )
+    run_llm_eval_cmd.add_argument(
+        "--raise-issues",
+        action="store_true",
+        help="Raise a first-class Issue when the problem level exceeds --threshold (implies --persist; evidence only).",
+    )
+    run_llm_eval_cmd.add_argument(
+        "--threshold", type=float, help="Manual problem-level threshold (0-1) for --raise-issues."
+    )
     run_llm_eval_cmd.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+
+    llm_eval_compare = subcommands.add_parser(
+        "llm-eval-compare",
+        help="Before/after delta between two judge measurement runs of the same template.",
+    )
+    _add_db_argument(llm_eval_compare)
+    llm_eval_compare.add_argument("baseline_run_id", help="Baseline measurement run id.")
+    llm_eval_compare.add_argument("compare_run_id", help="Comparison measurement run id.")
+    llm_eval_compare.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
 
     llm_eval_runs = subcommands.add_parser(
         "llm-eval-runs",
@@ -4538,6 +4573,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 detector_id=args.detector_id,
                 corpus=corpus,
                 persist=args.persist,
+                raise_issues=args.raise_issues,
+                issue_threshold=args.threshold,
             )
         except (DetectorError, EvalMeasureError, StorageError) as exc:
             print(f"run-eval failed: {exc}", file=sys.stderr)
@@ -4551,6 +4588,24 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                   f"({agg.get('numerator')}/{agg.get('denominator')})  "
                   f"units={payload['corpus_resolution']['total_matched']} "
                   f"persisted={payload['persisted']}")
+        return 0
+
+    if args.command in ("eval-compare", "llm-eval-compare"):
+        try:
+            comparison = compare_eval_runs(
+                db_path=args.db,
+                baseline_run_id=args.baseline_run_id,
+                compare_run_id=args.compare_run_id,
+            )
+        except (EvalMeasureError, StorageError) as exc:
+            print(f"{args.command} failed: {exc}", file=sys.stderr)
+            return 1
+        if args.json:
+            print(json.dumps(comparison, sort_keys=True))
+        else:
+            print(f"{comparison['eval_id']}: {comparison['baseline_value']:.3f} -> "
+                  f"{comparison['compare_value']:.3f} (delta {comparison['delta']:+.3f}) "
+                  f"= {comparison['direction']}")
         return 0
 
     if args.command == "eval-runs":
@@ -4628,6 +4683,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 command=command,
                 persist=args.persist,
                 prepare_only=args.prepare_only,
+                raise_issues=args.raise_issues,
+                issue_threshold=args.threshold,
                 output_dir=args.output_dir,
             )
         except (LlmEvalError, DetectorError, EvalMeasureError, StorageError) as exc:

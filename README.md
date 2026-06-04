@@ -987,6 +987,57 @@ they do not auto-promote trust and cannot satisfy autonomy gates. `check-approve
 is the explicit human path to `L3_human_approved`; Kyoko never auto-promotes an
 check to that level, and human-locked check specs must be unlocked before
 approval.
+
+### Measurement plane (`eval` and `llm_eval`)
+
+Separate from the `check`/gate apply path, the **measurement plane** scores a
+trace corpus to surface the prevalence/severity of a problem. It is **evidence
+only**: a measurement never writes a `check_run`, mutates a skill, or edits a
+harness file, and never satisfies the autonomy gate. It can (opt-in) raise a
+first-class Issue that the normal improve/proposal flow may pick up.
+
+Two flavors. `eval` runs a deterministic Python detector (a single `.py`
+defining `detect(...)`) out-of-process over exported run traces and reports a
+prevalence. `llm_eval` runs one of 10 bundled LLM-as-judge templates; the model
+call runs **outside** core via your `--command` (BYO key/CLI), exactly like the
+`judge-command` apply-judge but with a distinct result block.
+
+```bash
+# eval (Python detectors) — evidence only
+python3 -m kyoko evals --db /tmp/kyoko.db --json
+python3 -m kyoko eval-detail failed_span --db /tmp/kyoko.db --json
+python3 -m kyoko eval-register /path/to/detector.py --db /tmp/kyoko.db --json
+python3 -m kyoko run-eval failed_span --db /tmp/kyoko.db --corpus '{"unit":"event"}' --persist --json
+python3 -m kyoko run-eval failed_span --db /tmp/kyoko.db --corpus '{"unit":"event"}' --raise-issues --threshold 0.3 --json
+python3 -m kyoko eval-runs --db /tmp/kyoko.db --json
+python3 -m kyoko eval-run-detail <eval_run_id> --db /tmp/kyoko.db --json
+python3 -m kyoko eval-compare <baseline_run_id> <compare_run_id> --db /tmp/kyoko.db --json
+
+# llm_eval (judge templates) — model runs outside core via --command
+python3 -m kyoko llm-evals --db /tmp/kyoko.db --json
+python3 -m kyoko llm-eval-detail hallucination --db /tmp/kyoko.db --json
+python3 -m kyoko run-llm-eval hallucination --db /tmp/kyoko.db --corpus '{"unit":"llm_span"}' \
+  --command "python /path/to/provider-judge.py" --persist --json
+python3 -m kyoko run-llm-eval hallucination --db /tmp/kyoko.db --corpus '{"unit":"llm_span"}' \
+  --prepare-only --output-dir /tmp/kyoko-llm-eval --json
+python3 -m kyoko llm-eval-runs --db /tmp/kyoko.db --json
+python3 -m kyoko llm-eval-run-detail <eval_run_id> --db /tmp/kyoko.db --json
+python3 -m kyoko llm-eval-compare <baseline_run_id> <compare_run_id> --db /tmp/kyoko.db --json
+```
+
+A corpus selector chooses units: `{"unit": "event"|"llm_span"|"run", "source_id":
+…, "run_ids": […], "since": …, "until": …, "span_filter": {"kind": "llm"},
+"limit": 500}`. Detectors iterate runs and emit `event` units; `llm_eval` units
+are `llm_span` or `run` per the template. A missing template variable skips that
+unit (never silently scored). `run-llm-eval --prepare-only` writes per-unit
+redacted requests + a handoff and stops. `--raise-issues` is threshold-gated
+(manual `--threshold` in v1) and implies `--persist`. `*-compare` reports an
+`improved|regressed|unchanged` delta between two completed runs of the same
+definition, oriented by its `direction`. The API mirrors these (`/api/evals`,
+`/api/run-eval`, `/api/eval-runs`, `/api/eval-compare`, and the `llm-eval`
+equivalents) with SSE progress (`eval_progress`/`eval_complete`) over
+`GET /api/events/stream`; deterministic, no-live-model smokes are
+`kyoko doctor --eval-smoke` and `--llm-eval-smoke`.
 `run-check` never invokes a live judge provider. To use a model-backed or
 provider-backed judge, run `judge-command` explicitly. Kyoko writes a redacted
 `judge-request.json`, passes it on stdin and through `KYOKO_JUDGE_REQUEST_PATH`,

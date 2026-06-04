@@ -35,6 +35,7 @@ from .evals_measure import (
     resolve_corpus,
     upsert_eval_definition,
 )
+from .live import LiveBus
 from .metric_bindings import resolve_bindings
 from .redaction import get_redaction_policy, redact_evidence_bundle
 
@@ -166,6 +167,7 @@ class LlmEvalRunReport:
     results: list[dict[str, Any]]
     corpus_resolution: dict[str, Any]
     status: str
+    raised_issue_id: Optional[str] = None
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -177,6 +179,7 @@ class LlmEvalRunReport:
             "results": self.results,
             "corpus_resolution": self.corpus_resolution,
             "status": self.status,
+            "raised_issue_id": self.raised_issue_id,
         }
 
 
@@ -231,13 +234,20 @@ def run_llm_eval(
     command: Optional[Sequence[str]] = None,
     persist: bool = False,
     prepare_only: bool = False,
+    raise_issues: bool = False,
+    issue_threshold: Optional[float] = None,
     output_dir: Optional[Path] = None,
     profile_id: Optional[str] = None,
     timeout_seconds: int = _DEFAULT_TIMEOUT_SECONDS,
+    bus: Optional[LiveBus] = None,
 ) -> LlmEvalRunReport:
     definition = get_llm_eval(db_path=db_path, llm_eval_id=llm_eval_id, profile_id=profile_id)
     if not prepare_only and not command:
         raise LlmEvalError("llm_eval_command_required")
+    if raise_issues and issue_threshold is None:
+        raise LlmEvalError("raise_issues_requires_threshold")
+    if raise_issues and not prepare_only:
+        persist = True  # an Issue references a persisted run
     unit_type = definition["unit_type"]
     output = definition.get("output") or {"type": definition["output_type"]}
     direction = definition["direction"]
@@ -258,6 +268,23 @@ def run_llm_eval(
     notable = 0
     scored = 0
     skipped = 0
+    total_units = len(resolution.unit_refs)
+
+    def _emit_progress(last_value: Optional[float] = None) -> None:
+        if bus is not None:
+            bus.publish(
+                "live_event",
+                {
+                    "kind": "eval_progress",
+                    "eval_run_id": eval_run_id,
+                    "llm_eval_id": llm_eval_id,
+                    "scored": scored,
+                    "skipped": skipped,
+                    "total": total_units,
+                    "last_value": last_value,
+                },
+            )
+
     if prepare_only and output_dir is not None:
         output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -278,6 +305,7 @@ def run_llm_eval(
                     db_path=db_path, eval_run_id=eval_run_id, unit_type=unit_type,
                     unit_ref=unit_ref, status="skipped", detail=detail, profile_id=profile_id,
                 )
+            _emit_progress()
             continue
 
         request = _build_request(definition, unit_ref, resolution_b.values, policy)
@@ -326,6 +354,7 @@ def run_llm_eval(
                     detail={"raw": block, "notable": is_notable}, profile_id=profile_id,
                 )
         results.append(row)
+        _emit_progress(last_value=row.get("score_numeric"))
 
     if prepare_only:
         if output_dir is not None:
@@ -350,9 +379,39 @@ def run_llm_eval(
         aggregate = aggregate_boolean(notable, scored)
     if eval_run_id:
         complete_measure_run(db_path=db_path, eval_run_id=eval_run_id, aggregate=aggregate)
+    if bus is not None:
+        bus.publish(
+            "live_event",
+            {"kind": "eval_complete", "eval_run_id": eval_run_id,
+             "llm_eval_id": llm_eval_id, "aggregate": aggregate},
+        )
+
+    raised_issue_id: Optional[str] = None
+    if raise_issues and eval_run_id is not None:
+        from .eval_issues import problem_value, raise_issue_for_run
+
+        scored_rows = [r for r in results if r["status"] == "scored"]
+        if output["type"] == "numeric":
+            scored_rows.sort(
+                key=lambda r: problem_value(r.get("score_numeric") or 0.0, direction), reverse=True
+            )
+            worst = [r["unit_ref"] for r in scored_rows][:5]
+        else:
+            worst = [r["unit_ref"] for r in scored_rows if r.get("notable")][:5]
+        issue = raise_issue_for_run(
+            db_path=db_path,
+            definition=definition,
+            eval_run_id=eval_run_id,
+            aggregate=aggregate,
+            worst_unit_refs=worst,
+            threshold=float(issue_threshold),
+            profile_id=profile_id,
+        )
+        raised_issue_id = issue["id"] if issue else None
 
     return LlmEvalRunReport(
         llm_eval_id=llm_eval_id, persisted=bool(eval_run_id), prepared_only=False,
         eval_run_id=eval_run_id, aggregate=aggregate, results=results,
         corpus_resolution=resolution.to_json(), status="complete",
+        raised_issue_id=raised_issue_id,
     )

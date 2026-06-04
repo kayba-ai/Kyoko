@@ -6,6 +6,7 @@ import { ProposalsPage } from "./pages/ProposalsPage";
 import { IssuesPage } from "./pages/IssuesPage";
 import { AutonomyPage } from "./pages/AutonomyPage";
 import { ChecksPage } from "./pages/ChecksPage";
+import { EvaluationPage } from "./pages/EvaluationPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { OverviewPage } from "./pages/OverviewPage";
 
@@ -24,6 +25,7 @@ export const router = createBrowserRouter([
       { path: "issues", element: <IssuesPage /> },
       { path: "autonomy", element: <AutonomyPage /> },
       { path: "checks", element: <ChecksPage /> },
+      { path: "evaluation", element: <EvaluationPage /> },
       { path: "settings", element: <SettingsPage /> },
       { path: "*", element: <Navigate to="/runs" replace /> },
     ],

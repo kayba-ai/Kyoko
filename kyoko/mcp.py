@@ -47,9 +47,9 @@ from .checks import (
     run_check,
     run_judge_command,
 )
-from .eval_detectors import list_detectors, run_detector
-from .evals_measure import get_measure_results, get_measure_run, list_measure_runs
-from .llm_evals import list_llm_evals, run_llm_eval
+from .eval_detectors import DetectorError, list_detectors, run_detector
+from .evals_measure import EvalMeasureError, compare_eval_runs, get_measure_results, get_measure_run, list_measure_runs
+from .llm_evals import LlmEvalError, list_llm_evals, run_llm_eval
 from .annotations import create_annotation, list_annotations
 from .harness import list_harness_target_locks, list_patch_transactions
 from .inspection import (
@@ -1780,12 +1780,38 @@ def _build_tools(server: KyokoMcpServer) -> dict[str, McpTool]:
                     "persist": {"type": "boolean"},
                     "profile_id": {"type": "string"},
                     "timeout_seconds": {"type": "integer", "minimum": 1},
+                    "raise_issues": {
+                        "type": "boolean",
+                        "description": "When true, create an Issue if the score crosses threshold. Requires threshold.",
+                    },
+                    "threshold": {
+                        "type": "number",
+                        "description": "Score threshold for raise_issues. Required when raise_issues=true.",
+                    },
                 },
                 required=["detector_id", "corpus"],
             ),
             handler=lambda args: _run_eval(server, args),
             read_only=False,
             idempotent=False,
+        ),
+        # ---- eval compare — read-only, evidence only ----
+        McpTool(
+            name="kyoko_eval_compare",
+            title="Kyoko Eval Compare",
+            description=(
+                "Compare two Python detector eval measurement runs and return delta, "
+                "direction, and metric metadata. Evidence only — no gate or apply path."
+            ),
+            input_schema=_object_schema(
+                {
+                    "baseline_run_id": {"type": "string"},
+                    "compare_run_id": {"type": "string"},
+                },
+                required=["baseline_run_id", "compare_run_id"],
+            ),
+            handler=lambda args: _eval_compare(server, args),
+            read_only=True,
         ),
         # ---- llm_eval (LLM-as-judge) measurement plane — evidence only ----
         McpTool(
@@ -1847,12 +1873,38 @@ def _build_tools(server: KyokoMcpServer) -> dict[str, McpTool]:
                     "prepare_only": {"type": "boolean"},
                     "profile_id": {"type": "string"},
                     "timeout_seconds": {"type": "integer", "minimum": 1},
+                    "raise_issues": {
+                        "type": "boolean",
+                        "description": "When true, create an Issue if the score crosses threshold. Requires threshold.",
+                    },
+                    "threshold": {
+                        "type": "number",
+                        "description": "Score threshold for raise_issues. Required when raise_issues=true.",
+                    },
                 },
                 required=["llm_eval_id", "corpus"],
             ),
             handler=lambda args: _run_llm_eval(server, args),
             read_only=False,
             idempotent=False,
+        ),
+        # ---- llm_eval compare — read-only, evidence only ----
+        McpTool(
+            name="kyoko_llm_eval_compare",
+            title="Kyoko LLM Eval Compare",
+            description=(
+                "Compare two LLM-as-judge eval measurement runs and return delta, "
+                "direction, and metric metadata. Evidence only — no gate or apply path."
+            ),
+            input_schema=_object_schema(
+                {
+                    "baseline_run_id": {"type": "string"},
+                    "compare_run_id": {"type": "string"},
+                },
+                required=["baseline_run_id", "compare_run_id"],
+            ),
+            handler=lambda args: _llm_eval_compare(server, args),
+            read_only=True,
         ),
     ]
     return {tool.name: tool for tool in tools}
@@ -2115,6 +2167,10 @@ def _run_eval(server: KyokoMcpServer, args: dict[str, Any]) -> dict[str, Any]:
     corpus = args.get("corpus")
     if not isinstance(corpus, dict):
         raise McpError("corpus_object_required")
+    raise_issues_raw = args.get("raise_issues")
+    raise_issues = bool(raise_issues_raw) if raise_issues_raw is not None else False
+    threshold_raw = args.get("threshold")
+    issue_threshold = float(threshold_raw) if threshold_raw is not None else None
     report = run_detector(
         db_path=server.db_path,
         detector_id=_required_string(args, "detector_id"),
@@ -2122,8 +2178,18 @@ def _run_eval(server: KyokoMcpServer, args: dict[str, Any]) -> dict[str, Any]:
         persist=bool(args.get("persist", False)),
         profile_id=_optional_string(args, "profile_id"),
         timeout_seconds=_optional_positive_int(args, "timeout_seconds", 120),
+        raise_issues=raise_issues,
+        issue_threshold=issue_threshold,
     )
     return report.to_json()
+
+
+def _eval_compare(server: KyokoMcpServer, args: dict[str, Any]) -> dict[str, Any]:
+    return compare_eval_runs(
+        db_path=server.db_path,
+        baseline_run_id=_required_string(args, "baseline_run_id"),
+        compare_run_id=_required_string(args, "compare_run_id"),
+    )
 
 
 def _llm_eval_run_detail(server: KyokoMcpServer, args: dict[str, Any]) -> dict[str, Any]:
@@ -2140,6 +2206,10 @@ def _run_llm_eval(server: KyokoMcpServer, args: dict[str, Any]) -> dict[str, Any
         raise McpError("corpus_object_required")
     command_raw = args.get("command")
     command: Optional[list[str]] = list(command_raw) if isinstance(command_raw, list) else None
+    raise_issues_raw = args.get("raise_issues")
+    raise_issues = bool(raise_issues_raw) if raise_issues_raw is not None else False
+    threshold_raw = args.get("threshold")
+    issue_threshold = float(threshold_raw) if threshold_raw is not None else None
     report = run_llm_eval(
         db_path=server.db_path,
         llm_eval_id=_required_string(args, "llm_eval_id"),
@@ -2150,8 +2220,18 @@ def _run_llm_eval(server: KyokoMcpServer, args: dict[str, Any]) -> dict[str, Any
         output_dir=None,
         profile_id=_optional_string(args, "profile_id"),
         timeout_seconds=_optional_positive_int(args, "timeout_seconds", 120),
+        raise_issues=raise_issues,
+        issue_threshold=issue_threshold,
     )
     return report.to_json()
+
+
+def _llm_eval_compare(server: KyokoMcpServer, args: dict[str, Any]) -> dict[str, Any]:
+    return compare_eval_runs(
+        db_path=server.db_path,
+        baseline_run_id=_required_string(args, "baseline_run_id"),
+        compare_run_id=_required_string(args, "compare_run_id"),
+    )
 
 
 def _object_schema(

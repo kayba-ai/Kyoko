@@ -130,6 +130,48 @@ class EvalPlaneApiTests(unittest.TestCase):
             safety = _call_tool(server, "kyoko_mcp_safety_contract", {})["structuredContent"]
             self.assertTrue(safety["passed"])
 
+    def test_api_compare_and_raise_issues(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "kyoko.db"
+            _seed(db_path)  # 2 spans, 1 failed -> problem 0.5
+            with RunningServer(db_path) as server:
+                # raise-issues pass-through on the run POST
+                run = server.post_json(
+                    "/api/run-eval",
+                    {"detector_id": "failed_span", "corpus": {"unit": "event"},
+                     "persist": True, "raise_issues": True, "threshold": 0.3},
+                )
+                self.assertIsNotNone(run["raised_issue_id"])
+                base = run["eval_run_id"]
+                # a second (identical) run, then compare
+                run2 = server.post_json(
+                    "/api/run-eval",
+                    {"detector_id": "failed_span", "corpus": {"unit": "event"}, "persist": True},
+                )
+                comp = server.get_json(
+                    f"/api/eval-compare?baseline={quote(base)}&compare={quote(run2['eval_run_id'])}"
+                )
+                self.assertEqual(comp["direction"], "unchanged")
+                self.assertEqual(comp["eval_id"], "failed_span")
+
+    def test_mcp_compare(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "kyoko.db"
+            _seed(db_path)
+            server = KyokoMcpServer(db_path=db_path, schema_path=SCHEMA)
+            tools = {t["name"] for t in server.handle_message(
+                {"jsonrpc": "2.0", "id": "t", "method": "tools/list", "params": {}}
+            )["result"]["tools"]}
+            self.assertIn("kyoko_eval_compare", tools)
+            self.assertIn("kyoko_llm_eval_compare", tools)
+            a = _call_tool(server, "kyoko_run_eval",
+                           {"detector_id": "failed_span", "corpus": {"unit": "event"}, "persist": True})["structuredContent"]
+            b = _call_tool(server, "kyoko_run_eval",
+                           {"detector_id": "failed_span", "corpus": {"unit": "event"}, "persist": True})["structuredContent"]
+            comp = _call_tool(server, "kyoko_eval_compare",
+                              {"baseline_run_id": a["eval_run_id"], "compare_run_id": b["eval_run_id"]})["structuredContent"]
+            self.assertEqual(comp["direction"], "unchanged")
+
 
 class LlmEvalPlaneApiTests(unittest.TestCase):
     def test_api_llm_eval_flow(self) -> None:

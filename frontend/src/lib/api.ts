@@ -6,12 +6,21 @@ import type {
   Annotation,
   AnnotationKind,
   AutonomyPolicy,
+  Comparison,
   DashboardMetrics,
   ChecksBundle,
+  EvalDetailBundle,
+  EvalRunDetailBundle,
+  EvalRunsBundle,
+  EvalsBundle,
   Issue,
   IssueSection,
   IssueSeverity,
   IssueStatus,
+  LlmEvalDetailBundle,
+  LlmEvalRunDetailBundle,
+  LlmEvalRunsBundle,
+  LlmEvalsBundle,
   LiveEvent,
   McpLogEntry,
   Proposal,
@@ -159,6 +168,24 @@ export const api = {
     ),
 
   checks: () => getJson<ChecksBundle>("/api/checks"),
+
+  // ---- Evaluation plane (detectors + judges) --------------------------------
+  evals: () => getJson<EvalsBundle>("/api/evals").then((d) => d.detectors ?? []),
+  evalDetail: (id: string) => getJson<EvalDetailBundle>("/api/evals/detail", { id }).then((d) => d.detector),
+  evalRuns: () => getJson<EvalRunsBundle>("/api/eval-runs").then((d) => d.eval_runs ?? []),
+  evalRunDetail: (id: string) =>
+    getJson<EvalRunDetailBundle>("/api/eval-runs/detail", { id }),
+  evalCompare: (baseline: string, compare: string) =>
+    getJson<Comparison>("/api/eval-compare", { baseline, compare }),
+
+  llmEvals: () => getJson<LlmEvalsBundle>("/api/llm-evals").then((d) => d.llm_evals ?? []),
+  llmEvalDetail: (id: string) =>
+    getJson<LlmEvalDetailBundle>("/api/llm-evals/detail", { id }).then((d) => d.llm_eval),
+  llmEvalRuns: () => getJson<LlmEvalRunsBundle>("/api/llm-eval-runs").then((d) => d.eval_runs ?? []),
+  llmEvalRunDetail: (id: string) =>
+    getJson<LlmEvalRunDetailBundle>("/api/llm-eval-runs/detail", { id }),
+  llmEvalCompare: (baseline: string, compare: string) =>
+    getJson<Comparison>("/api/llm-eval-compare", { baseline, compare }),
 
   // Redaction is a fixed global default and retention is a manual prune (SCOPE
   // simplification) — neither has a policy endpoint anymore; Settings shows them

@@ -71,9 +71,13 @@ def _finalize(result):
         events = [_normalize_event(e) for e in raw_events]
         return num, den, events
     if isinstance(result, list):
+        # Kyoko reports the *problem prevalence* (count of flagged events), so a
+        # detector's stored value and direction orient the same way as a boolean
+        # llm_eval. (kayba-hosted's framework counts non-problems instead; the
+        # detect() contract and per-event has_problem are unchanged either way.)
         events = [_normalize_event(e) for e in result]
         den = len(events)
-        num = sum(1 for e in events if not e["has_problem"])
+        num = sum(1 for e in events if e["has_problem"])
         return num, den, events
     raise ValueError(f"detector returned unsupported result shape: {type(result).__name__}")
 

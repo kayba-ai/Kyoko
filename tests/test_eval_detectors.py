@@ -87,8 +87,8 @@ class BundledDetectorTests(unittest.TestCase):
             db = Path(tmp) / "k.db"
             _seed(db, runs=2)
             report = run_detector(db_path=db, detector_id="failed_span", corpus={"unit": "event"})
-            # 4 spans, 1 failed (run_1_tool) -> num=3 (not failed), den=4
-            self.assertEqual(report.aggregate["numerator"], 3)
+            # 4 spans, 1 failed (run_1_tool) -> num=1 (problem prevalence), den=4
+            self.assertEqual(report.aggregate["numerator"], 1)
             self.assertEqual(report.aggregate["denominator"], 4)
 
     def test_empty_llm_output_uses_normalized(self) -> None:
@@ -96,7 +96,7 @@ class BundledDetectorTests(unittest.TestCase):
             db = Path(tmp) / "k.db"
             _seed(db, runs=2)
             report = run_detector(db_path=db, detector_id="empty_llm_output", corpus={"unit": "event"})
-            # 2 llm spans, run_0 empty completion -> 1 problem; num=1 (not problem), den=2
+            # 2 llm spans, run_0 empty completion -> 1 problem; num=1 (problems), den=2
             self.assertEqual(report.aggregate["denominator"], 2)
             self.assertEqual(report.aggregate["numerator"], 1)
 
@@ -115,7 +115,7 @@ class DetectorDispatchTests(unittest.TestCase):
             _register_code(db, code, "d_list")
             report = run_detector(db_path=db, detector_id="d_list", corpus={"unit": "event"})
             self.assertEqual(report.aggregate["denominator"], 4)
-            self.assertEqual(report.aggregate["numerator"], 3)
+            self.assertEqual(report.aggregate["numerator"], 1)
 
     def test_per_trace_tuple_shape(self) -> None:
         code = (
@@ -163,7 +163,7 @@ class DetectorDispatchTests(unittest.TestCase):
             _register_code(db, code, "d_fallback")
             report = run_detector(db_path=db, detector_id="d_fallback", corpus={"unit": "event"})
             self.assertEqual(report.aggregate["denominator"], 2)
-            self.assertEqual(report.aggregate["numerator"], 2)
+            self.assertEqual(report.aggregate["numerator"], 0)
 
     def test_missing_detect_raises(self) -> None:
         code = (
