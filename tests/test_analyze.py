@@ -11,6 +11,7 @@ from kyoko.analyze import (
     extract_proposal_from_output,
     list_operator_runs,
 )
+from kyoko.issues import get_issue, list_issues
 from kyoko.proposals import list_learning_proposals
 from kyoko.storage import get_database_status, ingest_source_fixture
 
@@ -56,6 +57,30 @@ class AnalyzeTests(unittest.TestCase):
                 proposal_payload["evidence_refs"][0]["entity_id"],
                 "span_fetch_timeout_001",
             )
+
+    def test_mock_operator_originates_issue_for_proposal(self) -> None:
+        # Issue-centric spine: analysis surfaces+diagnoses an Issue, and the proposal is
+        # born of it (carries issue_id; the issue backlinks the proposal and is proposed).
+        with TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "kyoko.db"
+            output_dir = Path(tmpdir) / "analysis"
+            ingest_source_fixture(db_path, FIXTURE)
+
+            report = analyze_with_mock_operator(
+                db_path=db_path, output_dir=output_dir, schema_path=SCHEMA
+            )
+            self.assertTrue(report.issue_id)
+
+            issues = list_issues(db_path=db_path)
+            self.assertEqual(len(issues), 1)
+            issue = get_issue(db_path=db_path, issue_id=report.issue_id)
+            self.assertEqual(issue["source"], "analysis")
+            self.assertEqual(issue["status"], "proposed")
+            self.assertIn(report.proposal_id, issue["proposal_ids"])
+            self.assertTrue(issue["root_cause"])
+
+            proposal_payload = json.loads(report.proposal_path.read_text())
+            self.assertEqual(proposal_payload["issue_id"], report.issue_id)
 
     def test_command_operator_extracts_and_persists_proposal(self) -> None:
         with TemporaryDirectory() as tmpdir:

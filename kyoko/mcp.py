@@ -32,7 +32,7 @@ from .details import (
     get_run_detail,
     list_runs,
 )
-from .issues import create_issue, list_issues
+from .issues import create_issue, link_proposal_to_issue, list_issues
 from .doctor import DEFAULT_SMOKE_EVIDENCE_DIR, DoctorError, run_doctor
 from .evidence import build_evidence_bundle
 from .checks import (
@@ -65,7 +65,11 @@ from .operator_adapters import list_operator_adapters
 from .operator_smoke import OperatorSmokeError, run_operator_smoke_matrix
 from .profile_next import ProfileNextError, run_profile_next_step
 from .profiles import list_profiles
-from .proposals import list_learning_proposals, submit_learning_proposal_payload
+from .proposals import (
+    list_learning_proposals,
+    originate_issue_for_proposal,
+    submit_learning_proposal_payload,
+)
 from .replay_adapters import list_replay_adapters, run_registered_replay_adapter
 from .retention import prune_retained_data
 from .skillbook import render_skillbook_prompt
@@ -1914,17 +1918,32 @@ def _submit_proposal(server: KyokoMcpServer, args: dict[str, Any]) -> dict[str, 
     proposal = args.get("proposal")
     if not isinstance(proposal, dict):
         raise McpError("proposal_object_required")
+    # Issue-centric spine: every proposal originates from an Issue. If the agent did not
+    # reference an existing issue, surface one now from the proposal's own evidence so a
+    # proposal can never exist without an origin. Still pure propose — no apply.
+    originated_issue = None
+    if not proposal.get("issue_id"):
+        originated_issue = originate_issue_for_proposal(
+            db_path=server.db_path, proposal=proposal, source="analysis"
+        )
     report = submit_learning_proposal_payload(
         db_path=server.db_path,
         proposal=proposal,
         schema_path=server.schema_path,
     )
+    if originated_issue is not None:
+        link_proposal_to_issue(
+            db_path=server.db_path,
+            issue_id=originated_issue["id"],
+            proposal_id=report.proposal_id,
+        )
     return {
         "proposal_id": report.proposal_id,
         "profile_id": report.profile_id,
         "state": report.state,
         "section": report.section,
         "title": report.title,
+        "issue_id": proposal.get("issue_id"),
     }
 
 

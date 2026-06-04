@@ -9,6 +9,7 @@ from typing import Any, Optional
 from .bundled_assets import AssetError, load_bundled_json
 from .confidence import assess_proposal_confidence
 from .gates import load_json, proposal_evidence_refs
+from .issues import create_issue, link_proposal_to_issue
 from .storage import StorageError, connect, initialize_database
 from .vocabulary import section_description, section_label
 
@@ -62,6 +63,7 @@ ENTITY_TABLES = {
     "timeline_event": "timeline_events",
     "proposal": "learning_proposals",
     "learning_proposal": "learning_proposals",
+    "issue": "issues",
     "skill": "skills",
     "context_delivery_rule": "context_delivery_rules",
     "check_run": "check_runs",
@@ -90,6 +92,77 @@ class ProposalSubmitReport:
 
 class ProposalError(Exception):
     """Raised when a proposal cannot be validated or persisted."""
+
+
+def originate_issue_for_proposal(
+    *,
+    db_path: Path,
+    proposal: dict[str, Any],
+    source: str = "analysis",
+    profile_id: Optional[str] = None,
+) -> dict[str, Any]:
+    """Create the originating :class:`Issue` for ``proposal`` and stamp
+    ``proposal["issue_id"]`` in place. This is the single chokepoint that enforces the
+    issue-centric spine — every production proposal producer routes through here so a
+    proposal can never exist without an issue. The issue is created already
+    ``diagnosed`` (analysis both surfaces and diagnoses), carrying the proposal's
+    ``insight`` as its root cause and the proposal's section/evidence.
+
+    Returns the stored issue record. The caller submits the proposal, then calls
+    :func:`kyoko.issues.link_proposal_to_issue` to backlink and advance to ``proposed``.
+    """
+
+    problem = proposal.get("problem") if isinstance(proposal.get("problem"), dict) else {}
+    raw_title = problem.get("issue") or proposal.get("title") or "Surfaced agent failure"
+    title = str(raw_title).strip()[:500] or "Surfaced agent failure"
+    section = proposal.get("section") if proposal.get("section") in ("context", "harness") else None
+    evidence_refs = proposal.get("evidence_refs") if isinstance(proposal.get("evidence_refs"), list) else []
+    root_cause = proposal.get("insight") if isinstance(proposal.get("insight"), str) else None
+    if not root_cause:
+        rc = problem.get("root_cause") if isinstance(problem, dict) else None
+        root_cause = rc if isinstance(rc, str) and rc.strip() else None
+    body = proposal.get("summary") if isinstance(proposal.get("summary"), str) else None
+    severity = _issue_severity_from_problem(problem)
+
+    span_ids: list[str] = []
+    target = problem.get("target") if isinstance(problem, dict) else None
+    if (
+        isinstance(target, dict)
+        and target.get("entity_type") == "span"
+        and isinstance(target.get("entity_id"), str)
+    ):
+        span_ids = [target["entity_id"]]
+
+    issue = create_issue(
+        db_path=db_path,
+        title=title,
+        body=body,
+        section=section,
+        category="analysis",
+        severity=severity,
+        status="diagnosed" if root_cause else "open",
+        evidence_refs=evidence_refs,
+        affected_span_ids=span_ids,
+        source=source,
+        root_cause=root_cause,
+        profile_id=profile_id or proposal.get("profile_id"),
+    )
+    proposal["issue_id"] = issue["id"]
+    return issue
+
+
+def _issue_severity_from_problem(problem: dict[str, Any]) -> Optional[str]:
+    """Map a proposal problem severity (info|low|medium|high|critical) onto the issue
+    severity scale (low|medium|high)."""
+    mapping = {
+        "info": "low",
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "critical": "high",
+    }
+    raw = problem.get("severity") if isinstance(problem, dict) else None
+    return mapping.get(raw) if isinstance(raw, str) else None
 
 
 def submit_learning_proposal(
@@ -162,6 +235,13 @@ def validate_learning_proposal(
     proposal_id = _string_field(proposal, "id")
     if proposal_id and _row_exists(connection, "learning_proposals", proposal_id):
         errors.append(f"proposal_already_exists:{proposal_id}")
+
+    # The issue-centric spine: every proposal originates from an Issue. The field is
+    # schema-optional (so legacy static fixtures validate) but referentially checked
+    # when present; all production producers stamp it via originate_issue_for_proposal.
+    issue_id = _string_field(proposal, "issue_id")
+    if issue_id and not _row_exists(connection, "issues", issue_id):
+        errors.append(f"issue_not_found:{issue_id}")
 
     producer = proposal.get("producer")
     if isinstance(producer, dict):
@@ -330,10 +410,11 @@ def _insert_learning_proposal(connection: sqlite3.Connection, proposal: dict[str
           proposed_changes_json,
           gate_expectations_json,
           validation_errors_json,
+          issue_id,
           created_at,
           updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             proposal["id"],
@@ -351,6 +432,7 @@ def _insert_learning_proposal(connection: sqlite3.Connection, proposal: dict[str
             _json_value(proposal["proposed_changes"]),
             _json_value(proposal["gate_expectations"]),
             _json_value(validation_errors),
+            proposal.get("issue_id"),
             proposal["created_at"],
             proposal.get("updated_at"),
         ),

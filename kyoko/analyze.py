@@ -15,7 +15,12 @@ from .operator_prompts import (
     END_PROPOSAL_BLOCK,
     write_operator_prompt_artifacts,
 )
-from .proposals import ProposalError, submit_learning_proposal_payload
+from .issues import link_proposal_to_issue
+from .proposals import (
+    ProposalError,
+    originate_issue_for_proposal,
+    submit_learning_proposal_payload,
+)
 from .storage import connect, initialize_database, utc_now
 
 
@@ -31,6 +36,7 @@ class AnalyzeReport:
     operator_run_id: Optional[str] = None
     raw_output_path: Optional[Path] = None
     attempts: int = 1
+    issue_id: Optional[str] = None
 
 
 class AnalyzeError(Exception):
@@ -79,6 +85,15 @@ def analyze_with_mock_operator(
         _update_operator_run(db_path, operator_run_id, status="failed", error=str(exc))
         raise
 
+    # Issue-centric spine: analysis surfaces+diagnoses an Issue first, and the proposal
+    # is born of it. originate_issue_for_proposal stamps proposal["issue_id"] in place.
+    issue = originate_issue_for_proposal(
+        db_path=db_path,
+        proposal=proposal,
+        source="analysis",
+        profile_id=prompt_report.profile_id,
+    )
+
     proposal_path = output_dir / f"{proposal['id']}.json"
     proposal_path.write_text(json.dumps(proposal, indent=2, sort_keys=True) + "\n")
 
@@ -92,6 +107,9 @@ def analyze_with_mock_operator(
         _update_operator_run(db_path, operator_run_id, status="failed", error=str(exc))
         raise AnalyzeError(str(exc)) from exc
 
+    link_proposal_to_issue(
+        db_path=db_path, issue_id=issue["id"], proposal_id=str(proposal["id"])
+    )
     _update_operator_run(
         db_path,
         operator_run_id,
@@ -108,6 +126,7 @@ def analyze_with_mock_operator(
         proposal_path=proposal_path,
         persisted=True,
         operator_run_id=operator_run_id,
+        issue_id=issue["id"],
     )
 
 
@@ -188,6 +207,7 @@ def analyze_with_command_operator(
     last_error: Optional[str] = None
     proposal: Optional[dict[str, Any]] = None
     proposal_path: Optional[Path] = None
+    originated_issue: Optional[dict[str, Any]] = None
     for attempt in range(1, max_retries + 2):
         prompt_text = base_prompt_text if attempt == 1 else _retry_prompt_text(base_prompt_text, last_error)
         prompt_path = prompt_report.prompt_path
@@ -290,6 +310,19 @@ def analyze_with_command_operator(
             )
             raise
 
+        # Issue-centric spine: the proposal is born of an Issue. Create it once and
+        # reuse it across retries (each retry re-stamps the same issue_id) so a failed
+        # attempt does not orphan a fresh issue.
+        if originated_issue is None:
+            originated_issue = originate_issue_for_proposal(
+                db_path=db_path,
+                proposal=proposal,
+                source="analysis",
+                profile_id=prompt_report.profile_id,
+            )
+        else:
+            proposal["issue_id"] = originated_issue["id"]
+
         proposal_path = output_dir / f"{proposal['id']}.json"
         proposal_path.write_text(json.dumps(proposal, indent=2, sort_keys=True) + "\n")
         try:
@@ -322,6 +355,12 @@ def analyze_with_command_operator(
     if proposal is None or proposal_path is None:
         raise AnalyzeError(last_error or "operator_retry_exhausted")
 
+    if originated_issue is not None:
+        link_proposal_to_issue(
+            db_path=db_path,
+            issue_id=originated_issue["id"],
+            proposal_id=str(proposal["id"]),
+        )
     _update_operator_run(
         db_path,
         operator_run_id,
@@ -342,6 +381,7 @@ def analyze_with_command_operator(
         operator_run_id=operator_run_id,
         raw_output_path=raw_output_path,
         attempts=len(attempt_results),
+        issue_id=originated_issue["id"] if originated_issue is not None else None,
     )
 
 

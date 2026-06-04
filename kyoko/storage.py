@@ -281,9 +281,11 @@ CREATE TABLE IF NOT EXISTS learning_proposals (
   proposed_changes_json TEXT NOT NULL,
   gate_expectations_json TEXT NOT NULL,
   validation_errors_json TEXT NOT NULL,
+  issue_id TEXT,                         -- v29: the Issue this proposal originates from
   created_at TEXT NOT NULL,
   updated_at TEXT,
-  FOREIGN KEY (profile_id) REFERENCES profiles(id)
+  FOREIGN KEY (profile_id) REFERENCES profiles(id),
+  FOREIGN KEY (issue_id) REFERENCES issues(id)
 );
 
 CREATE TABLE IF NOT EXISTS skills (
@@ -1077,6 +1079,7 @@ def initialize_database(db_path: Path) -> None:
         _ensure_column(connection, "issues", "source", "source TEXT")
         _ensure_column(connection, "issues", "evaluator_id", "evaluator_id TEXT")
         _ensure_column(connection, "eval_definitions", "issue_id", "issue_id TEXT")
+        _ensure_column(connection, "learning_proposals", "issue_id", "issue_id TEXT")
         # v21 (SCOPE simplification): redaction collapses to a single global
         # "redact on export" default; the per-profile policy table and the audit
         # ledger are removed. Drop them for DBs created before v21.

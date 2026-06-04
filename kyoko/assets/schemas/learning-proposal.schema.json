@@ -32,6 +32,10 @@
     "profile_id": {
       "$ref": "#/$defs/id"
     },
+    "issue_id": {
+      "$ref": "#/$defs/id",
+      "description": "The Issue this proposal originates from. Every proposal is born of an issue (the issue-centric spine); optional in the schema only so legacy fixtures validate."
+    },
     "producer": {
       "type": "object",
       "additionalProperties": false,
