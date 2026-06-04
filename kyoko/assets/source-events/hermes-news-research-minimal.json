@@ -1,0 +1,262 @@
+{
+  "fixture_version": "kyoko.source_fixture.v1",
+  "name": "hermes-news-research-minimal",
+  "description": "Minimal coordination and execution fixture for a Hermes-style news research workflow.",
+  "profile": {
+    "id": "profile_news_research_001",
+    "name": "News Research Workflow",
+    "root_path": "/tmp/kyoko-fixtures/news-research",
+    "status": "active",
+    "created_at": "2026-05-31T11:45:00Z",
+    "updated_at": "2026-05-31T11:55:00Z"
+  },
+  "sources": [
+    {
+      "id": "source_hermes_001",
+      "profile_id": "profile_news_research_001",
+      "kind": "hermes_kanban",
+      "display_name": "Hermes Kanban",
+      "status": "active",
+      "adapter_version": "kyoko.hermes.v0",
+      "config_json": {},
+      "capabilities_json": {
+        "tasks": true,
+        "handoffs": true,
+        "runs": true
+      },
+      "last_seen_at": "2026-05-31T11:55:00Z"
+    },
+    {
+      "id": "source_operator_001",
+      "profile_id": "profile_news_research_001",
+      "kind": "operator_agent",
+      "display_name": "Codex operator",
+      "status": "active",
+      "adapter_version": "kyoko.operator.codex.v0",
+      "config_json": {},
+      "capabilities_json": {
+        "learning_proposals": true
+      },
+      "last_seen_at": "2026-05-31T12:00:00Z"
+    }
+  ],
+  "agent_identities": [
+    {
+      "id": "agent_researcher_001",
+      "profile_id": "profile_news_research_001",
+      "source_id": "source_hermes_001",
+      "external_id": "hermes-profile-researcher",
+      "name": "researcher",
+      "kind": "hermes_profile",
+      "role": "source research",
+      "model": "unknown",
+      "workspace_path": "/tmp/kyoko-fixtures/news-research",
+      "metadata_json": {}
+    },
+    {
+      "id": "agent_writer_001",
+      "profile_id": "profile_news_research_001",
+      "source_id": "source_hermes_001",
+      "external_id": "hermes-profile-writer",
+      "name": "writer",
+      "kind": "hermes_profile",
+      "role": "article drafting",
+      "model": "unknown",
+      "workspace_path": "/tmp/kyoko-fixtures/news-research",
+      "metadata_json": {}
+    },
+    {
+      "id": "agent_operator_codex_001",
+      "profile_id": "profile_news_research_001",
+      "source_id": "source_operator_001",
+      "external_id": "codex-local",
+      "name": "codex",
+      "kind": "operator",
+      "role": "kyoko analysis",
+      "model": "operator_subscription",
+      "workspace_path": "/tmp/kyoko-fixtures/news-research",
+      "metadata_json": {}
+    }
+  ],
+  "workflow_nodes": [
+    {
+      "id": "node_researcher_001",
+      "profile_id": "profile_news_research_001",
+      "source_id": "source_hermes_001",
+      "external_id": "node-researcher",
+      "agent_identity_id": "agent_researcher_001",
+      "kind": "agent",
+      "name": "Researcher",
+      "metadata_json": {}
+    },
+    {
+      "id": "node_writer_001",
+      "profile_id": "profile_news_research_001",
+      "source_id": "source_hermes_001",
+      "external_id": "node-writer",
+      "agent_identity_id": "agent_writer_001",
+      "kind": "agent",
+      "name": "Writer",
+      "metadata_json": {}
+    }
+  ],
+  "queues": [
+    {
+      "id": "queue_news_board_001",
+      "profile_id": "profile_news_research_001",
+      "source_id": "source_hermes_001",
+      "external_id": "hermes-board-news",
+      "name": "news",
+      "kind": "hermes_board",
+      "metadata_json": {}
+    }
+  ],
+  "tasks": [
+    {
+      "id": "task_research_topic_001",
+      "profile_id": "profile_news_research_001",
+      "source_id": "source_hermes_001",
+      "queue_id": "queue_news_board_001",
+      "external_id": "hermes-task-001",
+      "title": "Research source coverage for a breaking AI infrastructure story",
+      "body_ref": "blob_task_body_001",
+      "status": "done",
+      "assignee_agent_identity_id": "agent_researcher_001",
+      "created_by_agent_identity_id": "agent_writer_001",
+      "priority": "normal",
+      "workspace_kind": "repo",
+      "workspace_path": "/tmp/kyoko-fixtures/news-research",
+      "created_at": "2026-05-31T11:45:00Z",
+      "started_at": "2026-05-31T11:46:00Z",
+      "completed_at": "2026-05-31T11:50:00Z",
+      "metadata_json": {}
+    }
+  ],
+  "task_attempts": [
+    {
+      "id": "attempt_research_topic_001",
+      "task_id": "task_research_topic_001",
+      "run_id": "run_research_topic_001",
+      "agent_identity_id": "agent_researcher_001",
+      "status": "done",
+      "outcome": "completed_with_incomplete_source",
+      "claim_token_hash": "fixture-token-hash",
+      "worker_pid": 12345,
+      "started_at": "2026-05-31T11:46:00Z",
+      "ended_at": "2026-05-31T11:50:00Z",
+      "last_heartbeat_at": "2026-05-31T11:49:30Z",
+      "summary_ref": "blob_attempt_summary_001",
+      "metadata_json": {},
+      "error_ref": null
+    }
+  ],
+  "runs": [
+    {
+      "id": "run_research_topic_001",
+      "profile_id": "profile_news_research_001",
+      "source_id": "source_hermes_001",
+      "external_id": "hermes-run-001",
+      "root_span_id": "span_research_root_001",
+      "agent_identity_id": "agent_researcher_001",
+      "task_attempt_id": "attempt_research_topic_001",
+      "status": "succeeded",
+      "started_at": "2026-05-31T11:46:00Z",
+      "ended_at": "2026-05-31T11:50:00Z",
+      "input_ref": "blob_run_input_001",
+      "output_ref": "blob_run_output_001",
+      "summary": "Research completed but one source fetch timed out and was not retried.",
+      "metadata_json": {}
+    }
+  ],
+  "spans": [
+    {
+      "id": "span_research_root_001",
+      "run_id": "run_research_topic_001",
+      "source_id": "source_hermes_001",
+      "external_id": "root",
+      "parent_span_id": null,
+      "workflow_node_id": "node_researcher_001",
+      "agent_identity_id": "agent_researcher_001",
+      "kind": "agent",
+      "name": "research topic",
+      "status": "succeeded",
+      "started_at": "2026-05-31T11:46:00Z",
+      "ended_at": "2026-05-31T11:50:00Z",
+      "input_ref": "blob_run_input_001",
+      "output_ref": "blob_run_output_001",
+      "usage_json": {},
+      "attributes_json": {},
+      "raw_ref": "blob_raw_span_root_001"
+    },
+    {
+      "id": "span_fetch_timeout_001",
+      "run_id": "run_research_topic_001",
+      "source_id": "source_hermes_001",
+      "external_id": "tool-fetch-source-a",
+      "parent_span_id": "span_research_root_001",
+      "workflow_node_id": "node_researcher_001",
+      "agent_identity_id": "agent_researcher_001",
+      "kind": "tool",
+      "name": "fetch_source",
+      "status": "failed",
+      "started_at": "2026-05-31T11:47:00Z",
+      "ended_at": "2026-05-31T11:47:30Z",
+      "input_ref": "blob_fetch_input_001",
+      "output_ref": "blob_fetch_timeout_output_001",
+      "usage_json": {},
+      "attributes_json": {
+        "error_type": "timeout",
+        "retry_count": 0
+      },
+      "raw_ref": "blob_raw_span_fetch_001"
+    }
+  ],
+  "handoffs": [
+    {
+      "id": "handoff_research_to_writer_001",
+      "profile_id": "profile_news_research_001",
+      "source_id": "source_hermes_001",
+      "from_agent_identity_id": "agent_researcher_001",
+      "to_agent_identity_id": "agent_writer_001",
+      "from_workflow_node_id": "node_researcher_001",
+      "to_workflow_node_id": "node_writer_001",
+      "from_task_id": "task_research_topic_001",
+      "to_task_id": null,
+      "run_id": "run_research_topic_001",
+      "span_id": null,
+      "kind": "agent_handoff",
+      "reason_ref": "blob_handoff_reason_001",
+      "payload_ref": "blob_handoff_payload_001",
+      "created_at": "2026-05-31T11:50:00Z",
+      "metadata_json": {
+        "source_status": "incomplete"
+      }
+    }
+  ],
+  "timeline_events": [
+    {
+      "id": "event_fetch_timeout_001",
+      "profile_id": "profile_news_research_001",
+      "source_id": "source_hermes_001",
+      "entity_type": "span",
+      "entity_id": "span_fetch_timeout_001",
+      "kind": "tool_timeout",
+      "at": "2026-05-31T11:47:30Z",
+      "agent_identity_id": "agent_researcher_001",
+      "payload_ref": "blob_fetch_timeout_quote_001",
+      "metadata_json": {}
+    },
+    {
+      "id": "event_handoff_001",
+      "profile_id": "profile_news_research_001",
+      "source_id": "source_hermes_001",
+      "entity_type": "handoff",
+      "entity_id": "handoff_research_to_writer_001",
+      "kind": "handoff_created",
+      "at": "2026-05-31T11:50:00Z",
+      "agent_identity_id": "agent_researcher_001",
+      "payload_ref": "blob_handoff_payload_001",
+      "metadata_json": {}
+    }
+  ]
+}

@@ -1,0 +1,99 @@
+{
+  "schema_version": "kyoko.learning_proposal.v1",
+  "id": "proposal_hermes_span_fetch_timeout_001",
+  "profile_id": "profile_news_research_001",
+  "producer": {
+    "kind": "operator_agent",
+    "name": "hermes",
+    "agent_identity_id": "agent_operator_codex_001",
+    "session_id": "hermes_one_shot_session",
+    "raw_output_ref": "blob_operator_output_001"
+  },
+  "state": "pending",
+  "section": "context",
+  "title": "Add retry guidance for source fetch timeouts",
+  "summary": "The researcher agent treated a transient fetch timeout as a final source failure and moved forward with weak evidence.",
+  "confidence": 0.82,
+  "evidence_refs": [
+    {
+      "entity_type": "span",
+      "entity_id": "span_fetch_timeout_001",
+      "role": "failure",
+      "quote_ref": "blob_fetch_timeout_quote_001",
+      "note": "The tool call timed out and the agent did not retry."
+    },
+    {
+      "entity_type": "handoff",
+      "entity_id": "handoff_research_to_writer_001",
+      "role": "context",
+      "note": "The writer received the task after the failed fetch was treated as complete."
+    }
+  ],
+  "problem": {
+    "issue": "When source fetching times out, the researcher proceeds without retrying or marking the evidence as incomplete.",
+    "severity": "medium",
+    "root_cause": "The workflow context does not tell the researcher how to distinguish transient fetch failures from real source absence.",
+    "target": {
+      "entity_type": "agent_identity",
+      "entity_id": "agent_researcher_001",
+      "name": "researcher"
+    }
+  },
+  "insight": "Teach the researcher to retry transient source fetch failures once, then mark the evidence incomplete if the retry also fails.",
+  "proposed_changes": [
+    {
+      "type": "skillbook_update",
+      "operation": "create",
+      "section": "context",
+      "issue": "Source fetch timeouts are treated as final failures.",
+      "insight": "Retry transient fetch failures once before handoff; if retry fails, mark the source as incomplete in the handoff payload.",
+      "keywords": ["fetch", "timeout", "retry", "handoff", "evidence"],
+      "occurrence_refs": [
+        {
+          "entity_type": "span",
+          "entity_id": "span_fetch_timeout_001",
+          "role": "failure",
+          "quote_ref": "blob_fetch_timeout_quote_001"
+        }
+      ]
+    },
+    {
+      "type": "eval_spec",
+      "name": "researcher retries fetch timeout before handoff",
+      "eval_type": "deterministic_assertion",
+      "trust_level": "L0_generated",
+      "side_effect_mode": "network_mocked",
+      "definition": {
+        "given": "fetch tool times out on first call and succeeds on retry",
+        "expect": "researcher retries once and includes recovered source in handoff",
+        "assertions": [
+          {
+            "type": "target_status_not_failed"
+          },
+          {
+            "type": "replay_target_field_equals",
+            "path": "attributes.retry_count",
+            "equals": 1
+          },
+          {
+            "type": "replay_entity_field_equals",
+            "entity_type": "handoff",
+            "match": {
+              "metadata.replay_of_handoff_id": "handoff_research_to_writer_001"
+            },
+            "path": "metadata.source_status",
+            "equals": "complete"
+          }
+        ]
+      }
+    }
+  ],
+  "gate_expectations": {
+    "requires_human_review": false,
+    "requires_eval_level": "L1_repeated",
+    "requires_replay": true,
+    "allowed_autonomy_section": "context",
+    "notes": "Generated eval must be repeated before autonomous context apply."
+  },
+  "created_at": "2026-05-31T12:00:00Z"
+}

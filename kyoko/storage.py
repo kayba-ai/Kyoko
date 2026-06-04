@@ -1,0 +1,1611 @@
+from __future__ import annotations
+
+import base64
+import hashlib
+import json
+import sqlite3
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any, Optional
+
+
+SCHEMA_VERSION = 24
+
+
+class StorageError(Exception):
+    """Raised when Kyoko storage operations fail."""
+
+
+@dataclass(frozen=True)
+class IngestReport:
+    profile_id: str
+    inserted_counts: dict[str, int]
+
+
+@dataclass(frozen=True)
+class DatabaseStatus:
+    db_path: Path
+    initialized: bool
+    schema_version: Optional[int]
+    counts: dict[str, int]
+    migration_versions: tuple[int, ...] = ()
+
+
+@dataclass(frozen=True)
+class WalCheckpointReport:
+    db_path: Path
+    wal_path: Path
+    mode: str
+    busy: int
+    log_frames: int
+    checkpointed_frames: int
+    wal_size_before: int
+    wal_size_after: int
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "db_path": str(self.db_path),
+            "wal_path": str(self.wal_path),
+            "mode": self.mode,
+            "busy": self.busy,
+            "log_frames": self.log_frames,
+            "checkpointed_frames": self.checkpointed_frames,
+            "wal_size_before": self.wal_size_before,
+            "wal_size_after": self.wal_size_after,
+        }
+
+
+SCHEMA_SQL = """
+PRAGMA foreign_keys = ON;
+PRAGMA journal_mode = WAL;
+PRAGMA busy_timeout = 5000;
+
+CREATE TABLE IF NOT EXISTS schema_migrations (
+  version INTEGER PRIMARY KEY,
+  applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS profiles (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  root_path TEXT NOT NULL,
+  status TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS sources (
+  id TEXT PRIMARY KEY,
+  profile_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  status TEXT NOT NULL,
+  adapter_version TEXT NOT NULL,
+  config_json TEXT NOT NULL,
+  capabilities_json TEXT NOT NULL,
+  last_seen_at TEXT,
+  FOREIGN KEY (profile_id) REFERENCES profiles(id)
+);
+
+CREATE TABLE IF NOT EXISTS agent_identities (
+  id TEXT PRIMARY KEY,
+  profile_id TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  external_id TEXT,
+  name TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  role TEXT,
+  model TEXT,
+  workspace_path TEXT,
+  metadata_json TEXT NOT NULL,
+  FOREIGN KEY (profile_id) REFERENCES profiles(id),
+  FOREIGN KEY (source_id) REFERENCES sources(id)
+);
+
+CREATE TABLE IF NOT EXISTS workflow_nodes (
+  id TEXT PRIMARY KEY,
+  profile_id TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  external_id TEXT,
+  agent_identity_id TEXT,
+  kind TEXT NOT NULL,
+  name TEXT NOT NULL,
+  metadata_json TEXT NOT NULL,
+  FOREIGN KEY (profile_id) REFERENCES profiles(id),
+  FOREIGN KEY (source_id) REFERENCES sources(id),
+  FOREIGN KEY (agent_identity_id) REFERENCES agent_identities(id)
+);
+
+CREATE TABLE IF NOT EXISTS queues (
+  id TEXT PRIMARY KEY,
+  profile_id TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  external_id TEXT,
+  name TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  metadata_json TEXT NOT NULL,
+  FOREIGN KEY (profile_id) REFERENCES profiles(id),
+  FOREIGN KEY (source_id) REFERENCES sources(id)
+);
+
+CREATE TABLE IF NOT EXISTS tasks (
+  id TEXT PRIMARY KEY,
+  profile_id TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  queue_id TEXT,
+  external_id TEXT,
+  title TEXT NOT NULL,
+  body_ref TEXT,
+  status TEXT NOT NULL,
+  assignee_agent_identity_id TEXT,
+  created_by_agent_identity_id TEXT,
+  priority TEXT,
+  workspace_kind TEXT,
+  workspace_path TEXT,
+  created_at TEXT NOT NULL,
+  started_at TEXT,
+  completed_at TEXT,
+  metadata_json TEXT NOT NULL,
+  FOREIGN KEY (profile_id) REFERENCES profiles(id),
+  FOREIGN KEY (source_id) REFERENCES sources(id),
+  FOREIGN KEY (queue_id) REFERENCES queues(id),
+  FOREIGN KEY (assignee_agent_identity_id) REFERENCES agent_identities(id),
+  FOREIGN KEY (created_by_agent_identity_id) REFERENCES agent_identities(id)
+);
+
+CREATE TABLE IF NOT EXISTS task_attempts (
+  id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL,
+  run_id TEXT,
+  agent_identity_id TEXT NOT NULL,
+  status TEXT NOT NULL,
+  outcome TEXT,
+  claim_token_hash TEXT,
+  worker_pid INTEGER,
+  started_at TEXT NOT NULL,
+  ended_at TEXT,
+  last_heartbeat_at TEXT,
+  summary_ref TEXT,
+  metadata_json TEXT NOT NULL,
+  error_ref TEXT,
+  FOREIGN KEY (task_id) REFERENCES tasks(id),
+  FOREIGN KEY (agent_identity_id) REFERENCES agent_identities(id)
+);
+
+CREATE TABLE IF NOT EXISTS runs (
+  id TEXT PRIMARY KEY,
+  profile_id TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  external_id TEXT,
+  root_span_id TEXT,
+  agent_identity_id TEXT,
+  task_attempt_id TEXT,
+  status TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  ended_at TEXT,
+  input_ref TEXT,
+  output_ref TEXT,
+  summary TEXT,
+  metadata_json TEXT NOT NULL,
+  FOREIGN KEY (profile_id) REFERENCES profiles(id),
+  FOREIGN KEY (source_id) REFERENCES sources(id),
+  FOREIGN KEY (agent_identity_id) REFERENCES agent_identities(id),
+  FOREIGN KEY (task_attempt_id) REFERENCES task_attempts(id)
+);
+
+CREATE TABLE IF NOT EXISTS spans (
+  id TEXT PRIMARY KEY,
+  run_id TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  external_id TEXT,
+  parent_span_id TEXT,
+  workflow_node_id TEXT,
+  agent_identity_id TEXT,
+  kind TEXT NOT NULL,
+  name TEXT NOT NULL,
+  status TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  ended_at TEXT,
+  input_ref TEXT,
+  output_ref TEXT,
+  usage_json TEXT NOT NULL,
+  attributes_json TEXT NOT NULL,
+  raw_ref TEXT,
+  FOREIGN KEY (run_id) REFERENCES runs(id),
+  FOREIGN KEY (source_id) REFERENCES sources(id),
+  FOREIGN KEY (parent_span_id) REFERENCES spans(id),
+  FOREIGN KEY (workflow_node_id) REFERENCES workflow_nodes(id),
+  FOREIGN KEY (agent_identity_id) REFERENCES agent_identities(id)
+);
+
+CREATE TABLE IF NOT EXISTS handoffs (
+  id TEXT PRIMARY KEY,
+  profile_id TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  from_agent_identity_id TEXT,
+  to_agent_identity_id TEXT,
+  from_workflow_node_id TEXT,
+  to_workflow_node_id TEXT,
+  from_task_id TEXT,
+  to_task_id TEXT,
+  run_id TEXT,
+  span_id TEXT,
+  kind TEXT NOT NULL,
+  reason_ref TEXT,
+  payload_ref TEXT,
+  created_at TEXT NOT NULL,
+  metadata_json TEXT NOT NULL,
+  FOREIGN KEY (profile_id) REFERENCES profiles(id),
+  FOREIGN KEY (source_id) REFERENCES sources(id),
+  FOREIGN KEY (from_agent_identity_id) REFERENCES agent_identities(id),
+  FOREIGN KEY (to_agent_identity_id) REFERENCES agent_identities(id),
+  FOREIGN KEY (from_workflow_node_id) REFERENCES workflow_nodes(id),
+  FOREIGN KEY (to_workflow_node_id) REFERENCES workflow_nodes(id),
+  FOREIGN KEY (from_task_id) REFERENCES tasks(id),
+  FOREIGN KEY (to_task_id) REFERENCES tasks(id),
+  FOREIGN KEY (run_id) REFERENCES runs(id),
+  FOREIGN KEY (span_id) REFERENCES spans(id)
+);
+
+CREATE TABLE IF NOT EXISTS timeline_events (
+  id TEXT PRIMARY KEY,
+  profile_id TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  at TEXT NOT NULL,
+  agent_identity_id TEXT,
+  payload_ref TEXT,
+  metadata_json TEXT NOT NULL,
+  FOREIGN KEY (profile_id) REFERENCES profiles(id),
+  FOREIGN KEY (source_id) REFERENCES sources(id),
+  FOREIGN KEY (agent_identity_id) REFERENCES agent_identities(id)
+);
+
+CREATE TABLE IF NOT EXISTS learning_proposals (
+  id TEXT PRIMARY KEY,
+  schema_version TEXT NOT NULL,
+  profile_id TEXT NOT NULL,
+  producer_json TEXT NOT NULL,
+  state TEXT NOT NULL,
+  section TEXT NOT NULL,
+  title TEXT NOT NULL,
+  summary TEXT NOT NULL,
+  confidence REAL NOT NULL,
+  evidence_refs_json TEXT NOT NULL,
+  problem_json TEXT NOT NULL,
+  insight TEXT NOT NULL,
+  proposed_changes_json TEXT NOT NULL,
+  gate_expectations_json TEXT NOT NULL,
+  validation_errors_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT,
+  FOREIGN KEY (profile_id) REFERENCES profiles(id)
+);
+
+CREATE TABLE IF NOT EXISTS skills (
+  id TEXT PRIMARY KEY,
+  profile_id TEXT NOT NULL,
+  proposal_id TEXT,
+  section TEXT NOT NULL,
+  issue TEXT NOT NULL,
+  insight TEXT NOT NULL,
+  keywords_json TEXT NOT NULL,
+  occurrences_json TEXT NOT NULL,
+  helpful_count INTEGER NOT NULL DEFAULT 0,
+  harmful_count INTEGER NOT NULL DEFAULT 0,
+  neutral_count INTEGER NOT NULL DEFAULT 0,
+  active INTEGER NOT NULL DEFAULT 1,
+  human_locked INTEGER NOT NULL DEFAULT 0,
+  human_lock_reason TEXT,
+  source_run_id TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (profile_id) REFERENCES profiles(id),
+  FOREIGN KEY (proposal_id) REFERENCES learning_proposals(id),
+  FOREIGN KEY (source_run_id) REFERENCES runs(id)
+);
+
+CREATE TABLE IF NOT EXISTS context_delivery_rules (
+  id TEXT PRIMARY KEY,
+  profile_id TEXT NOT NULL,
+  proposal_id TEXT,
+  target_json TEXT NOT NULL,
+  rule_json TEXT NOT NULL,
+  active INTEGER NOT NULL DEFAULT 1,
+  human_locked INTEGER NOT NULL DEFAULT 0,
+  human_lock_reason TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (profile_id) REFERENCES profiles(id),
+  FOREIGN KEY (proposal_id) REFERENCES learning_proposals(id)
+);
+
+CREATE TABLE IF NOT EXISTS skill_revisions (
+  id TEXT PRIMARY KEY,
+  skill_id TEXT NOT NULL,
+  profile_id TEXT NOT NULL,
+  proposal_id TEXT,
+  operation TEXT NOT NULL,
+  before_json TEXT,
+  after_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (skill_id) REFERENCES skills(id),
+  FOREIGN KEY (profile_id) REFERENCES profiles(id),
+  FOREIGN KEY (proposal_id) REFERENCES learning_proposals(id)
+);
+
+CREATE TABLE IF NOT EXISTS context_delivery_rule_revisions (
+  id TEXT PRIMARY KEY,
+  rule_id TEXT NOT NULL,
+  profile_id TEXT NOT NULL,
+  proposal_id TEXT,
+  operation TEXT NOT NULL,
+  before_json TEXT,
+  after_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (rule_id) REFERENCES context_delivery_rules(id),
+  FOREIGN KEY (profile_id) REFERENCES profiles(id),
+  FOREIGN KEY (proposal_id) REFERENCES learning_proposals(id)
+);
+
+CREATE TABLE IF NOT EXISTS autonomy_policies (
+  profile_id TEXT PRIMARY KEY,
+  context_mode TEXT NOT NULL,
+  harness_mode TEXT NOT NULL,
+  allow_skillbook_write INTEGER NOT NULL,
+  allow_eval_write INTEGER NOT NULL,
+  allow_profile_config_write INTEGER NOT NULL,
+  allow_repo_patch INTEGER NOT NULL,
+  allow_replay_server_patch INTEGER NOT NULL,
+  allowed_paths_json TEXT NOT NULL,
+  protected_paths_json TEXT NOT NULL,
+  dirty_worktree_policy TEXT NOT NULL,
+  required_eval_level_context TEXT NOT NULL,
+  required_eval_level_harness TEXT NOT NULL,
+  rollback_on_regression INTEGER NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (profile_id) REFERENCES profiles(id)
+);
+
+CREATE TABLE IF NOT EXISTS harness_target_locks (
+  profile_id TEXT NOT NULL,
+  target_path TEXT NOT NULL,
+  human_locked INTEGER NOT NULL,
+  reason TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (profile_id, target_path),
+  FOREIGN KEY (profile_id) REFERENCES profiles(id)
+);
+
+CREATE TABLE IF NOT EXISTS payload_blobs (
+  id TEXT PRIMARY KEY,
+  profile_id TEXT,
+  kind TEXT NOT NULL,
+  media_type TEXT NOT NULL,
+  sha256 TEXT NOT NULL,
+  size_bytes INTEGER NOT NULL,
+  path TEXT NOT NULL,
+  preview TEXT,
+  redaction_mode TEXT NOT NULL,
+  retained_until TEXT,
+  metadata_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (profile_id) REFERENCES profiles(id)
+);
+
+CREATE TABLE IF NOT EXISTS eval_specs (
+  id TEXT PRIMARY KEY,
+  profile_id TEXT NOT NULL,
+  proposal_id TEXT,
+  name TEXT NOT NULL,
+  eval_type TEXT NOT NULL,
+  trust_level TEXT NOT NULL,
+  side_effect_mode TEXT NOT NULL,
+  target_json TEXT NOT NULL,
+  definition_json TEXT NOT NULL,
+  status TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (profile_id) REFERENCES profiles(id),
+  FOREIGN KEY (proposal_id) REFERENCES learning_proposals(id)
+);
+
+CREATE TABLE IF NOT EXISTS eval_spec_locks (
+  profile_id TEXT NOT NULL,
+  eval_spec_id TEXT NOT NULL,
+  human_locked INTEGER NOT NULL,
+  reason TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (profile_id, eval_spec_id),
+  FOREIGN KEY (profile_id) REFERENCES profiles(id),
+  FOREIGN KEY (eval_spec_id) REFERENCES eval_specs(id)
+);
+
+CREATE TABLE IF NOT EXISTS replay_runs (
+  id TEXT PRIMARY KEY,
+  profile_id TEXT NOT NULL,
+  proposal_id TEXT,
+  eval_spec_id TEXT,
+  source_run_id TEXT,
+  task_attempt_id TEXT,
+  mode TEXT NOT NULL,
+  side_effect_mode TEXT NOT NULL,
+  status TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  ended_at TEXT,
+  input_ref TEXT,
+  output_ref TEXT,
+  result_json TEXT NOT NULL,
+  artifact_refs_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (profile_id) REFERENCES profiles(id),
+  FOREIGN KEY (proposal_id) REFERENCES learning_proposals(id),
+  FOREIGN KEY (eval_spec_id) REFERENCES eval_specs(id),
+  FOREIGN KEY (source_run_id) REFERENCES runs(id),
+  FOREIGN KEY (task_attempt_id) REFERENCES task_attempts(id)
+);
+
+CREATE TABLE IF NOT EXISTS eval_runs (
+  id TEXT PRIMARY KEY,
+  profile_id TEXT NOT NULL,
+  eval_spec_id TEXT NOT NULL,
+  proposal_id TEXT,
+  replay_run_id TEXT,
+  status TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  ended_at TEXT,
+  result_json TEXT NOT NULL,
+  artifact_refs_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (profile_id) REFERENCES profiles(id),
+  FOREIGN KEY (eval_spec_id) REFERENCES eval_specs(id),
+  FOREIGN KEY (proposal_id) REFERENCES learning_proposals(id),
+  FOREIGN KEY (replay_run_id) REFERENCES replay_runs(id)
+);
+
+CREATE TABLE IF NOT EXISTS replay_adapters (
+  id TEXT PRIMARY KEY,
+  profile_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  command_json TEXT NOT NULL,
+  output_dir TEXT,
+  default_mode TEXT NOT NULL,
+  default_side_effect_mode TEXT NOT NULL,
+  timeout_seconds INTEGER NOT NULL,
+  enabled INTEGER NOT NULL,
+  metadata_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (profile_id) REFERENCES profiles(id)
+);
+
+CREATE TABLE IF NOT EXISTS operator_adapters (
+  id TEXT PRIMARY KEY,
+  profile_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  operator_kind TEXT NOT NULL,
+  command_json TEXT NOT NULL,
+  output_dir TEXT,
+  timeout_seconds INTEGER NOT NULL,
+  enabled INTEGER NOT NULL,
+  metadata_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (profile_id) REFERENCES profiles(id)
+);
+
+CREATE TABLE IF NOT EXISTS operator_runs (
+  id TEXT PRIMARY KEY,
+  profile_id TEXT NOT NULL,
+  adapter_id TEXT,
+  operator_label TEXT NOT NULL,
+  operator_kind TEXT NOT NULL,
+  status TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  ended_at TEXT,
+  evidence_ref TEXT,
+  prompt_ref TEXT,
+  raw_output_ref TEXT,
+  proposal_id TEXT,
+  error TEXT,
+  metadata_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (profile_id) REFERENCES profiles(id),
+  FOREIGN KEY (adapter_id) REFERENCES operator_adapters(id),
+  FOREIGN KEY (proposal_id) REFERENCES learning_proposals(id)
+);
+
+CREATE TABLE IF NOT EXISTS patch_transactions (
+  id TEXT PRIMARY KEY,
+  profile_id TEXT NOT NULL,
+  proposal_id TEXT NOT NULL,
+  status TEXT NOT NULL,
+  patch_kind TEXT NOT NULL,
+  target_paths_json TEXT NOT NULL,
+  diff_ref TEXT,
+  command_plan_json TEXT NOT NULL,
+  side_effect_mode TEXT NOT NULL,
+  rollback_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (profile_id) REFERENCES profiles(id),
+  FOREIGN KEY (proposal_id) REFERENCES learning_proposals(id)
+);
+
+CREATE TABLE IF NOT EXISTS live_events (
+  id TEXT PRIMARY KEY,
+  profile_id TEXT NOT NULL,
+  source_id TEXT,
+  run_id TEXT,
+  span_id TEXT,
+  seq INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  content_preview TEXT,
+  content_ref TEXT,
+  at TEXT NOT NULL,
+  metadata_json TEXT NOT NULL,
+  FOREIGN KEY (profile_id) REFERENCES profiles(id)
+);
+
+CREATE TABLE IF NOT EXISTS mcp_log (
+  id TEXT PRIMARY KEY,
+  profile_id TEXT,
+  session_id TEXT NOT NULL,
+  seq INTEGER NOT NULL,
+  direction TEXT NOT NULL,
+  method TEXT,
+  tool_name TEXT,
+  params_preview TEXT,
+  params_ref TEXT,
+  result_preview TEXT,
+  result_ref TEXT,
+  is_error INTEGER NOT NULL DEFAULT 0,
+  error_code INTEGER,
+  duration_ms REAL,
+  client_id TEXT,
+  at TEXT NOT NULL,
+  metadata_json TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS annotations (
+  id TEXT PRIMARY KEY,
+  profile_id TEXT NOT NULL,
+  run_id TEXT,
+  span_id TEXT,
+  kind TEXT NOT NULL,
+  note TEXT,
+  source TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT,
+  metadata_json TEXT NOT NULL,
+  FOREIGN KEY (profile_id) REFERENCES profiles(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sources_profile_id ON sources(profile_id);
+CREATE INDEX IF NOT EXISTS idx_runs_profile_id ON runs(profile_id);
+CREATE INDEX IF NOT EXISTS idx_spans_run_id ON spans(run_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_profile_id ON tasks(profile_id);
+CREATE INDEX IF NOT EXISTS idx_task_attempts_task_id ON task_attempts(task_id);
+CREATE INDEX IF NOT EXISTS idx_handoffs_profile_id ON handoffs(profile_id);
+CREATE INDEX IF NOT EXISTS idx_timeline_events_profile_id ON timeline_events(profile_id);
+CREATE INDEX IF NOT EXISTS idx_learning_proposals_profile_id ON learning_proposals(profile_id);
+CREATE INDEX IF NOT EXISTS idx_skills_profile_id ON skills(profile_id);
+CREATE INDEX IF NOT EXISTS idx_context_delivery_rules_profile_id ON context_delivery_rules(profile_id);
+CREATE INDEX IF NOT EXISTS idx_context_delivery_rules_proposal_id ON context_delivery_rules(proposal_id);
+CREATE INDEX IF NOT EXISTS idx_skill_revisions_skill_id ON skill_revisions(skill_id);
+CREATE INDEX IF NOT EXISTS idx_skill_revisions_proposal_id ON skill_revisions(proposal_id);
+CREATE INDEX IF NOT EXISTS idx_context_delivery_rule_revisions_rule_id
+  ON context_delivery_rule_revisions(rule_id);
+CREATE INDEX IF NOT EXISTS idx_context_delivery_rule_revisions_proposal_id
+  ON context_delivery_rule_revisions(proposal_id);
+CREATE INDEX IF NOT EXISTS idx_payload_blobs_profile_id ON payload_blobs(profile_id);
+CREATE INDEX IF NOT EXISTS idx_payload_blobs_sha256 ON payload_blobs(sha256);
+CREATE INDEX IF NOT EXISTS idx_payload_blobs_retained_until ON payload_blobs(retained_until);
+CREATE INDEX IF NOT EXISTS idx_harness_target_locks_profile_id ON harness_target_locks(profile_id);
+CREATE INDEX IF NOT EXISTS idx_eval_specs_profile_id ON eval_specs(profile_id);
+CREATE INDEX IF NOT EXISTS idx_eval_spec_locks_profile_id ON eval_spec_locks(profile_id);
+CREATE INDEX IF NOT EXISTS idx_eval_runs_eval_spec_id ON eval_runs(eval_spec_id);
+CREATE INDEX IF NOT EXISTS idx_replay_runs_eval_spec_id ON replay_runs(eval_spec_id);
+CREATE INDEX IF NOT EXISTS idx_replay_adapters_profile_id ON replay_adapters(profile_id);
+CREATE INDEX IF NOT EXISTS idx_operator_adapters_profile_id ON operator_adapters(profile_id);
+CREATE INDEX IF NOT EXISTS idx_operator_runs_profile_id ON operator_runs(profile_id);
+CREATE INDEX IF NOT EXISTS idx_operator_runs_adapter_id ON operator_runs(adapter_id);
+CREATE INDEX IF NOT EXISTS idx_patch_transactions_profile_id ON patch_transactions(profile_id);
+CREATE INDEX IF NOT EXISTS idx_patch_transactions_proposal_id ON patch_transactions(proposal_id);
+CREATE INDEX IF NOT EXISTS idx_live_events_profile_id ON live_events(profile_id);
+CREATE INDEX IF NOT EXISTS idx_live_events_run_id ON live_events(run_id);
+CREATE INDEX IF NOT EXISTS idx_live_events_at ON live_events(at);
+CREATE INDEX IF NOT EXISTS idx_mcp_log_session_id ON mcp_log(session_id);
+CREATE INDEX IF NOT EXISTS idx_mcp_log_at ON mcp_log(at);
+CREATE INDEX IF NOT EXISTS idx_mcp_log_profile_id ON mcp_log(profile_id);
+CREATE INDEX IF NOT EXISTS idx_annotations_profile_id ON annotations(profile_id);
+CREATE INDEX IF NOT EXISTS idx_annotations_run_id ON annotations(run_id);
+
+CREATE TABLE IF NOT EXISTS issues (
+  id TEXT PRIMARY KEY,
+  profile_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  body TEXT,
+  section TEXT,
+  category TEXT,
+  severity TEXT,
+  status TEXT NOT NULL,
+  evidence_refs_json TEXT,
+  affected_agent_identity_ids_json TEXT,
+  affected_workflow_node_ids_json TEXT,
+  affected_task_ids_json TEXT,
+  affected_span_ids_json TEXT,
+  proposal_ids_json TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT,
+  FOREIGN KEY (profile_id) REFERENCES profiles(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_issues_profile_id ON issues(profile_id);
+CREATE INDEX IF NOT EXISTS idx_issues_status ON issues(status);
+CREATE INDEX IF NOT EXISTS idx_issues_section ON issues(section);
+"""
+
+
+# v24: per-span full-text search index (FTS5). Created separately from SCHEMA_SQL
+# because `CREATE VIRTUAL TABLE ... USING fts5` raises on sqlite builds without the
+# FTS5 module; we never want that to abort the whole schema script. ``span_id`` and
+# ``run_id`` are UNINDEXED (stored, returned, but not tokenized) so search_run can
+# filter by run and map matches back to spans. ``text`` carries the searchable body
+# (span name + JSON attributes + payload-blob previews), one document per span.
+SPANS_FTS_TABLE = "spans_fts"
+SPANS_FTS_SQL = (
+    "CREATE VIRTUAL TABLE IF NOT EXISTS spans_fts USING fts5("
+    "span_id UNINDEXED, run_id UNINDEXED, text, "
+    "tokenize='unicode61 remove_diacritics 2')"
+)
+
+
+TABLE_COLUMNS = {
+    "profiles": ["id", "name", "root_path", "status", "created_at", "updated_at"],
+    "sources": [
+        "id",
+        "profile_id",
+        "kind",
+        "display_name",
+        "status",
+        "adapter_version",
+        "config_json",
+        "capabilities_json",
+        "last_seen_at",
+    ],
+    "agent_identities": [
+        "id",
+        "profile_id",
+        "source_id",
+        "external_id",
+        "name",
+        "kind",
+        "role",
+        "model",
+        "workspace_path",
+        "metadata_json",
+    ],
+    "workflow_nodes": [
+        "id",
+        "profile_id",
+        "source_id",
+        "external_id",
+        "agent_identity_id",
+        "kind",
+        "name",
+        "metadata_json",
+    ],
+    "queues": ["id", "profile_id", "source_id", "external_id", "name", "kind", "metadata_json"],
+    "tasks": [
+        "id",
+        "profile_id",
+        "source_id",
+        "queue_id",
+        "external_id",
+        "title",
+        "body_ref",
+        "status",
+        "assignee_agent_identity_id",
+        "created_by_agent_identity_id",
+        "priority",
+        "workspace_kind",
+        "workspace_path",
+        "created_at",
+        "started_at",
+        "completed_at",
+        "metadata_json",
+    ],
+    "task_attempts": [
+        "id",
+        "task_id",
+        "run_id",
+        "agent_identity_id",
+        "status",
+        "outcome",
+        "claim_token_hash",
+        "worker_pid",
+        "started_at",
+        "ended_at",
+        "last_heartbeat_at",
+        "summary_ref",
+        "metadata_json",
+        "error_ref",
+    ],
+    "runs": [
+        "id",
+        "profile_id",
+        "source_id",
+        "external_id",
+        "root_span_id",
+        "agent_identity_id",
+        "task_attempt_id",
+        "status",
+        "started_at",
+        "ended_at",
+        "input_ref",
+        "output_ref",
+        "summary",
+        "metadata_json",
+    ],
+    "spans": [
+        "id",
+        "run_id",
+        "source_id",
+        "external_id",
+        "parent_span_id",
+        "workflow_node_id",
+        "agent_identity_id",
+        "kind",
+        "name",
+        "status",
+        "started_at",
+        "ended_at",
+        "input_ref",
+        "output_ref",
+        "usage_json",
+        "attributes_json",
+        "raw_ref",
+    ],
+    "handoffs": [
+        "id",
+        "profile_id",
+        "source_id",
+        "from_agent_identity_id",
+        "to_agent_identity_id",
+        "from_workflow_node_id",
+        "to_workflow_node_id",
+        "from_task_id",
+        "to_task_id",
+        "run_id",
+        "span_id",
+        "kind",
+        "reason_ref",
+        "payload_ref",
+        "created_at",
+        "metadata_json",
+    ],
+    "timeline_events": [
+        "id",
+        "profile_id",
+        "source_id",
+        "entity_type",
+        "entity_id",
+        "kind",
+        "at",
+        "agent_identity_id",
+        "payload_ref",
+        "metadata_json",
+    ],
+}
+
+
+FIXTURE_COLLECTIONS = [
+    ("sources", "sources"),
+    ("agent_identities", "agent_identities"),
+    ("workflow_nodes", "workflow_nodes"),
+    ("queues", "queues"),
+    ("tasks", "tasks"),
+    ("task_attempts", "task_attempts"),
+    ("runs", "runs"),
+    ("spans", "spans"),
+    ("handoffs", "handoffs"),
+    ("timeline_events", "timeline_events"),
+]
+
+INLINE_PAYLOAD_FIELDS = {
+    "tasks": {"body_ref": "body_payload"},
+    "task_attempts": {
+        "summary_ref": "summary_payload",
+        "error_ref": "error_payload",
+    },
+    "runs": {
+        "input_ref": "input_payload",
+        "output_ref": "output_payload",
+    },
+    "spans": {
+        "input_ref": "input_payload",
+        "output_ref": "output_payload",
+        "raw_ref": "raw_payload",
+    },
+    "handoffs": {
+        "reason_ref": "reason_payload",
+        "payload_ref": "payload",
+    },
+    "timeline_events": {"payload_ref": "payload"},
+}
+INLINE_PAYLOAD_WRAPPER_KEYS = {
+    "content",
+    "encoding",
+    "kind",
+    "media_type",
+    "metadata",
+    "redaction_mode",
+    "retained_until",
+    "retention_days",
+}
+
+
+STATUS_TABLES = [
+    "profiles",
+    "sources",
+    "agent_identities",
+    "workflow_nodes",
+    "queues",
+    "tasks",
+    "task_attempts",
+    "runs",
+    "spans",
+    "handoffs",
+    "timeline_events",
+    "learning_proposals",
+    "skills",
+    "context_delivery_rules",
+    "skill_revisions",
+    "context_delivery_rule_revisions",
+    "autonomy_policies",
+    "harness_target_locks",
+    "payload_blobs",
+    "eval_specs",
+    "eval_spec_locks",
+    "eval_runs",
+    "replay_runs",
+    "replay_adapters",
+    "operator_adapters",
+    "operator_runs",
+    "patch_transactions",
+    "issues",
+]
+
+
+def default_db_path() -> Path:
+    return Path.home() / ".kyoko" / "kyoko.db"
+
+
+def connect(db_path: Path) -> sqlite3.Connection:
+    connection = sqlite3.connect(str(db_path))
+    connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA foreign_keys = ON")
+    connection.execute("PRAGMA busy_timeout = 5000")
+    return connection
+
+
+def initialize_database(db_path: Path) -> None:
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    with connect(db_path) as connection:
+        existing_versions = _schema_migration_versions(connection)
+        existing_user_version = _database_user_version(connection)
+        existing_version = max((existing_user_version, *existing_versions))
+        if existing_version > SCHEMA_VERSION:
+            raise StorageError(f"database_schema_too_new:{existing_version}:supported:{SCHEMA_VERSION}")
+        connection.executescript(SCHEMA_SQL)
+        _ensure_column(connection, "skills", "human_lock_reason", "human_lock_reason TEXT")
+        _ensure_column(
+            connection,
+            "context_delivery_rules",
+            "human_lock_reason",
+            "human_lock_reason TEXT",
+        )
+        # v21 (SCOPE simplification): redaction collapses to a single global
+        # "redact on export" default; the per-profile policy table and the audit
+        # ledger are removed. Drop them for DBs created before v21.
+        connection.execute("DROP TABLE IF EXISTS redaction_audit_events")
+        connection.execute("DROP TABLE IF EXISTS redaction_policies")
+        # v22 (SCOPE simplification): retention collapses to a manual
+        # --older-than-days prune; the per-profile policy table is removed.
+        connection.execute("DROP TABLE IF EXISTS retention_policies")
+        # v24: per-span FTS5 search index. Additive and best-effort — if this sqlite
+        # build lacks FTS5, search_run falls back to the linear scan and nothing here
+        # raises. For pre-v24 DBs (index absent/empty), backfill from existing spans.
+        if fts5_available(connection):
+            connection.execute(SPANS_FTS_SQL)
+            _backfill_spans_fts(connection)
+        connection.executemany(
+            "INSERT OR IGNORE INTO schema_migrations(version) VALUES (?)",
+            [(version,) for version in range(1, SCHEMA_VERSION + 1)],
+        )
+        connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+
+
+def ingest_source_fixture(db_path: Path, fixture_path: Path) -> IngestReport:
+    return ingest_source_payload(
+        db_path=db_path,
+        fixture=_load_json(fixture_path),
+        source_label=str(fixture_path),
+    )
+
+
+def ingest_source_json(db_path: Path, payload_path: Path) -> IngestReport:
+    return ingest_source_payload(
+        db_path=db_path,
+        fixture=_load_json(payload_path),
+        source_label=str(payload_path),
+    )
+
+
+def ingest_source_payload(
+    *,
+    db_path: Path,
+    fixture: dict[str, Any],
+    source_label: str,
+) -> IngestReport:
+    initialize_database(db_path)
+    profile = fixture.get("profile")
+    if not isinstance(profile, dict):
+        raise StorageError(f"{source_label}: missing profile object")
+    profile_id = profile.get("id")
+    if not isinstance(profile_id, str):
+        raise StorageError(f"{source_label}: profile id must be a string")
+
+    with connect(db_path) as connection:
+        _upsert_row(connection, "profiles", profile)
+        _ensure_default_autonomy_policy(connection, str(profile["id"]))
+        inserted_counts = {"profiles": 1}
+        fixture, materialized_blob_count = _materialize_inline_payloads(
+            connection=connection,
+            db_path=db_path,
+            fixture=fixture,
+            profile_id=profile_id,
+            source_label=source_label,
+        )
+        if materialized_blob_count:
+            inserted_counts["payload_blobs"] = materialized_blob_count
+
+        # Runs and task_attempts reference each other in the canonical model.
+        # Insert task attempts with no run link first, insert runs, then update
+        # the task attempts with their run ids.
+        deferred_task_attempt_runs = {
+            row["id"]: row.get("run_id")
+            for row in fixture.get("task_attempts", [])
+            if isinstance(row, dict)
+        }
+
+        for collection_name, table in FIXTURE_COLLECTIONS:
+            rows = fixture.get(collection_name, [])
+            if not isinstance(rows, list):
+                raise StorageError(f"{source_label}: {collection_name} must be a list")
+            if table == "task_attempts":
+                rows = [{**row, "run_id": None} for row in rows if isinstance(row, dict)]
+            for row in rows:
+                if not isinstance(row, dict):
+                    raise StorageError(f"{source_label}: {collection_name} contains non-object row")
+                _upsert_row(connection, table, row)
+                if table == "spans" and isinstance(row.get("id"), str):
+                    # Write-through the per-span FTS index; payload-blob previews
+                    # this span references were materialised earlier in this txn.
+                    index_span_fts(connection, str(row["id"]))
+            inserted_counts[table] = len(rows)
+
+        for attempt_id, run_id in deferred_task_attempt_runs.items():
+            if run_id is not None:
+                connection.execute(
+                    "UPDATE task_attempts SET run_id = ? WHERE id = ?",
+                    (run_id, attempt_id),
+                )
+    return IngestReport(profile_id=profile_id, inserted_counts=inserted_counts)
+
+
+def ensure_default_autonomy_policy(db_path: Path, profile_id: str) -> None:
+    initialize_database(db_path)
+    with connect(db_path) as connection:
+        _ensure_default_autonomy_policy(connection, profile_id)
+
+
+def get_database_status(db_path: Path) -> DatabaseStatus:
+    if not db_path.exists():
+        return DatabaseStatus(
+            db_path=db_path,
+            initialized=False,
+            schema_version=None,
+            counts={table: 0 for table in STATUS_TABLES},
+            migration_versions=(),
+        )
+
+    with connect(db_path) as connection:
+        try:
+            version_row = connection.execute(
+                "SELECT MAX(version) AS version FROM schema_migrations"
+            ).fetchone()
+        except sqlite3.OperationalError:
+            return DatabaseStatus(
+                db_path=db_path,
+                initialized=False,
+                schema_version=None,
+                counts={table: 0 for table in STATUS_TABLES},
+                migration_versions=(),
+            )
+        migration_versions = _schema_migration_versions(connection)
+
+        counts = {}
+        for table in STATUS_TABLES:
+            counts[table] = _table_count(connection, table)
+
+    version = version_row["version"] if version_row is not None else None
+    return DatabaseStatus(
+        db_path=db_path,
+        initialized=version is not None,
+        schema_version=version,
+        counts=counts,
+        migration_versions=migration_versions,
+    )
+
+
+def checkpoint_database(db_path: Path, *, mode: str = "PASSIVE") -> WalCheckpointReport:
+    selected_mode = mode.upper()
+    if selected_mode not in {"PASSIVE", "FULL", "RESTART", "TRUNCATE"}:
+        raise StorageError(f"unsupported_wal_checkpoint_mode:{mode}")
+    initialize_database(db_path)
+    wal_path = Path(f"{db_path}-wal")
+    wal_size_before = _file_size(wal_path)
+    with connect(db_path) as connection:
+        row = connection.execute(f"PRAGMA wal_checkpoint({selected_mode})").fetchone()
+    wal_size_after = _file_size(wal_path)
+    busy = int(row[0]) if row is not None else 0
+    log_frames = int(row[1]) if row is not None else 0
+    checkpointed_frames = int(row[2]) if row is not None else 0
+    return WalCheckpointReport(
+        db_path=db_path,
+        wal_path=wal_path,
+        mode=selected_mode,
+        busy=busy,
+        log_frames=log_frames,
+        checkpointed_frames=checkpointed_frames,
+        wal_size_before=wal_size_before,
+        wal_size_after=wal_size_after,
+    )
+
+
+def status_to_json(status: DatabaseStatus) -> dict[str, Any]:
+    return {
+        "db_path": str(status.db_path),
+        "initialized": status.initialized,
+        "schema_version": status.schema_version,
+        "migration_versions": list(status.migration_versions),
+        "counts": status.counts,
+    }
+
+
+def _load_json(path: Path) -> Any:
+    try:
+        return json.loads(path.read_text())
+    except FileNotFoundError as exc:
+        raise StorageError(f"{path}: file not found") from exc
+    except json.JSONDecodeError as exc:
+        raise StorageError(f"{path}: invalid JSON: {exc}") from exc
+
+
+def _materialize_inline_payloads(
+    *,
+    connection: sqlite3.Connection,
+    db_path: Path,
+    fixture: dict[str, Any],
+    profile_id: str,
+    source_label: str,
+) -> tuple[dict[str, Any], int]:
+    materialized_fixture = dict(fixture)
+    materialized_count = 0
+    for collection_name, ref_fields in INLINE_PAYLOAD_FIELDS.items():
+        rows = fixture.get(collection_name, [])
+        if not isinstance(rows, list):
+            continue
+        next_rows = []
+        changed = False
+        for row in rows:
+            if not isinstance(row, dict):
+                next_rows.append(row)
+                continue
+            next_row = dict(row)
+            row_id = str(next_row.get("id") or "unknown")
+            for ref_field, payload_field in ref_fields.items():
+                if payload_field not in next_row or next_row.get(payload_field) is None:
+                    continue
+                if next_row.get(ref_field):
+                    raise StorageError(
+                        f"{source_label}: {collection_name}.{row_id}.{payload_field}_conflicts_with_{ref_field}"
+                    )
+                blob_id = _put_inline_payload_blob(
+                    connection=connection,
+                    db_path=db_path,
+                    profile_id=profile_id,
+                    collection_name=collection_name,
+                    row_id=row_id,
+                    ref_field=ref_field,
+                    payload_field=payload_field,
+                    payload=next_row[payload_field],
+                    source_label=source_label,
+                )
+                next_row[ref_field] = blob_id
+                changed = True
+                materialized_count += 1
+            next_rows.append(next_row)
+        if changed:
+            materialized_fixture[collection_name] = next_rows
+    return materialized_fixture, materialized_count
+
+
+def _put_inline_payload_blob(
+    *,
+    connection: sqlite3.Connection,
+    db_path: Path,
+    profile_id: str,
+    collection_name: str,
+    row_id: str,
+    ref_field: str,
+    payload_field: str,
+    payload: Any,
+    source_label: str,
+) -> str:
+    blob = _inline_payload_blob_input(
+        payload,
+        default_kind=f"source_{collection_name}_{ref_field.removesuffix('_ref')}",
+    )
+    sha256 = hashlib.sha256(blob["data"]).hexdigest()
+    blob_id = f"blob_sha256_{sha256[:32]}"
+    blob_path = db_path.parent / "blobs" / sha256[:2] / sha256
+    blob_path.parent.mkdir(parents=True, exist_ok=True)
+    if not blob_path.exists():
+        blob_path.write_bytes(blob["data"])
+
+    now = utc_now()
+    occurrence = {
+        "source_label": source_label,
+        "collection": collection_name,
+        "row_id": row_id,
+        "ref_field": ref_field,
+        "payload_field": payload_field,
+    }
+    existing_metadata = _existing_blob_metadata(connection, blob_id=blob_id)
+    metadata = {
+        **existing_metadata,
+        **blob["metadata"],
+        "inline_payload_occurrences": _inline_payload_occurrences(
+            existing_metadata,
+            occurrence=occurrence,
+        ),
+    }
+    connection.execute(
+        """
+        INSERT INTO payload_blobs (
+          id,
+          profile_id,
+          kind,
+          media_type,
+          sha256,
+          size_bytes,
+          path,
+          preview,
+          redaction_mode,
+          retained_until,
+          metadata_json,
+          created_at,
+          updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          profile_id = COALESCE(excluded.profile_id, payload_blobs.profile_id),
+          kind = payload_blobs.kind,
+          media_type = excluded.media_type,
+          size_bytes = excluded.size_bytes,
+          path = excluded.path,
+          preview = excluded.preview,
+          redaction_mode = excluded.redaction_mode,
+          retained_until = COALESCE(excluded.retained_until, payload_blobs.retained_until),
+          metadata_json = excluded.metadata_json,
+          updated_at = excluded.updated_at
+        """,
+        (
+            blob_id,
+            profile_id,
+            blob["kind"],
+            blob["media_type"],
+            sha256,
+            len(blob["data"]),
+            str(blob_path),
+            _blob_preview(blob["data"], blob["media_type"]),
+            blob["redaction_mode"],
+            blob["retained_until"],
+            _db_value(metadata),
+            now,
+            now,
+        ),
+    )
+    return blob_id
+
+
+def _existing_blob_metadata(connection: sqlite3.Connection, *, blob_id: str) -> dict[str, Any]:
+    row = connection.execute(
+        "SELECT metadata_json FROM payload_blobs WHERE id = ?",
+        (blob_id,),
+    ).fetchone()
+    if row is None:
+        return {}
+    try:
+        metadata = json.loads(str(row["metadata_json"] or "{}"))
+    except json.JSONDecodeError:
+        return {}
+    return metadata if isinstance(metadata, dict) else {}
+
+
+def _inline_payload_occurrences(
+    metadata: dict[str, Any],
+    *,
+    occurrence: dict[str, str],
+) -> list[dict[str, str]]:
+    occurrences: list[dict[str, str]] = []
+    existing = metadata.get("inline_payload_occurrences")
+    if isinstance(existing, list):
+        occurrences = [
+            item
+            for item in existing
+            if isinstance(item, dict) and all(isinstance(key, str) for key in item.keys())
+        ]
+    if occurrence not in occurrences:
+        occurrences.append(occurrence)
+    return occurrences
+
+
+def _inline_payload_blob_input(payload: Any, *, default_kind: str) -> dict[str, Any]:
+    wrapper = _inline_payload_wrapper(payload)
+    content = wrapper["content"]
+    encoding = wrapper["encoding"]
+    media_type = wrapper["media_type"] or _default_media_type(content, encoding)
+    data = _inline_payload_bytes(content, encoding=encoding)
+    return {
+        "data": data,
+        "kind": wrapper["kind"] or default_kind,
+        "media_type": media_type,
+        "redaction_mode": wrapper["redaction_mode"] or "redacted",
+        "retained_until": wrapper["retained_until"],
+        "metadata": wrapper["metadata"],
+    }
+
+
+def _inline_payload_wrapper(payload: Any) -> dict[str, Any]:
+    wrapper_control_keys = INLINE_PAYLOAD_WRAPPER_KEYS - {"content"}
+    if isinstance(payload, dict) and "content" in payload and wrapper_control_keys.intersection(payload):
+        metadata = payload.get("metadata")
+        if metadata is not None and not isinstance(metadata, dict):
+            raise StorageError("inline_payload_metadata_must_be_object")
+        retained_until = payload.get("retained_until")
+        retention_days = payload.get("retention_days")
+        if retained_until is not None and not isinstance(retained_until, str):
+            raise StorageError("inline_payload_retained_until_must_be_string")
+        if retention_days is not None:
+            if isinstance(retention_days, bool) or not isinstance(retention_days, int) or retention_days < 0:
+                raise StorageError("inline_payload_retention_days_must_be_non_negative_integer")
+            retained_until = _format_utc(datetime.now(timezone.utc) + timedelta(days=retention_days))
+        return {
+            "content": payload["content"],
+            "encoding": _optional_payload_string(payload.get("encoding"), "encoding"),
+            "kind": _optional_payload_string(payload.get("kind"), "kind"),
+            "media_type": _optional_payload_string(payload.get("media_type"), "media_type"),
+            "redaction_mode": _optional_payload_string(payload.get("redaction_mode"), "redaction_mode"),
+            "retained_until": retained_until,
+            "metadata": metadata or {},
+        }
+    return {
+        "content": payload,
+        "encoding": None,
+        "kind": None,
+        "media_type": None,
+        "redaction_mode": None,
+        "retained_until": None,
+        "metadata": {},
+    }
+
+
+def _inline_payload_bytes(content: Any, *, encoding: Optional[str]) -> bytes:
+    if encoding is None:
+        if isinstance(content, str):
+            return content.encode("utf-8")
+        return json.dumps(content, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    normalized = encoding.strip().lower()
+    if normalized == "text":
+        if not isinstance(content, str):
+            raise StorageError("inline_payload_text_content_must_be_string")
+        return content.encode("utf-8")
+    if normalized == "json":
+        return json.dumps(content, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    if normalized == "base64":
+        if not isinstance(content, str):
+            raise StorageError("inline_payload_base64_content_must_be_string")
+        try:
+            return base64.b64decode(content.encode("ascii"), validate=True)
+        except Exception as exc:
+            raise StorageError("inline_payload_base64_invalid") from exc
+    raise StorageError(f"inline_payload_encoding_unsupported:{encoding}")
+
+
+def _default_media_type(content: Any, encoding: Optional[str]) -> str:
+    if encoding is not None and encoding.strip().lower() == "base64":
+        return "application/octet-stream"
+    if isinstance(content, str):
+        return "text/plain"
+    return "application/json"
+
+
+def _optional_payload_string(value: Any, field_name: str) -> Optional[str]:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value:
+        raise StorageError(f"inline_payload_{field_name}_must_be_string")
+    return value
+
+
+def _blob_preview(data: bytes, media_type: str) -> str:
+    if media_type.startswith("text/") or media_type == "application/json":
+        return data.decode("utf-8", errors="replace")[:500]
+    return ""
+
+
+def _format_utc(value: datetime) -> str:
+    return value.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _upsert_row(connection: sqlite3.Connection, table: str, row: dict[str, Any]) -> None:
+    columns = TABLE_COLUMNS[table]
+    missing = [column for column in columns if column not in row]
+    if missing:
+        raise StorageError(f"{table}: row {row.get('id')} missing columns {missing}")
+
+    placeholders = ", ".join("?" for _ in columns)
+    column_list = ", ".join(columns)
+    update_list = ", ".join(f"{column} = excluded.{column}" for column in columns if column != "id")
+    values = [_db_value(row[column]) for column in columns]
+
+    connection.execute(
+        f"""
+        INSERT INTO {table} ({column_list})
+        VALUES ({placeholders})
+        ON CONFLICT(id) DO UPDATE SET {update_list}
+        """,
+        values,
+    )
+
+
+def _db_value(value: Any) -> Any:
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, sort_keys=True, separators=(",", ":"))
+    return value
+
+
+def _table_count(connection: sqlite3.Connection, table: str) -> int:
+    try:
+        row = connection.execute(f"SELECT COUNT(*) AS count FROM {table}").fetchone()
+    except sqlite3.OperationalError:
+        return 0
+    return int(row["count"])
+
+
+def _schema_migration_versions(connection: sqlite3.Connection) -> tuple[int, ...]:
+    try:
+        rows = connection.execute(
+            "SELECT version FROM schema_migrations ORDER BY version ASC"
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return ()
+    return tuple(int(row["version"]) for row in rows)
+
+
+def _ensure_column(connection: sqlite3.Connection, table: str, column: str, definition: str) -> None:
+    columns = {
+        str(row["name"])
+        for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
+    }
+    if column not in columns:
+        connection.execute(f"ALTER TABLE {table} ADD COLUMN {definition}")
+
+
+def _database_user_version(connection: sqlite3.Connection) -> int:
+    try:
+        row = connection.execute("PRAGMA user_version").fetchone()
+    except sqlite3.OperationalError:
+        return 0
+    if row is None:
+        return 0
+    return int(row[0])
+
+
+def _file_size(path: Path) -> int:
+    try:
+        return path.stat().st_size
+    except FileNotFoundError:
+        return 0
+
+
+def _ensure_default_autonomy_policy(connection: sqlite3.Connection, profile_id: str) -> None:
+    now = utc_now()
+    connection.execute(
+        """
+        INSERT OR IGNORE INTO autonomy_policies (
+          profile_id,
+          context_mode,
+          harness_mode,
+          allow_skillbook_write,
+          allow_eval_write,
+          allow_profile_config_write,
+          allow_repo_patch,
+          allow_replay_server_patch,
+          allowed_paths_json,
+          protected_paths_json,
+          dirty_worktree_policy,
+          required_eval_level_context,
+          required_eval_level_harness,
+          rollback_on_regression,
+          updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            profile_id,
+            "propose",
+            "propose",
+            1,
+            1,
+            0,
+            0,
+            0,
+            json.dumps(["agents/**", "prompts/**", "evals/**", "tests/**", ".kyoko/**"]),
+            json.dumps(
+                [
+                    ".env",
+                    ".env.*",
+                    "secrets/**",
+                    "**/secrets/**",
+                    "node_modules/**",
+                    ".git/**",
+                    "*.pem",
+                    "*.key",
+                    "*.p12",
+                ]
+            ),
+            "block",
+            "L1_repeated",
+            "L2_regression",
+            1,
+            now,
+        ),
+    )
+
+
+_FTS5_SUPPORTED: Optional[bool] = None
+
+
+def fts5_available(connection: sqlite3.Connection) -> bool:
+    """Return True if this sqlite build can create FTS5 virtual tables.
+
+    Cached process-wide: FTS5 is a compile-time module, so availability never
+    changes across connections in one interpreter. When unavailable, callers fall
+    back to the linear scan and never create ``spans_fts``.
+    """
+
+    global _FTS5_SUPPORTED
+    if _FTS5_SUPPORTED is None:
+        try:
+            connection.execute(
+                "CREATE VIRTUAL TABLE IF NOT EXISTS temp._kyoko_fts5_probe USING fts5(x)"
+            )
+            connection.execute("DROP TABLE IF EXISTS temp._kyoko_fts5_probe")
+            _FTS5_SUPPORTED = True
+        except sqlite3.OperationalError:
+            _FTS5_SUPPORTED = False
+    return bool(_FTS5_SUPPORTED)
+
+
+def spans_fts_ready(connection: sqlite3.Connection) -> bool:
+    """True when the ``spans_fts`` index exists and is usable for this connection."""
+
+    if not fts5_available(connection):
+        return False
+    row = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+        (SPANS_FTS_TABLE,),
+    ).fetchone()
+    return row is not None
+
+
+def _span_fts_text(connection: sqlite3.Connection, span_row: Any) -> str:
+    """Build the searchable document for one span: name + attributes + previews.
+
+    Sections are newline-joined so substring/snippet behaviour downstream stays
+    natural and tokenisation never merges adjacent fields.
+    """
+
+    parts: list[str] = []
+    name = span_row["name"]
+    if name:
+        parts.append(str(name))
+    attributes_json = span_row["attributes_json"]
+    if attributes_json:
+        # Re-serialise canonically (sorted keys, no separators stripping) so the FTS
+        # document matches what search_run's attribute scope would render.
+        try:
+            attributes = json.loads(attributes_json)
+        except (json.JSONDecodeError, TypeError):
+            attributes = None
+        if attributes:
+            parts.append(json.dumps(attributes, ensure_ascii=False, sort_keys=True))
+    for ref_field in ("input_ref", "output_ref"):
+        ref = span_row[ref_field]
+        if not ref:
+            continue
+        blob = connection.execute(
+            "SELECT preview FROM payload_blobs WHERE id = ?", (ref,)
+        ).fetchone()
+        if blob is not None and blob["preview"]:
+            parts.append(str(blob["preview"]))
+    return "\n".join(parts)
+
+
+def index_span_fts(connection: sqlite3.Connection, span_id: str) -> None:
+    """(Re)index a single span in ``spans_fts``. No-op if FTS5 is unavailable.
+
+    Write-through: deletes any prior rows for the span then inserts the current
+    document, so re-ingest/upsert keeps the index consistent.
+    """
+
+    if not spans_fts_ready(connection):
+        return
+    span_row = connection.execute(
+        "SELECT id, run_id, name, attributes_json, input_ref, output_ref "
+        "FROM spans WHERE id = ?",
+        (span_id,),
+    ).fetchone()
+    if span_row is None:
+        return
+    connection.execute("DELETE FROM spans_fts WHERE span_id = ?", (span_id,))
+    text = _span_fts_text(connection, span_row)
+    connection.execute(
+        "INSERT INTO spans_fts (span_id, run_id, text) VALUES (?, ?, ?)",
+        (str(span_row["id"]), str(span_row["run_id"]), text),
+    )
+
+
+def _backfill_spans_fts(connection: sqlite3.Connection) -> None:
+    """Populate ``spans_fts`` from existing spans for DBs created before v24.
+
+    Runs only when the index is empty but spans exist, so re-initialising an
+    already-indexed DB is cheap.
+    """
+
+    if not spans_fts_ready(connection):
+        return
+    indexed = connection.execute("SELECT COUNT(*) FROM spans_fts").fetchone()[0]
+    span_count = connection.execute("SELECT COUNT(*) FROM spans").fetchone()[0]
+    if indexed or not span_count:
+        return
+    for row in connection.execute("SELECT id FROM spans").fetchall():
+        index_span_fts(connection, str(row["id"]))
+
+
+def utc_now() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")

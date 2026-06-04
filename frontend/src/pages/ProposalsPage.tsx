@@ -1,0 +1,172 @@
+import { useEffect, useState } from "react";
+import { GitPullRequestArrow } from "lucide-react";
+import { api } from "@/lib/api";
+import type { Proposal } from "@/lib/types";
+import { ago } from "@/lib/format";
+import { useApi } from "@/hooks/useApi";
+import { Badge, statusTone } from "@/components/ui/badge";
+import { Card, CardHeader, CardTitle, CardBody } from "@/components/ui/card";
+import { Spinner, Empty, ErrorNote } from "@/components/ui/misc";
+import { JsonView } from "@/components/JsonView";
+import { cn } from "@/lib/utils";
+
+// Learning proposals are Kyoko's gated change suggestions (context/skill/harness
+// edits). This dashboard only VIEWS them — applying happens server-side behind the
+// eval/replay gate and the profile autonomy policy. No apply controls here.
+
+function pct(v: number | null | undefined): string | null {
+  if (v === null || v === undefined) return null;
+  return `${Math.round(v * 100)}%`;
+}
+
+function ConfidenceRow({ label, value }: { label: string; value: number | null | undefined }) {
+  const p = pct(value);
+  if (p === null) return null;
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="font-mono text-xs text-foreground/90">{p}</span>
+    </div>
+  );
+}
+
+function ProposalDetail({ id }: { id: string }) {
+  const { data, error, loading } = useApi<Record<string, unknown>>(() => api.proposalDetail(id), [id]);
+
+  if (loading)
+    return (
+      <div className="flex h-full items-center justify-center">
+        <Spinner />
+      </div>
+    );
+  if (error) return <ErrorNote error={error} />;
+  if (!data) return <Empty title="Proposal not found" />;
+
+  const title = String(data.title ?? id);
+  const state = (data.state as string | undefined) ?? null;
+  const sectionLabel = (data.section_label as string | undefined) ?? (data.section as string | undefined) ?? null;
+  const summary = (data.summary as string | undefined) ?? null;
+  const sectionDescription = (data.section_description as string | undefined) ?? null;
+  const kyokoConfidence = data.kyoko_confidence as number | null | undefined;
+  const operatorConfidence = data.operator_confidence as number | null | undefined;
+  const confidence = data.confidence as number | null | undefined;
+  const hasConfidence =
+    pct(kyokoConfidence) !== null || pct(operatorConfidence) !== null || pct(confidence) !== null;
+
+  return (
+    <div className="space-y-3 p-4">
+      <div className="space-y-2">
+        <h2 className="text-md font-semibold text-foreground">{title}</h2>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {state && <Badge tone={statusTone(state)}>{state}</Badge>}
+          {sectionLabel && <Badge tone="neutral">{sectionLabel}</Badge>}
+        </div>
+        {sectionDescription && (
+          <p className="text-xs text-muted-foreground/80">{sectionDescription}</p>
+        )}
+      </div>
+
+      {summary && <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground/85">{summary}</p>}
+
+      {hasConfidence && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Confidence</CardTitle>
+          </CardHeader>
+          <CardBody className="space-y-1.5">
+            <ConfidenceRow label="Kyoko" value={kyokoConfidence} />
+            <ConfidenceRow label="Operator" value={operatorConfidence} />
+            <ConfidenceRow label="Overall" value={confidence} />
+          </CardBody>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Full proposal</CardTitle>
+        </CardHeader>
+        <CardBody>
+          <JsonView data={data} />
+        </CardBody>
+      </Card>
+    </div>
+  );
+}
+
+export function ProposalsPage() {
+  const { data, error, loading } = useApi<Proposal[]>(() => api.proposals(), []);
+  const [selected, setSelected] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (data && data.length > 0 && selected === null) {
+      setSelected(data[0].id);
+    }
+  }, [data, selected]);
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex h-12 shrink-0 items-center justify-between border-b border-white/[0.06] px-4">
+        <h1 className="text-md font-semibold">Proposals</h1>
+        {data && <span className="text-xs text-muted-foreground">{data.length} total</span>}
+      </div>
+      <div className="flex min-h-0 flex-1">
+        {loading ? (
+          <div className="flex flex-1 items-center justify-center">
+            <Spinner />
+          </div>
+        ) : error ? (
+          <div className="flex-1 overflow-auto">
+            <ErrorNote error={error} />
+          </div>
+        ) : !data || data.length === 0 ? (
+          <div className="flex-1">
+            <Empty
+              title="No learning proposals yet"
+              hint="Proposals come from operator, ACE, and import runs once they surface a gated change."
+              icon={<GitPullRequestArrow className="h-6 w-6" />}
+            />
+          </div>
+        ) : (
+          <>
+            <div className="w-80 shrink-0 overflow-auto border-r border-white/[0.06] p-2">
+              <div className="space-y-1.5">
+                {data.map((p) => {
+                  const sectionLabel = p.section_label ?? p.section;
+                  const conf = pct(p.confidence);
+                  const active = p.id === selected;
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => setSelected(p.id)}
+                      className={cn(
+                        "w-full rounded-md border p-2.5 text-left transition-colors",
+                        active
+                          ? "border-primary/30 bg-white/[0.05]"
+                          : "border-white/[0.06] hover:bg-white/[0.03]",
+                      )}
+                    >
+                      <div className="mb-1.5 text-sm font-medium text-foreground/90">{p.title}</div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Badge tone={statusTone(p.state)}>{p.state}</Badge>
+                        {sectionLabel && <Badge tone="neutral">{sectionLabel}</Badge>}
+                        {conf && <span className="font-mono text-label text-muted-foreground">{conf}</span>}
+                        <span className="ml-auto text-label text-muted-foreground/70">{ago(p.created_at)}</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="min-w-0 flex-1 overflow-auto">
+              {selected ? (
+                <ProposalDetail id={selected} />
+              ) : (
+                <Empty title="Select a proposal" />
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}

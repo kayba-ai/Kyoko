@@ -1,0 +1,78 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Dark, Workshop-inspired theme. Near-black surfaces, muted gray text, a single
+   blue accent, with llm/tool/status hues for span typing. */
+@layer base {
+  :root {
+    --background: 0 0% 4%;
+    --foreground: 210 8% 80%;
+    --card: 0 0% 7%;
+    --card-foreground: 210 8% 82%;
+    --muted: 0 0% 12%;
+    --muted-foreground: 210 6% 52%;
+    --accent: 0 0% 100%;
+    --accent-foreground: 210 10% 88%;
+    --primary: 216 85% 68%;
+    --primary-foreground: 0 0% 100%;
+    --border: 0 0% 100%;
+    --input: 0 0% 100%;
+    --ring: 216 85% 68%;
+    --radius: 0.5rem;
+
+    --llm: 216 85% 68%;
+    --tool: 38 92% 60%;
+    --ok: 142 60% 50%;
+    --warn: 38 92% 60%;
+    --danger: 0 72% 60%;
+  }
+
+  html {
+    color-scheme: dark;
+  }
+
+  * {
+    border-color: hsl(var(--border) / 0.08);
+  }
+
+  body {
+    margin: 0;
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: theme("fontFamily.sans");
+    font-size: 13px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  #root {
+    height: 100vh;
+  }
+
+  ::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(0 0% 100% / 0.1);
+    border-radius: 6px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(0 0% 100% / 0.18);
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@layer components {
+  .surface {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border) / 0.08);
+    border-radius: var(--radius);
+  }
+  .hairline {
+    border-color: hsl(var(--border) / 0.08);
+  }
+}

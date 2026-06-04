@@ -1,0 +1,39 @@
+{
+  "name": "@kyoko/sdk",
+  "version": "0.1.0",
+  "description": "Dependency-free TypeScript SDK for recording agent telemetry into a local Kyoko server.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "keywords": [
+    "kyoko",
+    "agents",
+    "telemetry",
+    "tracing",
+    "local-first"
+  ],
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

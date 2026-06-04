@@ -1,0 +1,65 @@
+{
+  "schema_version": "kyoko.learning_proposal.v1",
+  "id": "proposal_harness_timeout_eval_001",
+  "profile_id": "profile_news_research_001",
+  "producer": {
+    "kind": "operator_agent",
+    "name": "fixture-operator",
+    "agent_identity_id": "agent_operator_codex_001",
+    "session_id": "operator_session_harness_001"
+  },
+  "state": "pending",
+  "section": "harness",
+  "title": "Add a replay-backed timeout regression harness",
+  "summary": "Create a harness plan for a deterministic timeout replay eval before allowing autonomous harness writes.",
+  "confidence": 0.72,
+  "evidence_refs": [
+    {
+      "entity_type": "span",
+      "entity_id": "span_fetch_timeout_001",
+      "role": "failure",
+      "note": "The researcher source fetch timed out and caused the run to fail."
+    },
+    {
+      "entity_type": "handoff",
+      "entity_id": "handoff_research_to_writer_001",
+      "role": "context",
+      "note": "The failed research result was handed to the writer without enough recovery metadata."
+    }
+  ],
+  "problem": {
+    "issue": "The workflow has no deterministic regression harness for source-fetch timeouts.",
+    "severity": "medium",
+    "root_cause": "Timeout recovery is only represented as prompt guidance, so future harness changes could regress without a replay-backed check.",
+    "target": {
+      "entity_type": "file",
+      "entity_id": "file_evals_news_timeout_replay",
+      "path": "evals/news_research_timeout_replay.py"
+    }
+  },
+  "insight": "Before enabling autonomous harness writes, require a local replay harness that proves the timeout failure fails before the fix and passes after the fix.",
+  "proposed_changes": [
+    {
+      "type": "harness_patch",
+      "patch_kind": "command_plan",
+      "target_paths": [
+        "evals/news_research_timeout_replay.py"
+      ],
+      "command_plan": [
+        "Create a deterministic replay fixture for span_fetch_timeout_001.",
+        "Assert the original run fails on timeout and the replay run records a recovered source fetch.",
+        "Wire the command into Kyoko eval/replay gates before autonomous harness apply."
+      ],
+      "side_effect_mode": "sandboxed_filesystem",
+      "rollback_required": true
+    }
+  ],
+  "gate_expectations": {
+    "requires_human_review": true,
+    "requires_eval_level": "L2_regression",
+    "requires_replay": true,
+    "allowed_autonomy_section": "harness",
+    "notes": "This proposal prepares a reviewable harness patch transaction only; it does not write repository files."
+  },
+  "created_at": "2026-05-31T00:00:00Z"
+}

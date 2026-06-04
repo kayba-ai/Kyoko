@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The project baselines Python >=3.12 (setup.cfg python_requires + doctor
+        # version gate). Older interpreters are intentionally unsupported.
+        python-version:
+          - "3.12"
+          - "3.13"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install package
+        run: python -m pip install --upgrade pip && python -m pip install -e .
+
+      - name: Validate gate artifacts
+        run: python scripts/validate_gate_artifacts.py
+
+      - name: Run tests
+        run: python -m unittest discover -s tests
+
+      - name: Run safe doctor smoke
+        run: python -m kyoko doctor --safe-smokes --json
+
+  dashboard-bundle:
+    name: Dashboard bundle (build + drift)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend deps
+        run: npm ci
+        working-directory: frontend
+
+      - name: Build dashboard bundle
+        run: npm run build
+        working-directory: frontend
+
+      # The built React SPA is committed under kyoko/assets/web so `kyoko serve`
+      # ships it. Fail if the committed bundle is stale relative to frontend/ source.
+      - name: Check bundle is up to date
+        run: |
+          if ! git diff --quiet -- kyoko/assets/web; then
+            echo "::error::kyoko/assets/web is stale. Run 'npm run build' in frontend/ and commit the result."
+            git --no-pager diff --stat -- kyoko/assets/web
+            exit 1
+          fi
+
+  release-smoke:
+    name: Release smoke
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install package
+        run: python -m pip install --upgrade pip && python -m pip install -e .
+
+      - name: Run wheel/sdist release smoke
+        run: python -m kyoko release-smoke --artifact both --install-deps --json

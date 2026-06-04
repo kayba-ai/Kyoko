@@ -1,0 +1,297 @@
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Optional
+
+from .bundled_assets import bundled_asset_path
+from .evidence import build_evidence_bundle
+from .proposals import DEFAULT_SCHEMA_PATH
+
+
+BEGIN_PROPOSAL_BLOCK = "BEGIN_KYOKO_LEARNING_PROPOSAL_JSON"
+END_PROPOSAL_BLOCK = "END_KYOKO_LEARNING_PROPOSAL_JSON"
+INLINE_EVIDENCE_MAX_CHARS = 60000
+
+
+@dataclass(frozen=True)
+class OperatorPromptReport:
+    target: str
+    profile_id: str
+    evidence_path: Path
+    prompt_path: Path
+    schema_path: Optional[Path]
+    bundle: dict[str, Any]
+
+
+def write_operator_prompt_artifacts(
+    *,
+    db_path: Path,
+    output_dir: Path,
+    target: str = "generic",
+    profile_id: Optional[str] = None,
+    run_id: Optional[str] = None,
+    schema_path: Optional[Path] = None,
+) -> OperatorPromptReport:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    bundle = build_evidence_bundle(
+        db_path=db_path,
+        profile_id=profile_id,
+        run_id=run_id,
+        consumer=f"operator_prompt:{target}",
+    )
+    evidence_path = output_dir / "evidence-bundle.json"
+    prompt_path = output_dir / "operator-instructions.md"
+    resolved_schema_path = resolve_operator_schema_path(schema_path)
+
+    evidence_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n")
+    prompt_path.write_text(
+        build_operator_prompt(
+            bundle=bundle,
+            evidence_path=evidence_path,
+            target=target,
+            schema_path=resolved_schema_path,
+        )
+    )
+
+    return OperatorPromptReport(
+        target=target,
+        profile_id=str(bundle["profile_id"]),
+        evidence_path=evidence_path,
+        prompt_path=prompt_path,
+        schema_path=resolved_schema_path,
+        bundle=bundle,
+    )
+
+
+def build_operator_prompt(
+    *,
+    bundle: dict[str, Any],
+    evidence_path: Path,
+    target: str = "generic",
+    schema_path: Optional[Path] = None,
+) -> str:
+    summary = bundle.get("summary", {})
+    capabilities = bundle.get("eval_capabilities") if isinstance(bundle.get("eval_capabilities"), dict) else {}
+    redaction = bundle.get("redaction") if isinstance(bundle.get("redaction"), dict) else {}
+    redaction_policy = redaction.get("policy") if isinstance(redaction.get("policy"), dict) else {}
+    payload_access = redaction_policy.get("payload_access", "unknown")
+    redact_sensitive_values = redaction_policy.get("redact_sensitive_values", "unknown")
+    profile_id = str(bundle.get("profile_id") or "")
+    schema_display = str(schema_path) if schema_path is not None else "docs/schemas/learning-proposal.schema.json"
+    target_note = _target_note(target)
+    skeleton = _proposal_skeleton(profile_id)
+    inline_evidence = _inline_evidence_json(bundle=bundle, evidence_path=evidence_path)
+
+    return "\n".join(
+        [
+            "# Kyoko Operator Task",
+            "",
+            f"Target operator: `{target}`",
+            f"Evidence bundle: `{evidence_path}`",
+            f"LearningProposal schema: `{schema_display}`",
+            "",
+            "You are acting as Kyoko's analysis operator. Read the evidence bundle, identify one concrete agent failure or improvement opportunity, and return one strict LearningProposal JSON object.",
+            "",
+            target_note,
+            "",
+            "## Hard Constraints",
+            "",
+            "- Return exactly one proposal block on stdout.",
+            "- Cite only evidence IDs that exist in the evidence bundle.",
+            "- Do not apply proposals, patch files, mutate the skillbook, or change autonomy policy.",
+            "- Prefer a `context` proposal when a prompt/skillbook fix is enough.",
+            "- Use `harness` only when the proposed change is an eval, test, replay adapter, tool wrapper, or repository patch.",
+            "- Keep generated evals at `L0_generated`; Kyoko promotes trust only after replay/eval evidence.",
+            "- If evidence is insufficient, propose the smallest useful context skill and mark confidence conservatively.",
+            "- Your `confidence` field is only an operator signal; Kyoko computes its own confidence from evidence coverage, eval/replay results, duplicate history, and validation state.",
+            "",
+            "## Eval Capabilities",
+            "",
+            *_eval_capability_lines(capabilities),
+            "",
+            "## Evidence Privacy And Audit",
+            "",
+            f"- Payload access mode: `{payload_access}`",
+            f"- Sensitive-value redaction: `{redact_sensitive_values}`",
+            f"- Redacted field count: {redaction.get('redacted_count', 0)}",
+            "- Treat redacted refs and secret placeholders as intentional privacy controls, not missing evidence.",
+            "",
+            "## Evidence Summary",
+            "",
+            f"- Profile: `{profile_id}`",
+            f"- Runs: {summary.get('runs', 0)}",
+            f"- Spans: {summary.get('spans', 0)}",
+            f"- Failed spans: {summary.get('failed_spans', 0)}",
+            f"- Tasks: {summary.get('tasks', 0)}",
+            f"- Handoffs: {summary.get('handoffs', 0)}",
+            f"- Existing proposals: {len(bundle.get('learning_proposals', [])) if isinstance(bundle.get('learning_proposals'), list) else 0}",
+            f"- Existing skills: {summary.get('skills', 0)}",
+            f"- Eval specs: {summary.get('eval_specs', 0)}",
+            f"- Replay runs: {summary.get('replay_runs', 0)}",
+            "",
+            "## Evidence Bundle JSON",
+            "",
+            "The inline JSON below is the evidence to cite from. If it is marked as truncated, read the full evidence bundle path above.",
+            "",
+            "```json",
+            inline_evidence,
+            "```",
+            "",
+            "## Required Stdout",
+            "",
+            "```text",
+            BEGIN_PROPOSAL_BLOCK,
+            json.dumps(skeleton, indent=2, sort_keys=True),
+            END_PROPOSAL_BLOCK,
+            "```",
+            "",
+            "The JSON above is a shape guide, not the answer. Replace every placeholder with evidence-backed content.",
+            "",
+        ]
+    )
+
+
+def resolve_operator_schema_path(schema_path: Optional[Path]) -> Optional[Path]:
+    if schema_path is None:
+        default_path = Path.cwd() / DEFAULT_SCHEMA_PATH
+        if default_path.exists():
+            return default_path.resolve()
+        bundled = bundled_asset_path("schemas/learning-proposal.schema.json")
+        return bundled if bundled.exists() else None
+
+    if schema_path.exists():
+        return schema_path.resolve()
+
+    if schema_path == DEFAULT_SCHEMA_PATH:
+        default_path = Path.cwd() / DEFAULT_SCHEMA_PATH
+        if default_path.exists():
+            return default_path.resolve()
+        bundled = bundled_asset_path("schemas/learning-proposal.schema.json")
+        return bundled if bundled.exists() else schema_path
+
+    return schema_path
+
+
+def _eval_capability_lines(capabilities: dict[str, Any]) -> list[str]:
+    gateable = capabilities.get("gateable_eval_types") if isinstance(capabilities.get("gateable_eval_types"), list) else []
+    executable = capabilities.get("executable_eval_types") if isinstance(capabilities.get("executable_eval_types"), list) else []
+    replay = capabilities.get("replay") if isinstance(capabilities.get("replay"), dict) else {}
+    safe_modes = replay.get("safe_side_effect_modes") if isinstance(replay.get("safe_side_effect_modes"), list) else []
+    presets = capabilities.get("assertion_presets") if isinstance(capabilities.get("assertion_presets"), list) else []
+    preset_names = [preset.get("name") for preset in presets if isinstance(preset, dict) and isinstance(preset.get("name"), str)]
+    deterministic = capabilities.get("deterministic_assertions") if isinstance(capabilities.get("deterministic_assertions"), list) else []
+    assertion_names = [
+        assertion.get("name")
+        for assertion in deterministic
+        if isinstance(assertion, dict) and isinstance(assertion.get("name"), str)
+    ]
+    return [
+        f"- Executable eval types: `{_joined(executable)}`",
+        f"- Eval types that can gate autonomy: `{_joined(gateable)}`",
+        "- `judge` and `smoke_run` are informational only; do not rely on them as sole autonomy gates.",
+        f"- Safe replay side-effect modes: `{_joined(safe_modes)}`",
+        f"- Deterministic assertions: `{_joined(assertion_names)}`",
+        f"- Assertion presets: `{_joined(preset_names)}`",
+        "- Prefer deterministic assertions or assertion presets tied to cited failure evidence.",
+    ]
+
+
+def _joined(values: list[Any]) -> str:
+    cleaned = [str(value) for value in values if isinstance(value, str) and value]
+    return "`, `".join(cleaned) if cleaned else "none"
+
+
+def _inline_evidence_json(
+    *,
+    bundle: dict[str, Any],
+    evidence_path: Path,
+    max_chars: int = INLINE_EVIDENCE_MAX_CHARS,
+) -> str:
+    encoded = json.dumps(bundle, indent=2, sort_keys=True)
+    if len(encoded) <= max_chars:
+        return encoded
+    return json.dumps(
+        {
+            "truncated": True,
+            "max_chars": max_chars,
+            "full_evidence_path": str(evidence_path),
+            "prefix": encoded[:max_chars],
+        },
+        indent=2,
+        sort_keys=True,
+    )
+
+
+def _target_note(target: str) -> str:
+    notes = {
+        "codex": "Codex note: use your normal local subscription/runtime for reasoning, but the only Kyoko output should be the delimited proposal block.",
+        "claude": "Claude note: use the local Claude Code session for reasoning, but do not emit markdown instead of the delimited proposal block.",
+        "hermes": "Hermes note: treat Hermes profile/task/queue/handoff evidence as source data unless this run is explicitly registered as an operator adapter.",
+        "openclaw": "OpenClaw note: treat OpenClaw agent/session/workspace evidence as source data unless this run is explicitly registered as an operator adapter.",
+        "generic": "Generic note: if your CLI can read stdin, this prompt is also passed on stdin. The evidence path is provided through `KYOKO_EVIDENCE_PATH`.",
+        "mock": "Mock note: deterministic tests may use this prompt only as an operator contract fixture.",
+    }
+    return notes.get(target, notes["generic"])
+
+
+def _proposal_skeleton(profile_id: str) -> dict[str, Any]:
+    return {
+        "schema_version": "kyoko.learning_proposal.v1",
+        "id": "proposal_replace_with_stable_id",
+        "profile_id": profile_id,
+        "producer": {
+            "kind": "operator_agent",
+            "name": "replace_with_operator_name",
+            "session_id": "replace_with_session_id",
+        },
+        "state": "pending",
+        "section": "context",
+        "title": "Short evidence-backed title",
+        "summary": "One or two sentences explaining the proposed improvement.",
+        "confidence": 0.5,
+        "evidence_refs": [
+            {
+                "entity_type": "span",
+                "entity_id": "replace_with_existing_span_id",
+                "role": "failure",
+                "note": "Why this evidence supports the proposal.",
+            }
+        ],
+        "problem": {
+            "issue": "Observed issue phrased as a reusable failure pattern.",
+            "severity": "medium",
+            "root_cause": "Evidence-backed root cause.",
+            "target": {
+                "entity_type": "agent_identity",
+                "entity_id": "replace_with_existing_agent_identity_id",
+            },
+        },
+        "insight": "Reusable operational guidance or harness improvement.",
+        "proposed_changes": [
+            {
+                "type": "skillbook_update",
+                "operation": "create",
+                "section": "context",
+                "issue": "Same reusable issue text.",
+                "insight": "Same reusable guidance.",
+                "keywords": ["replace", "with", "specific", "terms"],
+                "occurrence_refs": [
+                    {
+                        "entity_type": "span",
+                        "entity_id": "replace_with_existing_span_id",
+                        "role": "failure",
+                    }
+                ],
+            }
+        ],
+        "gate_expectations": {
+            "requires_human_review": False,
+            "requires_eval_level": "L1_repeated",
+            "requires_replay": False,
+            "allowed_autonomy_section": "context",
+            "notes": "Explain what Kyoko should verify before apply.",
+        },
+        "created_at": "replace_with_current_iso8601_utc",
+    }
