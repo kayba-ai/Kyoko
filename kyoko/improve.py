@@ -32,7 +32,7 @@ class ImproveError(Exception):
 @dataclass(frozen=True)
 class ImproveReport:
     profile_id: str
-    proposal_id: str
+    proposal_id: Optional[str]
     operator: Optional[str]
     analyze: Optional[AnalyzeReport]
     check_spec_ids: tuple[str, ...]
@@ -123,6 +123,24 @@ def run_improvement_loop(
         )
         proposal_id = analyze_report.proposal_id
         profile_id = analyze_report.profile_id
+
+        if proposal_id is None:
+            # Gate #1 stopped at diagnosed: the issue was surfaced+diagnosed but the
+            # section's autonomy mode is `off`, so no proposal was generated. There is
+            # nothing to check/replay/apply — return the diagnosed-only outcome.
+            return ImproveReport(
+                profile_id=analyze_report.profile_id,
+                proposal_id=None,
+                operator=selected_operator,
+                analyze=analyze_report,
+                check_spec_ids=(),
+                generated_check_spec_ids=(),
+                existing_check_spec_ids=(),
+                replay_runs=(),
+                autonomy=None,
+                source_import=source_import_report,
+                notes=(f"gate1_blocked:{analyze_report.gate1_reason}",),
+            )
 
     if proposal_id is None:
         raise ImproveError("proposal_id_required")
@@ -340,12 +358,16 @@ def _analyze_report_json(report: Optional[AnalyzeReport]) -> Optional[dict[str, 
         "operator": report.operator,
         "profile_id": report.profile_id,
         "proposal_id": report.proposal_id,
+        "issue_id": report.issue_id,
         "operator_run_id": report.operator_run_id,
         "evidence_path": str(report.evidence_path),
         "prompt_path": str(report.prompt_path),
-        "proposal_path": str(report.proposal_path),
+        "proposal_path": str(report.proposal_path) if report.proposal_path is not None else None,
         "persisted": report.persisted,
         "attempts": report.attempts,
+        "gate1_mode": report.gate1_mode,
+        "gate1_allow": report.gate1_allow,
+        "gate1_reason": report.gate1_reason,
         "raw_output_path": str(report.raw_output_path)
         if report.raw_output_path is not None
         else None,

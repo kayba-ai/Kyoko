@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
@@ -15,6 +16,58 @@ VALID_CHECK_LEVELS = {"L0_generated", "L1_repeated", "L2_regression", "L3_human_
 
 class AutonomyError(Exception):
     """Raised when an autonomy policy cannot be read or updated."""
+
+
+@dataclass(frozen=True)
+class IssueProposalGate:
+    """Gate #1 decision: may an issue (whose fix is ``section``) generate a proposal?
+
+    Reuses the existing ``context_mode`` / ``harness_mode`` switches — no new policy
+    surface. ``off`` stops at *diagnosed* (no proposal); ``propose`` generates a proposal
+    a human applies; ``autonomous`` generates a proposal that flows on to gate #2
+    (check + replay). This is purely a generate/no-generate decision; the apply decision
+    stays with gate #2 in :mod:`kyoko.autonomy_runner`.
+    """
+
+    section: Optional[str]
+    mode: str
+    allow_generate: bool
+    reason: str
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "section": self.section,
+            "mode": self.mode,
+            "allow_generate": self.allow_generate,
+            "reason": self.reason,
+        }
+
+
+def evaluate_issue_to_proposal_gate(
+    *,
+    db_path: Path,
+    section: Optional[str],
+    profile_id: Optional[str] = None,
+) -> IssueProposalGate:
+    """Resolve gate #1 for a proposal whose fix targets ``section`` (context|harness)."""
+
+    policy = get_autonomy_policy(db_path=db_path, profile_id=profile_id)
+    if section == "context":
+        mode = str(policy["context_mode"])
+    elif section == "harness":
+        mode = str(policy["harness_mode"])
+    else:
+        return IssueProposalGate(
+            section=section,
+            mode="unknown",
+            allow_generate=False,
+            reason=f"unsupported_section:{section}",
+        )
+    allow = mode in {"propose", "autonomous"}
+    reason = f"gate1_{mode}" if mode in VALID_MODES else f"gate1_unknown:{mode}"
+    return IssueProposalGate(
+        section=section, mode=mode, allow_generate=allow, reason=reason
+    )
 
 
 def get_autonomy_policy(*, db_path: Path, profile_id: Optional[str] = None) -> dict[str, Any]:

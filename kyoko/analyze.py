@@ -15,6 +15,7 @@ from .operator_prompts import (
     END_PROPOSAL_BLOCK,
     write_operator_prompt_artifacts,
 )
+from .autonomy import evaluate_issue_to_proposal_gate
 from .issues import link_proposal_to_issue
 from .proposals import (
     ProposalError,
@@ -28,15 +29,20 @@ from .storage import connect, initialize_database, utc_now
 class AnalyzeReport:
     operator: str
     profile_id: str
-    proposal_id: str
+    proposal_id: Optional[str]
     evidence_path: Path
     prompt_path: Path
-    proposal_path: Path
+    proposal_path: Optional[Path]
     persisted: bool
     operator_run_id: Optional[str] = None
     raw_output_path: Optional[Path] = None
     attempts: int = 1
     issue_id: Optional[str] = None
+    # Gate #1 (issue -> proposal). When the section's autonomy mode is `off`, analysis
+    # still surfaces+diagnoses the Issue but generates no proposal (proposal_id is None).
+    gate1_mode: Optional[str] = None
+    gate1_allow: bool = True
+    gate1_reason: Optional[str] = None
 
 
 class AnalyzeError(Exception):
@@ -94,6 +100,34 @@ def analyze_with_mock_operator(
         profile_id=prompt_report.profile_id,
     )
 
+    # Gate #1: may this issue generate a proposal? Reuses the section's autonomy mode.
+    gate = evaluate_issue_to_proposal_gate(
+        db_path=db_path,
+        section=proposal.get("section"),
+        profile_id=prompt_report.profile_id,
+    )
+    if not gate.allow_generate:
+        _update_operator_run(
+            db_path,
+            operator_run_id,
+            status="succeeded",
+            metadata_updates={"gate1": gate.to_json(), "issue_id": issue["id"]},
+        )
+        return AnalyzeReport(
+            operator="mock",
+            profile_id=prompt_report.profile_id,
+            proposal_id=None,
+            evidence_path=prompt_report.evidence_path,
+            prompt_path=prompt_report.prompt_path,
+            proposal_path=None,
+            persisted=False,
+            operator_run_id=operator_run_id,
+            issue_id=issue["id"],
+            gate1_mode=gate.mode,
+            gate1_allow=False,
+            gate1_reason=gate.reason,
+        )
+
     proposal_path = output_dir / f"{proposal['id']}.json"
     proposal_path.write_text(json.dumps(proposal, indent=2, sort_keys=True) + "\n")
 
@@ -127,6 +161,9 @@ def analyze_with_mock_operator(
         persisted=True,
         operator_run_id=operator_run_id,
         issue_id=issue["id"],
+        gate1_mode=gate.mode,
+        gate1_allow=True,
+        gate1_reason=gate.reason,
     )
 
 
@@ -208,6 +245,7 @@ def analyze_with_command_operator(
     proposal: Optional[dict[str, Any]] = None
     proposal_path: Optional[Path] = None
     originated_issue: Optional[dict[str, Any]] = None
+    resolved_gate: Optional[Any] = None
     for attempt in range(1, max_retries + 2):
         prompt_text = base_prompt_text if attempt == 1 else _retry_prompt_text(base_prompt_text, last_error)
         prompt_path = prompt_report.prompt_path
@@ -320,6 +358,44 @@ def analyze_with_command_operator(
                 source="analysis",
                 profile_id=prompt_report.profile_id,
             )
+            # Gate #1: if the section's mode is `off`, surface+diagnose only — no
+            # proposal, no retries. The decision is fixed by the proposal's section.
+            gate = evaluate_issue_to_proposal_gate(
+                db_path=db_path,
+                section=proposal.get("section"),
+                profile_id=prompt_report.profile_id,
+            )
+            resolved_gate = gate
+            if not gate.allow_generate:
+                attempt_result["status"] = "succeeded"
+                _write_attempt_outputs(raw_output_path, attempt_results)
+                _update_operator_run(
+                    db_path,
+                    operator_run_id,
+                    status="succeeded",
+                    raw_output_path=raw_output_path,
+                    metadata_updates={
+                        "gate1": gate.to_json(),
+                        "issue_id": originated_issue["id"],
+                        **_attempt_metadata(attempt_results, max_retries),
+                    },
+                )
+                return AnalyzeReport(
+                    operator=operator_label,
+                    profile_id=prompt_report.profile_id,
+                    proposal_id=None,
+                    evidence_path=prompt_report.evidence_path,
+                    prompt_path=prompt_report.prompt_path,
+                    proposal_path=None,
+                    persisted=False,
+                    operator_run_id=operator_run_id,
+                    raw_output_path=raw_output_path,
+                    attempts=len(attempt_results),
+                    issue_id=originated_issue["id"],
+                    gate1_mode=gate.mode,
+                    gate1_allow=False,
+                    gate1_reason=gate.reason,
+                )
         else:
             proposal["issue_id"] = originated_issue["id"]
 
@@ -382,6 +458,9 @@ def analyze_with_command_operator(
         raw_output_path=raw_output_path,
         attempts=len(attempt_results),
         issue_id=originated_issue["id"] if originated_issue is not None else None,
+        gate1_mode=resolved_gate.mode if resolved_gate is not None else None,
+        gate1_allow=resolved_gate.allow_generate if resolved_gate is not None else True,
+        gate1_reason=resolved_gate.reason if resolved_gate is not None else None,
     )
 
 

@@ -11,6 +11,7 @@ from kyoko.analyze import (
     extract_proposal_from_output,
     list_operator_runs,
 )
+from kyoko.autonomy import update_autonomy_policy
 from kyoko.issues import get_issue, list_issues
 from kyoko.proposals import list_learning_proposals
 from kyoko.storage import get_database_status, ingest_source_fixture
@@ -81,6 +82,30 @@ class AnalyzeTests(unittest.TestCase):
 
             proposal_payload = json.loads(report.proposal_path.read_text())
             self.assertEqual(proposal_payload["issue_id"], report.issue_id)
+
+    def test_gate1_off_surfaces_issue_without_generating_proposal(self) -> None:
+        # Gate #1: when the fix section's autonomy mode is `off`, analysis still
+        # surfaces+diagnoses the Issue but generates no proposal (stops at diagnosed).
+        with TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "kyoko.db"
+            output_dir = Path(tmpdir) / "analysis"
+            ingest_source_fixture(db_path, FIXTURE)
+            # The mock proposal is a context-section fix.
+            update_autonomy_policy(db_path=db_path, context_mode="off")
+
+            report = analyze_with_mock_operator(
+                db_path=db_path, output_dir=output_dir, schema_path=SCHEMA
+            )
+            self.assertIsNone(report.proposal_id)
+            self.assertFalse(report.gate1_allow)
+            self.assertEqual(report.gate1_mode, "off")
+            self.assertFalse(report.persisted)
+            self.assertTrue(report.issue_id)
+
+            self.assertEqual(list_learning_proposals(db_path), [])
+            issue = get_issue(db_path=db_path, issue_id=report.issue_id)
+            self.assertEqual(issue["status"], "diagnosed")
+            self.assertEqual(issue["proposal_ids"], [])
 
     def test_command_operator_extracts_and_persists_proposal(self) -> None:
         with TemporaryDirectory() as tmpdir:
