@@ -234,9 +234,12 @@ def upsert_eval_definition(
     output: Optional[dict[str, Any]] = None,
     severity_bands: Optional[dict[str, float]] = None,
     status: str = "active",
+    issue_id: Optional[str] = None,
     profile_id: Optional[str] = None,
 ) -> dict[str, Any]:
-    """Insert or update a measurement definition. Bundled assets upsert by id."""
+    """Insert or update a measurement definition. Bundled assets upsert by id.
+
+    ``issue_id`` binds a guard evaluator to the Issue it watches (job step 08)."""
     if kind not in KINDS:
         raise EvalMeasureError(f"invalid_kind:{kind}")
     if unit_type not in UNIT_TYPES:
@@ -263,8 +266,8 @@ def upsert_eval_definition(
               id, profile_id, kind, name, version, partner, source, unit_type,
               output_type, direction, problem_statement, detector_ref, prompt,
               vars_json, bindings_json, output_json, severity_bands_json, status,
-              created_at, updated_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+              issue_id, created_at, updated_at
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(id) DO UPDATE SET
               kind=excluded.kind, name=excluded.name, version=excluded.version,
               partner=excluded.partner, source=excluded.source,
@@ -273,6 +276,7 @@ def upsert_eval_definition(
               detector_ref=excluded.detector_ref, prompt=excluded.prompt,
               vars_json=excluded.vars_json, bindings_json=excluded.bindings_json,
               output_json=excluded.output_json, severity_bands_json=excluded.severity_bands_json,
+              issue_id=excluded.issue_id,
               updated_at=excluded.updated_at
             """,
             # NOTE: `status` is intentionally NOT updated on conflict. Bundled
@@ -298,6 +302,7 @@ def upsert_eval_definition(
                 json.dumps(output) if output is not None else None,
                 json.dumps(severity_bands) if severity_bands is not None else None,
                 status,
+                issue_id,
                 created_at,
                 now,
             ),
@@ -350,6 +355,7 @@ def _definition_row_to_dict(row: Any) -> dict[str, Any]:
         "output": _json_loads(row["output_json"], None),
         "severity_bands": _json_loads(row["severity_bands_json"], None),
         "status": row["status"],
+        "issue_id": row["issue_id"] if "issue_id" in row.keys() else None,
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }

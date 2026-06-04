@@ -14,6 +14,8 @@ from .analyze import (
 from .autonomy import AutonomyError
 from .autonomy_runner import AutonomyRunError, AutonomyRunReport, run_autonomy
 from .checks import CheckError, generate_checks_for_proposal, list_check_specs
+from .issue_guard import GuardError, GuardReport, mint_guard_for_issue
+from .issues import IssueError, update_issue_status
 from .operator_adapters import OperatorAdapterError, run_registered_operator_adapter
 from .replay_adapters import ReplayAdapterError, run_registered_replay_adapter
 from .replay_servers import ReplayServerError
@@ -42,6 +44,7 @@ class ImproveReport:
     autonomy: Optional[AutonomyRunReport]
     source_import: Optional[DiscoveredSourceImportReport]
     notes: tuple[str, ...]
+    guard_reports: tuple[GuardReport, ...] = ()
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -55,6 +58,7 @@ class ImproveReport:
             "replay_runs": list(self.replay_runs),
             "autonomy": self.autonomy.to_json() if self.autonomy is not None else None,
             "source_import": self.source_import.to_json() if self.source_import is not None else None,
+            "guards": [guard.to_json() for guard in self.guard_reports],
             "notes": list(self.notes),
         }
 
@@ -193,6 +197,7 @@ def run_improvement_loop(
             replay_runs.append(_replay_report_json(replay_report, selected_replay_adapter_id))
 
     autonomy_report: Optional[AutonomyRunReport] = None
+    guard_reports: list[GuardReport] = []
     if run_autonomy_after:
         try:
             autonomy_report = run_autonomy(
@@ -202,6 +207,25 @@ def run_improvement_loop(
             )
         except (AutonomyRunError, AutonomyError, StorageError) as exc:
             raise ImproveError(str(exc)) from exc
+
+        # Close the loop (job step 08): for every proposal the gate just applied, resolve
+        # its originating Issue and mint a standing deterministic guard evaluator that
+        # watches future traces for recurrence.
+        for decision in autonomy_report.decisions:
+            if decision.state_after != "applied" or not decision.proposal_id:
+                continue
+            issue_id = _issue_id_for_proposal(db_path, decision.proposal_id)
+            if not issue_id:
+                continue
+            try:
+                update_issue_status(db_path=db_path, issue_id=issue_id, status="resolved")
+                guard_reports.append(
+                    mint_guard_for_issue(
+                        db_path=db_path, issue_id=issue_id, profile_id=profile_id
+                    )
+                )
+            except (GuardError, IssueError, StorageError) as exc:
+                notes.append(f"guard_mint_failed:{issue_id}:{exc}")
 
     if profile_id is None:
         profile_id = _profile_id_from_outputs(analyze_report, autonomy_report)
@@ -220,7 +244,23 @@ def run_improvement_loop(
         autonomy=autonomy_report,
         source_import=source_import_report,
         notes=tuple(notes),
+        guard_reports=tuple(guard_reports),
     )
+
+
+def _issue_id_for_proposal(db_path: Path, proposal_id: str) -> Optional[str]:
+    """The originating issue id stamped on a proposal (issue-centric spine)."""
+    try:
+        with connect(db_path) as connection:
+            row = connection.execute(
+                "SELECT issue_id FROM learning_proposals WHERE id = ?", (proposal_id,)
+            ).fetchone()
+    except StorageError:
+        return None
+    if row is None:
+        return None
+    value = row["issue_id"] if "issue_id" in row.keys() else None
+    return str(value) if value else None
 
 
 def _run_analysis(

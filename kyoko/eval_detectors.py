@@ -151,7 +151,28 @@ def register_detector(
         raise DetectorError(f"detector_file_not_found:{path}")
     code = path.read_text(encoding="utf-8")
     default_id = f"detector_{path.stem.replace('-', '_')}"
-    meta = _extract_metadata(code, default_id=default_id)
+    return register_detector_source(
+        db_path=db_path,
+        code=code,
+        source=source,
+        default_id=default_id,
+        profile_id=profile_id,
+    )
+
+
+def register_detector_source(
+    *,
+    db_path: Path,
+    code: str,
+    source: str = "user",
+    default_id: Optional[str] = None,
+    issue_id: Optional[str] = None,
+    profile_id: Optional[str] = None,
+) -> dict[str, Any]:
+    """Register a detector from in-memory source (no file): store the body as a blob
+    and upsert a definition. This is the programmatic path used to mint a guard
+    evaluator from a resolved Issue (``source="guard"``, bound via ``issue_id``)."""
+    meta = _extract_metadata(code, default_id=default_id or "detector_generated")
 
     blob = put_blob(
         db_path=db_path,
@@ -174,6 +195,7 @@ def register_detector(
         source=source,
         problem_statement=meta.problem_statement,
         detector_ref=blob.blob_id,
+        issue_id=issue_id,
         profile_id=profile_id,
     )
 

@@ -61,12 +61,18 @@ def raise_issue_for_run(
         return None
     severity = severity_band(problem, definition.get("severity_bands")) or "low"
     unit_type = definition.get("unit_type")
-    evidence_refs: list[dict[str, str]] = [{"entity_type": "eval_run", "entity_id": eval_run_id}]
+    evidence_refs: list[dict[str, str]] = [
+        {"entity_type": "eval_run", "entity_id": eval_run_id},
+        {"entity_type": "eval_definition", "entity_id": str(definition["id"])},
+    ]
     span_like = unit_type in ("event", "llm_span")
     for ref in worst_unit_refs:
         evidence_refs.append(
             {"entity_type": "span" if span_like else "run", "entity_id": ref}
         )
+    # Provenance so a recurrence issue re-enters the spine with its source: an `eval`
+    # (deterministic detector / guard) or an `llm_eval` (judge).
+    source = "eval" if definition.get("kind") == "python" else "llm_eval"
     issue = create_issue(
         db_path=db_path,
         title=f"{definition['name']}: problem level {problem:.2f} ({definition['kind']} eval)",
@@ -80,6 +86,7 @@ def raise_issue_for_run(
         status="open",
         evidence_refs=evidence_refs,
         affected_span_ids=list(worst_unit_refs) if span_like else None,
+        source=source,
         profile_id=profile_id,
     )
     return issue
