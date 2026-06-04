@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import queue as _queue
 import secrets
+import shutil
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -91,7 +92,22 @@ from .operator_adapters import (
     list_operator_adapters,
     run_registered_operator_adapter,
 )
-from .operator_presets import bootstrap_operator_adapters, list_operator_presets
+from .operator_presets import (
+    OPERATOR_PRESETS,
+    bootstrap_operator_adapters,
+    list_operator_presets,
+)
+from .analysis_runner import (
+    DASHBOARD_ANALYZERS,
+    SCHEDULABLE_ANALYZERS,
+    AnalysisJob,
+    AnalysisRunError,
+    AnalysisRunner,
+    InlineAnalysisRunner,
+    Scheduler,
+    job_from_schedule,
+    next_run_at_iso,
+)
 from .operator_smoke import (
     OperatorSmokeError,
     build_operator_smoke_plan,
@@ -149,10 +165,15 @@ from .source_discovery import SourceDiscoveryError, discover_local_sources, impo
 from .storage import (
     StorageError,
     checkpoint_database,
+    create_analysis_schedule,
+    delete_analysis_schedule,
+    get_analysis_schedule,
     get_database_status,
     ingest_source_payload,
     initialize_database,
+    list_analysis_schedules,
     status_to_json,
+    update_analysis_schedule,
 )
 from .timeline import AUTONOMY_EVENT_KINDS, list_timeline_events
 
@@ -233,19 +254,31 @@ def serve(
     initialize_database(db_path)
     if not _is_loopback_host(host) and not auth_token:
         raise WebError("auth_token_required_for_remote_host")
+    # Background analysis worker + recurring scheduler. The runner serializes manual
+    # ("Run now") and scheduled analyses through one execution/gate path. Both are daemon
+    # threads, so they never block server shutdown; schedules only fire while serve runs.
+    analysis_runner = AnalysisRunner(db_path)
+    analysis_runner.start()
+    scheduler = Scheduler(db_path, analysis_runner)
+    scheduler.start()
     handler = make_handler(
         db_path,
         auth_token=auth_token,
         default_lock_actor_agent_identity_id=default_lock_actor_agent_identity_id,
+        analysis_runner=analysis_runner,
     )
     try:
         server = ThreadingHTTPServer((host, port), handler)
     except OSError as exc:
+        scheduler.stop()
+        analysis_runner.stop()
         raise WebError(f"server_bind_failed:{host}:{port}:{exc}") from exc
 
     try:
         server.serve_forever()
     finally:
+        scheduler.stop()
+        analysis_runner.stop()
         server.server_close()
 
 
@@ -254,12 +287,16 @@ def make_handler(
     *,
     auth_token: Optional[str] = None,
     default_lock_actor_agent_identity_id: Optional[str] = None,
+    analysis_runner: Optional[Any] = None,
 ) -> Type[BaseHTTPRequestHandler]:
     resolved_db_path = db_path
     selected_auth_token = auth_token if auth_token else None
     selected_default_lock_actor_agent_identity_id = _optional_string(
         default_lock_actor_agent_identity_id
     )
+    # Without a background runner (tests, or a handler built outside `serve`), execute
+    # analysis jobs synchronously on the request thread so behavior stays deterministic.
+    selected_analysis_runner = analysis_runner or InlineAnalysisRunner(resolved_db_path)
 
     def _lock_actor_agent_identity_id(payload: dict[str, Any]) -> Optional[str]:
         return (
@@ -890,6 +927,17 @@ def make_handler(
                     return
                 if path == "/api/operator-runs":
                     self._send_json({"operator_runs": list_operator_runs(resolved_db_path)})
+                    return
+                if path == "/api/analysis/analyzers":
+                    self._send_json(_analyzer_availability(resolved_db_path))
+                    return
+                if path == "/api/analysis/runs":
+                    self._send_json({"runs": list_operator_runs(resolved_db_path)})
+                    return
+                if path == "/api/analysis/schedules":
+                    self._send_json(
+                        {"schedules": list_analysis_schedules(resolved_db_path)}
+                    )
                     return
                 if path == "/api/harness-patches":
                     self._send_json({"patch_transactions": list_patch_transactions(resolved_db_path)})
@@ -2220,6 +2268,102 @@ def make_handler(
                     )
                     self._send_json(report.to_json())
                     return
+                if path == "/api/analysis/run":
+                    payload = self._read_json()
+                    try:
+                        job = _analysis_job_from_payload(payload)
+                    except AnalysisRunError as exc:
+                        self._send_json(
+                            {"error": "invalid_analysis_job", "detail": str(exc)},
+                            status=HTTPStatus.BAD_REQUEST,
+                        )
+                        return
+                    job_id = selected_analysis_runner.submit(job)
+                    self._send_json(
+                        {"job_id": job_id, "analyzer": job.analyzer, "status": "queued"},
+                        status=HTTPStatus.ACCEPTED,
+                    )
+                    return
+                if path == "/api/analysis/schedules/create":
+                    payload = self._read_json()
+                    analyzer = payload.get("analyzer") or payload.get("analyzer_kind")
+                    if not isinstance(analyzer, str) or analyzer not in SCHEDULABLE_ANALYZERS:
+                        self._send_json(
+                            {
+                                "error": "unschedulable_analyzer",
+                                "detail": f"schedulable analyzers: {list(SCHEDULABLE_ANALYZERS)}",
+                            },
+                            status=HTTPStatus.BAD_REQUEST,
+                        )
+                        return
+                    interval_hours = payload.get("interval_hours", 24)
+                    at_time = payload.get("at_time")
+                    schedule = create_analysis_schedule(
+                        db_path=resolved_db_path,
+                        analyzer_kind=analyzer,
+                        adapter_id=_optional_str(payload.get("adapter_id")),
+                        source_path=_optional_str(payload.get("source_path")),
+                        refresh_import=bool(payload.get("refresh_import", True)),
+                        interval_hours=interval_hours if isinstance(interval_hours, int) else 24,
+                        at_time=_optional_str(at_time),
+                        enabled=bool(payload.get("enabled", True)),
+                        run_autonomy=bool(payload.get("run_autonomy", True)),
+                        next_run_at=next_run_at_iso(
+                            interval_hours if isinstance(interval_hours, int) else 24,
+                            _optional_str(at_time),
+                        ),
+                        profile_id=_optional_str(payload.get("profile_id")),
+                    )
+                    self._send_json({"schedule": schedule})
+                    return
+                if path == "/api/analysis/schedules/update":
+                    payload = self._read_json()
+                    schedule_id = payload.get("id") or payload.get("schedule_id")
+                    if not isinstance(schedule_id, str) or not schedule_id:
+                        self._send_json(
+                            {"error": "schedule_id_required"}, status=HTTPStatus.BAD_REQUEST
+                        )
+                        return
+                    fields = _schedule_update_fields(payload)
+                    schedule = update_analysis_schedule(
+                        db_path=resolved_db_path, schedule_id=schedule_id, **fields
+                    )
+                    self._send_json({"schedule": schedule})
+                    return
+                if path == "/api/analysis/schedules/delete":
+                    payload = self._read_json()
+                    schedule_id = payload.get("id") or payload.get("schedule_id")
+                    if not isinstance(schedule_id, str) or not schedule_id:
+                        self._send_json(
+                            {"error": "schedule_id_required"}, status=HTTPStatus.BAD_REQUEST
+                        )
+                        return
+                    deleted = delete_analysis_schedule(
+                        db_path=resolved_db_path, schedule_id=schedule_id
+                    )
+                    self._send_json({"deleted": deleted, "id": schedule_id})
+                    return
+                if path == "/api/analysis/schedules/run":
+                    payload = self._read_json()
+                    schedule_id = payload.get("id") or payload.get("schedule_id")
+                    schedule = (
+                        get_analysis_schedule(db_path=resolved_db_path, schedule_id=schedule_id)
+                        if isinstance(schedule_id, str) and schedule_id
+                        else None
+                    )
+                    if schedule is None:
+                        self._send_json(
+                            {"error": "analysis_schedule_not_found", "id": schedule_id},
+                            status=HTTPStatus.NOT_FOUND,
+                        )
+                        return
+                    job = job_from_schedule(schedule)
+                    job_id = selected_analysis_runner.submit(job)
+                    self._send_json(
+                        {"job_id": job_id, "schedule_id": schedule_id, "status": "queued"},
+                        status=HTTPStatus.ACCEPTED,
+                    )
+                    return
                 if path == "/api/operator-smoke":
                     payload = self._read_json()
                     operator = payload.get("operator", "mock")
@@ -2342,6 +2486,11 @@ def make_handler(
                 self._send_json(
                     {"error": "operator_adapter_failed", "detail": str(exc)},
                     status=HTTPStatus.CONFLICT,
+                )
+            except AnalysisRunError as exc:
+                self._send_json(
+                    {"error": "invalid_analysis_job", "detail": str(exc)},
+                    status=HTTPStatus.BAD_REQUEST,
                 )
             except OperatorSmokeError as exc:
                 self._send_json(
@@ -2588,6 +2737,82 @@ def _query_int(raw_path: str, key: str, default: int) -> int:
 
 def _optional_str(value: object) -> Optional[str]:
     return value if isinstance(value, str) and value else None
+
+
+def _analyzer_availability(db_path: Path) -> dict[str, Any]:
+    """Report which dashboard analyzers are usable: which CLIs are on PATH and which
+    operator adapters are registered. Drives the picker's enabled/disabled state."""
+
+    adapters = {a["id"]: a for a in list_operator_adapters(db_path)}
+    analyzers: list[dict[str, Any]] = []
+    for kind in DASHBOARD_ANALYZERS:
+        # ACE is a skillbook-diff path (its own command), not an operator preset.
+        preset = OPERATOR_PRESETS.get(kind)
+        command = preset.command[0] if preset is not None else ("ace" if kind == "ace" else kind)
+        analyzers.append(
+            {
+                "analyzer": kind,
+                "installed": shutil.which(command) is not None,
+                "command": command,
+                "adapter_registered": kind in adapters,
+                "schedulable": kind in SCHEDULABLE_ANALYZERS,
+            }
+        )
+    return {"analyzers": analyzers, "schedulable": list(SCHEDULABLE_ANALYZERS)}
+
+
+def _analysis_job_from_payload(payload: dict[str, Any]) -> AnalysisJob:
+    analyzer = payload.get("analyzer")
+    if not isinstance(analyzer, str) or not analyzer:
+        raise AnalysisRunError("analyzer_required")
+    ace_command = payload.get("ace_command")
+    operator_command = payload.get("operator_command")
+    timeout = payload.get("timeout_seconds", 120)
+    max_retries = payload.get("max_retries", 0)
+    return AnalysisJob(
+        analyzer=analyzer,
+        adapter_id=_optional_str(payload.get("adapter_id")),
+        scope=str(payload.get("scope") or "all"),
+        run_id=_optional_str(payload.get("run_id")),
+        since=_optional_str(payload.get("since")),
+        refresh_import=bool(payload.get("refresh_import", False)),
+        source_kind=_optional_str(payload.get("source_kind")),
+        source_path=_optional_str(payload.get("source_path")),
+        run_autonomy=bool(payload.get("run_autonomy", True)),
+        ace_command=ace_command if isinstance(ace_command, list) and ace_command else None,
+        operator_command=(
+            operator_command if isinstance(operator_command, list) and operator_command else None
+        ),
+        timeout_seconds=timeout if isinstance(timeout, int) else 120,
+        max_retries=max_retries if isinstance(max_retries, int) else 0,
+        profile_id=_optional_str(payload.get("profile_id")),
+    )
+
+
+def _schedule_update_fields(payload: dict[str, Any]) -> dict[str, Any]:
+    fields: dict[str, Any] = {}
+    if "adapter_id" in payload:
+        fields["adapter_id"] = _optional_str(payload.get("adapter_id"))
+    if "source_path" in payload:
+        fields["source_path"] = _optional_str(payload.get("source_path"))
+    if "at_time" in payload:
+        fields["at_time"] = _optional_str(payload.get("at_time"))
+    if "refresh_import" in payload:
+        fields["refresh_import"] = bool(payload.get("refresh_import"))
+    if "enabled" in payload:
+        fields["enabled"] = bool(payload.get("enabled"))
+    if "run_autonomy" in payload:
+        fields["run_autonomy"] = bool(payload.get("run_autonomy"))
+    if isinstance(payload.get("interval_hours"), int):
+        fields["interval_hours"] = payload["interval_hours"]
+    # Recompute next_run_at when cadence changes so the new timing takes effect.
+    if "interval_hours" in fields or "at_time" in fields:
+        interval = fields.get("interval_hours", payload.get("interval_hours", 24))
+        fields["next_run_at"] = next_run_at_iso(
+            interval if isinstance(interval, int) else 24,
+            fields.get("at_time", _optional_str(payload.get("at_time"))),
+        )
+    return fields
 
 
 def _header_str(value: object) -> Optional[str]:

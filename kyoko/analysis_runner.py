@@ -400,6 +400,25 @@ class AnalysisRunner:
                 continue
 
 
+class InlineAnalysisRunner:
+    """Executes jobs synchronously on ``submit`` — used on the request path and in tests
+    where a background worker would make behavior non-deterministic."""
+
+    def __init__(self, db_path: Path, *, bus: Optional[LiveBus] = None) -> None:
+        self._db_path = db_path
+        self._bus = bus
+
+    def start(self) -> None:
+        return None
+
+    def stop(self) -> None:
+        return None
+
+    def submit(self, job: AnalysisJob) -> str:
+        execute_analysis_job(self._db_path, job, bus=self._bus)
+        return job.job_id
+
+
 class Scheduler:
     """Daemon thread that fires due analysis schedules into an :class:`AnalysisRunner`."""
 
