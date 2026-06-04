@@ -151,7 +151,7 @@ class CliTests(unittest.TestCase):
 
             payload = json.loads(status_out.getvalue())
             self.assertTrue(payload["initialized"])
-            self.assertEqual(payload["schema_version"], 26)
+            self.assertEqual(payload["schema_version"], 27)
             self.assertEqual(payload["counts"]["spans"], 2)
             self.assertEqual(payload["counts"]["issues"], 0)
 
@@ -754,6 +754,61 @@ class CliTests(unittest.TestCase):
             self.assertEqual(set_payload["policy"]["context_mode"], "autonomous")
             self.assertEqual(set_payload["policy"]["harness_mode"], "propose")
             self.assertTrue(set_payload["policy"]["allow_repo_patch"])
+
+            ext_out = io.StringIO()
+            with redirect_stdout(ext_out):
+                ext_code = main(
+                    [
+                        "policy-set",
+                        "--db",
+                        str(db_path),
+                        "--profile-config-write",
+                        "on",
+                        "--replay-server-patch",
+                        "on",
+                        "--required-check-level-context",
+                        "L2_regression",
+                        "--required-check-level-harness",
+                        "L3_human_approved",
+                        "--rollback-on-regression",
+                        "off",
+                        "--json",
+                    ]
+                )
+            self.assertEqual(ext_code, 0)
+            ext_payload = json.loads(ext_out.getvalue())["policy"]
+            self.assertTrue(ext_payload["allow_profile_config_write"])
+            self.assertTrue(ext_payload["allow_replay_server_patch"])
+            self.assertEqual(ext_payload["required_check_level_context"], "L2_regression")
+            self.assertEqual(ext_payload["required_check_level_harness"], "L3_human_approved")
+            self.assertFalse(ext_payload["rollback_on_regression"])
+
+    def test_issue_status_cli_flow(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "kyoko.db"
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(main(["ingest-fixture", "--db", str(db_path), str(FIXTURE)]), 0)
+
+            create_out = io.StringIO()
+            with redirect_stdout(create_out):
+                self.assertEqual(main(["issue-create", "Flaky fetch", "--db", str(db_path), "--json"]), 0)
+            issue_id = json.loads(create_out.getvalue())["issue"]["id"]
+
+            status_out = io.StringIO()
+            with redirect_stdout(status_out):
+                self.assertEqual(
+                    main(["issue-status", issue_id, "resolved", "--db", str(db_path), "--json"]), 0
+                )
+            self.assertEqual(json.loads(status_out.getvalue())["issue"]["status"], "resolved")
+
+            comment_out = io.StringIO()
+            with redirect_stdout(comment_out):
+                self.assertEqual(
+                    main(["issue-comment", issue_id, "Looks valid; tracked.", "--db", str(db_path), "--json"]), 0
+                )
+            self.assertEqual(
+                json.loads(comment_out.getvalue())["issue"]["review_comment"], "Looks valid; tracked."
+            )
 
     def test_evidence_cli_redacts_by_default(self) -> None:
         with TemporaryDirectory() as tmpdir:

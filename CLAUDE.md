@@ -101,22 +101,24 @@ script `kyoko`, entry point `kyoko.cli:main`).
   subparsers, then dispatches with a long `if args.command == "...":` chain, each branch
   delegating to a feature module. To add a command: add an `add_parser(...)` block and a
   matching dispatch branch, then wire it to the feature module's function.
-- **`storage.py`** owns the SQLite schema (`SCHEMA_VERSION`, currently 24), `connect()`,
+- **`storage.py`** owns the SQLite schema (`SCHEMA_VERSION`, currently 27), `connect()`,
   and `initialize_database()`. Kyoko **refuses to open a DB whose `user_version` is newer
   than the installed `SCHEMA_VERSION`**. Schema changes mean bumping `SCHEMA_VERSION` and
   adding a migration (additive `CREATE TABLE IF NOT EXISTS` + `_ensure_column`, or a
   `DROP TABLE IF EXISTS` in `initialize_database` for SCOPE removals). The canonical data
   model (profiles → sources → runs → spans → handoffs → timeline_events; plus
-  learning_proposals, issues, skills, eval_specs, replay_runs, patch_transactions,
-  payload_blobs, autonomy_policies, live_events, mcp_log, annotations, and a per-span FTS5
-  search index) is specified in `docs/specs/0001-canonical-model.md`. **SCOPE
+  learning_proposals, issues, skills, `check_specs`/`check_locks`/`check_runs` (the gate's
+  apply-check plane), `eval_definitions`/`eval_measure_runs`/`eval_measure_results` (the
+  measurement plane), replay_runs, patch_transactions, payload_blobs, autonomy_policies,
+  live_events, mcp_log, annotations, and a per-span FTS5 search index) is specified in
+  `docs/specs/0001-canonical-model.md`. **SCOPE
   simplifications applied:** the per-profile `redaction_policies`/`retention_policies`
   tables and the `redaction_audit_events` ledger were removed (redaction is a single global
   "redact on export" default; retention is a manual `prune-retention --older-than-days`);
   the human-lock event ledger was dropped (a lock is a boolean + reason with enforcement);
   the profile is a single invisible row (no picker / `--all-profiles`); proposal `state`
   collapsed to `pending → applied → rolled_back` (+ internal `failed`).
-- **`web.py`** (~7k lines) is the self-hosted dashboard + JSON API (`kyoko serve`). API
+- **`web.py`** (~2.7k lines) is the self-hosted dashboard + JSON API (`kyoko serve`). API
   endpoints generally mirror CLI commands one-to-one (`POST /api/improve`, `/api/demo`,
   etc.). Keep CLI and API behavior in sync when changing a feature.
 - **Feature modules** map closely to command groups: `proposals.py`, `apply.py`,
@@ -135,7 +137,22 @@ script `kyoko`, entry point `kyoko.cli:main`).
   issue/good/note markers on runs/spans — evidence only, outside the gate),
   `otlp_protobuf.py` (dependency-free stdlib OTLP `ExportTraceServiceRequest`
   decoder/encoder), `span_normalize.py` (SDK span → canonical llm/tool/other view),
-  `subagents.py` (infers sub-agent groupings from span-tree shape).
+  `subagents.py` (infers sub-agent groupings from span-tree shape). The **measurement plane**
+  (newest subsystem) lives in `evals_measure.py` (shared model for both planes),
+  `eval_detectors.py` (the `eval` plane — deterministic Python detectors over a trace
+  corpus), `llm_evals.py` (the `llm_eval` plane — LLM-as-judge templates scored outside the
+  core), `metric_bindings.py` (resolves `llm_eval` template vars from the span/run model),
+  and `eval_issues.py` (turns a measurement aggregate into a first-class Issue); the gate's
+  apply-check plane is `checks.py`.
+
+  **Naming footgun — three distinct "eval"-like things:** (1) the gate's apply-check plane
+  is now **`check`** (`checks` / `generate-checks` / `run-check` commands, `check_*` tables;
+  this is the thing renamed from `eval`→`check` at schema 24→25 and that the autonomy gate
+  consumes); (2) the measurement plane's deterministic-detector half is **`eval`** (`evals` /
+  `run-eval` / `eval-*` commands, `eval_*` tables, added 25→26); (3) its LLM-judge half is
+  **`llm_eval`** (`llm-evals` / `run-llm-eval` commands). When a doc, spec, or older comment
+  says "eval/replay gate" it means the **`check`** plane, not the measurement `eval` plane.
+  Measurement is observation-only; it never feeds the autonomy gate.
 - **`mcp.py`** exposes a read/propose/eval-request MCP surface. It deliberately does **not**
   expose direct apply/harness-write tools, and cleanup tools are dry-run only. Preserve
   this boundary.

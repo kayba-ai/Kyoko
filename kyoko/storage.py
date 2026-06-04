@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 
-SCHEMA_VERSION = 26
+SCHEMA_VERSION = 27
 
 
 class StorageError(Exception):
@@ -645,6 +645,7 @@ CREATE TABLE IF NOT EXISTS issues (
   affected_task_ids_json TEXT,
   affected_span_ids_json TEXT,
   proposal_ids_json TEXT,
+  review_comment TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT,
   FOREIGN KEY (profile_id) REFERENCES profiles(id)
@@ -1007,6 +1008,8 @@ def initialize_database(db_path: Path) -> None:
         ):
             connection.execute(f"DROP INDEX IF EXISTS {_old_index}")
         connection.executescript(SCHEMA_SQL)
+        # v27: per-issue free-text review comment (evidence triage; never gated).
+        _ensure_column(connection, "issues", "review_comment", "review_comment TEXT")
         _ensure_column(connection, "skills", "human_lock_reason", "human_lock_reason TEXT")
         _ensure_column(
             connection,

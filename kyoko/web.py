@@ -39,7 +39,7 @@ from .details import (
 from .eval_detectors import DetectorError, get_detector, list_detectors, run_detector
 from .evals_measure import EvalMeasureError, compare_eval_runs, get_measure_results, get_measure_run, list_measure_runs
 from .llm_evals import LlmEvalError, get_llm_eval, list_llm_evals, run_llm_eval
-from .issues import IssueError, create_issue, list_issues
+from .issues import IssueError, create_issue, list_issues, set_issue_comment, update_issue_status
 from .doctor import DEFAULT_SMOKE_EVIDENCE_DIR, run_doctor
 from .evidence import build_evidence_bundle
 from .checks import (
@@ -1165,6 +1165,46 @@ def make_handler(
                         return
                     self._send_json({"issue": issue})
                     return
+                if path == "/api/issue-status":
+                    payload = self._read_json()
+                    issue_id = _optional_str(payload.get("id"))
+                    status = _optional_str(payload.get("status"))
+                    if not issue_id or not status:
+                        self._send_json(
+                            {"error": "id_and_status_required"},
+                            status=HTTPStatus.BAD_REQUEST,
+                        )
+                        return
+                    try:
+                        issue = update_issue_status(
+                            db_path=resolved_db_path,
+                            issue_id=issue_id,
+                            status=status,
+                        )
+                    except IssueError as exc:
+                        self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                        return
+                    self._send_json({"issue": issue})
+                    return
+                if path == "/api/issue-comment":
+                    payload = self._read_json()
+                    issue_id = _optional_str(payload.get("id"))
+                    if not issue_id:
+                        self._send_json(
+                            {"error": "id_required"}, status=HTTPStatus.BAD_REQUEST
+                        )
+                        return
+                    try:
+                        issue = set_issue_comment(
+                            db_path=resolved_db_path,
+                            issue_id=issue_id,
+                            comment=_optional_str(payload.get("comment")),
+                        )
+                    except IssueError as exc:
+                        self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                        return
+                    self._send_json({"issue": issue})
+                    return
                 # ---- eval (Python detector) measurement plane ----
                 if path == "/api/run-eval":
                     payload = self._read_json()
@@ -1289,8 +1329,23 @@ def make_handler(
                         allow_skillbook_write=payload.get("allow_skillbook_write")
                         if isinstance(payload.get("allow_skillbook_write"), bool)
                         else None,
+                        allow_profile_config_write=payload.get("allow_profile_config_write")
+                        if isinstance(payload.get("allow_profile_config_write"), bool)
+                        else None,
+                        allow_replay_server_patch=payload.get("allow_replay_server_patch")
+                        if isinstance(payload.get("allow_replay_server_patch"), bool)
+                        else None,
                         dirty_worktree_policy=payload.get("dirty_worktree_policy")
                         if isinstance(payload.get("dirty_worktree_policy"), str)
+                        else None,
+                        required_check_level_context=payload.get("required_check_level_context")
+                        if isinstance(payload.get("required_check_level_context"), str)
+                        else None,
+                        required_check_level_harness=payload.get("required_check_level_harness")
+                        if isinstance(payload.get("required_check_level_harness"), str)
+                        else None,
+                        rollback_on_regression=payload.get("rollback_on_regression")
+                        if isinstance(payload.get("rollback_on_regression"), bool)
                         else None,
                     )
                     self._send_json({"policy": policy})

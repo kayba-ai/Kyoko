@@ -64,7 +64,7 @@ from .details import (
     get_run_detail,
     list_runs,
 )
-from .issues import IssueError, create_issue, list_issues
+from .issues import IssueError, create_issue, list_issues, set_issue_comment, update_issue_status
 from .eval_detectors import (
     DetectorError,
     get_detector,
@@ -1008,6 +1008,28 @@ def build_parser() -> argparse.ArgumentParser:
     )
     issue_create.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
 
+    issue_status = subcommands.add_parser(
+        "issue-status",
+        help="Set an issue's triage status (evidence only; never changes agent behavior).",
+    )
+    _add_db_argument(issue_status)
+    issue_status.add_argument("issue_id", help="Issue id to update.")
+    issue_status.add_argument(
+        "status", choices=["open", "resolved", "dismissed"], help="New triage status."
+    )
+    issue_status.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+
+    issue_comment = subcommands.add_parser(
+        "issue-comment",
+        help="Set an issue's review comment (evidence only; never changes agent behavior).",
+    )
+    _add_db_argument(issue_comment)
+    issue_comment.add_argument("issue_id", help="Issue id to comment on.")
+    issue_comment.add_argument(
+        "comment", help="Review comment text (empty string clears it)."
+    )
+    issue_comment.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+
     # --- measurement plane: `eval` (deterministic Python detectors) ---------
     evals_cmd = subcommands.add_parser(
         "evals",
@@ -1504,9 +1526,34 @@ def build_parser() -> argparse.ArgumentParser:
         help="Allow Kyoko skillbook/context writes.",
     )
     policy_set.add_argument(
+        "--profile-config-write",
+        choices=["on", "off"],
+        help="Allow Kyoko profile config writes.",
+    )
+    policy_set.add_argument(
+        "--replay-server-patch",
+        choices=["on", "off"],
+        help="Allow replay server patch writes.",
+    )
+    policy_set.add_argument(
         "--dirty-worktree-policy",
         choices=["block", "allow_touched_only", "allow"],
         help="Dirty worktree behavior for harness apply.",
+    )
+    policy_set.add_argument(
+        "--required-check-level-context",
+        choices=["L0_generated", "L1_repeated", "L2_regression", "L3_human_approved"],
+        help="Minimum check trust level required for context autonomy.",
+    )
+    policy_set.add_argument(
+        "--required-check-level-harness",
+        choices=["L0_generated", "L1_repeated", "L2_regression", "L3_human_approved"],
+        help="Minimum check trust level required for harness autonomy.",
+    )
+    policy_set.add_argument(
+        "--rollback-on-regression",
+        choices=["on", "off"],
+        help="Roll back autonomous harness writes when replay regresses.",
     )
     policy_set.add_argument(
         "--json",
@@ -4522,6 +4569,38 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(f"{issue['id']}  {issue['status']}  {issue['title']}")
         return 0
 
+    if args.command == "issue-status":
+        try:
+            issue = update_issue_status(
+                db_path=args.db,
+                issue_id=args.issue_id,
+                status=args.status,
+            )
+        except (IssueError, StorageError) as exc:
+            print(f"issue-status failed: {exc}", file=sys.stderr)
+            return 1
+        if args.json:
+            print(json.dumps({"issue": issue}, sort_keys=True))
+        else:
+            print(f"{issue['id']}  {issue['status']}  {issue['title']}")
+        return 0
+
+    if args.command == "issue-comment":
+        try:
+            issue = set_issue_comment(
+                db_path=args.db,
+                issue_id=args.issue_id,
+                comment=args.comment,
+            )
+        except (IssueError, StorageError) as exc:
+            print(f"issue-comment failed: {exc}", file=sys.stderr)
+            return 1
+        if args.json:
+            print(json.dumps({"issue": issue}, sort_keys=True))
+        else:
+            print(f"{issue['id']}  comment set")
+        return 0
+
     if args.command == "evals":
         try:
             detectors = list_detectors(db_path=args.db)
@@ -5065,7 +5144,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 allow_repo_patch=_on_off(args.repo_patch),
                 allow_check_write=_on_off(args.check_write),
                 allow_skillbook_write=_on_off(args.skillbook_write),
+                allow_profile_config_write=_on_off(args.profile_config_write),
+                allow_replay_server_patch=_on_off(args.replay_server_patch),
                 dirty_worktree_policy=args.dirty_worktree_policy,
+                required_check_level_context=args.required_check_level_context,
+                required_check_level_harness=args.required_check_level_harness,
+                rollback_on_regression=_on_off(args.rollback_on_regression),
             )
         except (AutonomyError, StorageError) as exc:
             print(f"policy update failed: {exc}", file=sys.stderr)

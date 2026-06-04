@@ -90,6 +90,7 @@ def _row_to_dict(row: Any) -> dict[str, Any]:
         "affected_task_ids": _json_loads(row["affected_task_ids_json"], []),
         "affected_span_ids": _json_loads(row["affected_span_ids_json"], []),
         "proposal_ids": _json_loads(row["proposal_ids_json"], []),
+        "review_comment": row["review_comment"] if "review_comment" in row.keys() else None,
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
@@ -268,5 +269,28 @@ def update_issue_status(*, db_path: Path, issue_id: str, status: str) -> dict:
         )
         record = _row_to_dict(row)
     record["status"] = status
+    record["updated_at"] = updated_at
+    return record
+
+
+def set_issue_comment(*, db_path: Path, issue_id: str, comment: Optional[str]) -> dict:
+    """Set (or clear) the free-text review comment on an issue. Evidence triage
+    only — it never changes agent behavior or touches the check/replay gate."""
+
+    initialize_database(db_path)
+    normalized = comment.strip() if isinstance(comment, str) and comment.strip() else None
+    updated_at = utc_now()
+    with connect(db_path) as connection:
+        row = connection.execute(
+            "SELECT * FROM issues WHERE id = ?", (issue_id,)
+        ).fetchone()
+        if row is None:
+            raise IssueError(f"issue_not_found:{issue_id}")
+        connection.execute(
+            "UPDATE issues SET review_comment = ?, updated_at = ? WHERE id = ?",
+            (normalized, updated_at, issue_id),
+        )
+        record = _row_to_dict(row)
+    record["review_comment"] = normalized
     record["updated_at"] = updated_at
     return record

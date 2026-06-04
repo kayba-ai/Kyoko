@@ -882,6 +882,53 @@ class WebTests(unittest.TestCase):
             self.assertEqual(detail["summary"]["failed_spans"], 1)
             self.assertEqual(detail["related_proposals"][0]["proposal"]["id"], "proposal_context_timeout_001")
 
+    def test_issue_status_post_round_trip(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "kyoko.db"
+            ingest_source_fixture(db_path, FIXTURE)
+
+            with RunningServer(db_path) as server:
+                created = server.post_json("/api/issues", {"title": "Flaky fetch", "severity": "high"})["issue"]
+                updated = server.post_json(
+                    "/api/issue-status", {"id": created["id"], "status": "resolved"}
+                )["issue"]
+                commented = server.post_json(
+                    "/api/issue-comment",
+                    {"id": created["id"], "comment": "Reviewed: valid; fix shipped."},
+                )["issue"]
+                resolved = server.get_json("/api/issues?status=resolved")["issues"]
+                detail = server.get_json(f"/api/issue-detail?id={created['id']}")
+
+            self.assertEqual(updated["status"], "resolved")
+            self.assertEqual(commented["review_comment"], "Reviewed: valid; fix shipped.")
+            self.assertIn(created["id"], [i["id"] for i in resolved])
+            self.assertEqual(detail["issue"]["review_comment"], "Reviewed: valid; fix shipped.")
+
+    def test_policy_post_updates_extended_fields(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "kyoko.db"
+            ingest_source_fixture(db_path, FIXTURE)
+
+            with RunningServer(db_path) as server:
+                updated = server.post_json(
+                    "/api/policy",
+                    {
+                        "allow_profile_config_write": True,
+                        "allow_replay_server_patch": True,
+                        "required_check_level_context": "L2_regression",
+                        "required_check_level_harness": "L3_human_approved",
+                        "rollback_on_regression": False,
+                    },
+                )["policy"]
+                reread = server.get_json("/api/policy")["policy"]
+
+            for policy in (updated, reread):
+                self.assertTrue(policy["allow_profile_config_write"])
+                self.assertTrue(policy["allow_replay_server_patch"])
+                self.assertEqual(policy["required_check_level_context"], "L2_regression")
+                self.assertEqual(policy["required_check_level_harness"], "L3_human_approved")
+                self.assertFalse(policy["rollback_on_regression"])
+
     def test_autonomy_endpoint_gates_context_proposal(self) -> None:
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
