@@ -25,23 +25,19 @@ interface NavItem {
   icon: LucideIcon;
 }
 interface NavSection {
-  heading: string;
+  /** Omitted for the lead group (Overview) which needs no label. */
+  heading?: string;
   items: NavItem[];
 }
 
 // Grouped to read as the issue-centric loop / 8-step job map (spec 0016):
-// Observe (capture) → Diagnose (the Issue spine) → Fix (proposal + both gates) →
-// Guard (standing evaluators that watch future traces and re-raise issues). The
-// loop closes: a Guard hit re-enters Diagnose.
+// Overview leads, then Diagnose (the Issue spine) → Fix (proposal + both gates)
+// → Evaluate (standing detectors/judges that watch future traces and re-raise
+// issues) → Observe (the raw telemetry you drill into).
 const SECTIONS: NavSection[] = [
   {
-    // Steps 01/03 — capture & locate the failure.
-    heading: "Observe",
-    items: [
-      { to: "/overview", label: "Overview", icon: LayoutDashboard },
-      { to: "/traces", label: "Traces", icon: ListTree },
-      { to: "/mcp-log", label: "Agent ↔ Kyoko", icon: Radio },
-    ],
+    // Lead tab, no heading — the outcome dashboard.
+    items: [{ to: "/overview", label: "Overview", icon: LayoutDashboard }],
   },
   {
     // Steps 02/04 — surface, prioritize, diagnose. Issues are the spine;
@@ -63,12 +59,20 @@ const SECTIONS: NavSection[] = [
     ],
   },
   {
-    // Step 08 — standing measurements/guards that monitor future traces and
-    // re-raise an Issue on recurrence, closing the loop back to Diagnose.
-    heading: "Guard",
+    // Step 08 — standing measurements that monitor future traces and re-raise
+    // an Issue on recurrence, closing the loop back to Diagnose.
+    heading: "Evaluate",
     items: [
       { to: "/detectors", label: "Detectors", icon: ScanSearch },
       { to: "/judges", label: "Judges", icon: Scale },
+    ],
+  },
+  {
+    // Steps 01/03 — the raw telemetry you capture & drill into.
+    heading: "Observe",
+    items: [
+      { to: "/traces", label: "Traces", icon: ListTree },
+      { to: "/mcp-log", label: "Agent ↔ Kyoko", icon: Radio },
     ],
   },
 ];
@@ -127,12 +131,14 @@ export function Layout() {
             </span>
           </div>
         </div>
-        <nav className="flex flex-1 flex-col gap-5 overflow-y-auto px-3 py-3">
+        <nav className="flex flex-1 flex-col gap-2.5 overflow-y-auto px-3 py-3">
           {SECTIONS.map((section) => (
-            <div key={section.heading} className="flex flex-col gap-1">
-              <div className="px-2.5 pb-1 text-xs font-medium text-muted-foreground">
-                {section.heading}
-              </div>
+            <div key={section.heading ?? section.items[0]?.to} className="flex flex-col gap-1">
+              {section.heading && (
+                <div className="px-2.5 pb-1 text-xs font-medium text-muted-foreground">
+                  {section.heading}
+                </div>
+              )}
               {section.items.map((item) => (
                 <NavRow key={item.to} {...item} />
               ))}
