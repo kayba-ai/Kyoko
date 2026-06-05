@@ -667,6 +667,138 @@ def bundle_into_issue(
     return record
 
 
+def _entry_is_active(connection: Any, issue_id: str) -> Optional[bool]:
+    """Return the entry's ``active`` flag (True/False), or ``None`` if it doesn't exist.
+
+    The analysing agent's in-place ``update``/``merge`` ops operate on the problem-phase
+    layer only; an ``active`` (injected) skill evolves solely through the gate."""
+
+    row = connection.execute(
+        "SELECT active FROM skills WHERE id = ?", (issue_id,)
+    ).fetchone()
+    if row is None:
+        return None
+    return bool(row["active"])
+
+
+def update_issue(
+    *,
+    db_path: Path,
+    issue_id: str,
+    title: Optional[str] = None,
+    body: Optional[str] = None,
+    section: Optional[str] = None,
+    severity: Optional[str] = None,
+    category: Optional[str] = None,
+    root_cause: Optional[str] = None,
+    evidence_refs: Optional[list] = None,
+    affected_span_ids: Optional[list] = None,
+) -> dict:
+    """Analysing-agent ``update`` op: refine an existing problem-phase entry in place.
+
+    The agent, having read the living skillbook, decides this finding *evolves* an existing
+    entry rather than spawning a duplicate. Scalar problem-facets (title/body/section/
+    severity/category/root_cause) are overwritten when provided; ``evidence_refs`` and
+    ``affected_span_ids`` are unioned so prior evidence is never dropped. Evidence only —
+    none of these fields is injected into a run, so the edit stays outside the gate.
+
+    Refuses an ``active`` (injected) entry: its content evolves only through the proposal →
+    gate path. Raises :class:`IssueError` (``issue_active`` / ``issue_not_found``) so the
+    caller can fall back to surfacing a fresh entry."""
+
+    initialize_database(db_path)
+    if section is not None and section not in ISSUE_SECTIONS:
+        raise IssueError(f"unsupported_section:{section}")
+    if severity is not None and severity not in ISSUE_SEVERITIES:
+        raise IssueError(f"unsupported_severity:{severity}")
+
+    with connect(db_path) as connection:
+        active = _entry_is_active(connection, issue_id)
+    if active is None:
+        raise IssueError(f"issue_not_found:{issue_id}")
+    if active:
+        raise IssueError(f"issue_active:{issue_id}")
+
+    current = get_issue(db_path=db_path, issue_id=issue_id)
+    assignments: dict[str, Any] = {}
+    if isinstance(title, str) and title.strip():
+        assignments["issue"] = title.strip()
+    if body is not None:
+        assignments["body"] = body
+    if section is not None:
+        assignments["section"] = section
+    if severity is not None:
+        assignments["severity"] = severity
+    if category is not None:
+        assignments["category"] = category
+    if isinstance(root_cause, str) and root_cause.strip():
+        assignments["root_cause"] = root_cause.strip()
+
+    merged_evidence = None
+    if evidence_refs:
+        merged_evidence = list(current.get("evidence_refs") or [])
+        seen = {json.dumps(ref, sort_keys=True) for ref in merged_evidence}
+        for ref in evidence_refs:
+            key = json.dumps(ref, sort_keys=True)
+            if key not in seen:
+                merged_evidence.append(ref)
+                seen.add(key)
+        assignments["evidence_refs_json"] = _json_dump(merged_evidence)
+
+    merged_spans = None
+    if affected_span_ids:
+        merged_spans = list(current.get("affected_span_ids") or [])
+        span_seen = set(merged_spans)
+        for span_id in affected_span_ids:
+            if span_id not in span_seen:
+                merged_spans.append(span_id)
+                span_seen.add(span_id)
+        assignments["affected_span_ids_json"] = _json_dump(merged_spans)
+
+    if not assignments:
+        return current
+
+    record = _apply_issue_update(
+        db_path=db_path, issue_id=issue_id, assignments=assignments
+    )
+    if "issue" in assignments:
+        record["title"] = assignments["issue"]
+        record.pop("issue", None)
+    if merged_evidence is not None:
+        record["evidence_refs"] = merged_evidence
+        record.pop("evidence_refs_json", None)
+    if merged_spans is not None:
+        record["affected_span_ids"] = merged_spans
+        record.pop("affected_span_ids_json", None)
+    return record
+
+
+def merge_observation(
+    *,
+    db_path: Path,
+    issue_id: str,
+    evidence_refs: Optional[list] = None,
+    affected_span_ids: Optional[list] = None,
+) -> dict:
+    """Analysing-agent ``merge`` op: fold a fresh observation into an existing problem-phase
+    entry (union evidence/spans, bump ``recurrence_count``, re-open a resolved/guarded one
+    as a regression). Refuses an ``active`` (injected) entry. Evidence only."""
+
+    initialize_database(db_path)
+    with connect(db_path) as connection:
+        active = _entry_is_active(connection, issue_id)
+    if active is None:
+        raise IssueError(f"issue_not_found:{issue_id}")
+    if active:
+        raise IssueError(f"issue_active:{issue_id}")
+    return bundle_into_issue(
+        db_path=db_path,
+        issue_id=issue_id,
+        evidence_refs=evidence_refs,
+        affected_span_ids=affected_span_ids,
+    )
+
+
 def surface_issue(
     *,
     db_path: Path,
@@ -888,6 +1020,18 @@ def validate_issue(
 
     if issue.get("schema_version") != "kyoko.issue.v1":
         errors.append("schema_version_invalid")
+
+    # Skillbook-integration op (analysing-agent add/update/merge). `update`/`merge` must
+    # name an existing entry to evolve; `add` (default) creates a fresh problem-phase entry.
+    op = issue.get("op")
+    if op is not None and op not in ("add", "update", "merge"):
+        errors.append(f"unsupported_op:{op}")
+    target_id = issue.get("target_id")
+    if op in ("update", "merge"):
+        if not isinstance(target_id, str) or not target_id.strip():
+            errors.append("target_id_required")
+        elif not _issue_row_exists(connection, "skills", target_id):
+            errors.append(f"target_not_found:{target_id}")
 
     title = issue.get("title")
     if not isinstance(title, str) or not title.strip():

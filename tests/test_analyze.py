@@ -6,13 +6,14 @@ import unittest
 
 from kyoko.analyze import (
     AnalyzeError,
+    _surface_issues,
     analyze_with_command_operator,
     analyze_with_mock_operator,
     extract_issues_from_output,
     extract_proposal_from_output,
     list_operator_runs,
 )
-from kyoko.issues import get_issue, list_issues
+from kyoko.issues import create_issue, get_issue, list_issues
 from kyoko.proposals import list_learning_proposals
 from kyoko.storage import get_database_status, ingest_source_fixture
 
@@ -108,6 +109,11 @@ class AnalyzeTests(unittest.TestCase):
             prompt = report.prompt_path.read_text()
             self.assertIn("Kyoko Diagnosis Task", prompt)
             self.assertIn("BEGIN_KYOKO_ISSUES_JSON", prompt)
+            # The diagnosis turn now shows the living skillbook and asks the agent to
+            # integrate its findings via add/update/merge ops.
+            self.assertIn("Current Skillbook (the living state)", prompt)
+            self.assertIn('op: "update"', prompt)
+            self.assertIn('op: "merge"', prompt)
             operator_runs = list_operator_runs(db_path)
             self.assertEqual(operator_runs[0]["id"], report.operator_run_id)
             self.assertEqual(operator_runs[0]["status"], "succeeded")
@@ -117,6 +123,63 @@ class AnalyzeTests(unittest.TestCase):
             self.assertEqual(
                 operator_runs[0]["metadata"]["issue_ids"], list(report.issue_ids)
             )
+
+    def test_diagnosis_prompt_lists_existing_open_issues(self) -> None:
+        # An open problem-phase entry is rendered (with its id) so the agent can target it.
+        with TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "kyoko.db"
+            output_dir = Path(tmpdir) / "analysis"
+            ingest_source_fixture(db_path, FIXTURE)
+            existing = create_issue(
+                db_path=db_path, title="Existing open failure", section="context",
+                root_cause="prior diagnosis",
+            )
+            report = analyze_with_command_operator(
+                db_path=db_path,
+                output_dir=output_dir,
+                command=[sys.executable, str(OPERATOR_COMMAND)],
+                schema_path=SCHEMA,
+            )
+            prompt = report.prompt_path.read_text()
+            self.assertIn(existing["id"], prompt)
+            self.assertIn("Existing open failure", prompt)
+
+    def test_surface_issues_dispatches_update_and_merge_ops(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "kyoko.db"
+            ingest_source_fixture(db_path, FIXTURE)
+            seed = create_issue(
+                db_path=db_path, title="Fetch times out", section="harness",
+                root_cause="initial", source="analysis",
+                evidence_refs=[{"entity_type": "span", "entity_id": "span_fetch_timeout_001"}],
+                profile_id="profile_news_research_001",
+            )
+            new_ids, bundled_ids, all_ids = _surface_issues(
+                db_path=db_path,
+                profile_id="profile_news_research_001",
+                issues=[
+                    {
+                        "schema_version": "kyoko.issue.v1", "op": "update",
+                        "target_id": seed["id"], "title": "Fetch times out",
+                        "section": "harness", "root_cause": "No backoff on the fetch tool",
+                        "evidence_refs": [{"entity_type": "run", "entity_id": "run_research_topic_001"}],
+                    },
+                    {
+                        "schema_version": "kyoko.issue.v1", "op": "merge",
+                        "target_id": seed["id"], "title": "again", "section": "harness",
+                        "root_cause": "again",
+                        "evidence_refs": [{"entity_type": "span", "entity_id": "span_fetch_timeout_001"}],
+                    },
+                ],
+            )
+            # Both ops folded into the existing entry — none created a new row.
+            self.assertEqual(new_ids, [])
+            self.assertEqual(bundled_ids, [seed["id"], seed["id"]])
+            self.assertEqual(all_ids, [seed["id"], seed["id"]])
+            self.assertEqual(len(list_issues(db_path=db_path)), 1)
+            refreshed = get_issue(db_path=db_path, issue_id=seed["id"])
+            self.assertEqual(refreshed["root_cause"], "No backoff on the fetch tool")
+            self.assertEqual(refreshed["recurrence_count"], 2)  # the merge bumped it once
 
     def test_command_operator_expands_prompt_placeholders_for_argument_driven_cli(self) -> None:
         with TemporaryDirectory() as tmpdir:

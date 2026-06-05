@@ -17,6 +17,16 @@
       "type": "string",
       "const": "kyoko.issue.v1"
     },
+    "op": {
+      "description": "How the analysing agent integrates this finding into the living skillbook: `add` (default) creates a new problem-phase entry; `update` refines the existing entry named by `target_id` in place; `merge` folds this recurrence into `target_id` (unions evidence, bumps recurrence_count). `update`/`merge` may only target an OPEN issue (an active/injected skill evolves only through the gate).",
+      "type": "string",
+      "enum": ["add", "update", "merge"]
+    },
+    "target_id": {
+      "description": "The existing skillbook entry id this `update`/`merge` op evolves. Required for `update`/`merge`; ignored for `add`.",
+      "type": "string",
+      "minLength": 1
+    },
     "title": {
       "type": "string",
       "minLength": 1

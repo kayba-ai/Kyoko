@@ -80,6 +80,8 @@ def write_operator_prompt_artifacts(
                 evidence_path=evidence_path,
                 target=target,
                 schema_path=resolved_schema_path,
+                db_path=db_path,
+                profile_id=str(bundle["profile_id"]),
             )
         )
     elif kind == "consolidate":
@@ -337,20 +339,28 @@ def build_diagnosis_prompt(
     evidence_path: Path,
     target: str = "generic",
     schema_path: Optional[Path] = None,
+    db_path: Optional[Path] = None,
+    profile_id: Optional[str] = None,
 ) -> str:
-    """Diagnosis turn: instruct the operator to read the evidence and return a JSON array
-    of ``kyoko.issue.v1`` issues — diagnosis only, no fixes/proposals/skillbook edits."""
+    """Diagnosis turn: show the operator the living skillbook and the evidence, and ask it
+    to **integrate** its findings into the skillbook — returning a JSON array of
+    ``kyoko.issue.v1`` items, each an ``add`` / ``update`` / ``merge`` op (ACE
+    SkillManager style). Still diagnosis-only: it never authors a fix/LearningProposal or
+    activates a skill (that is the later, gated step)."""
 
     summary = bundle.get("summary", {})
     redaction = bundle.get("redaction") if isinstance(bundle.get("redaction"), dict) else {}
     redaction_policy = redaction.get("policy") if isinstance(redaction.get("policy"), dict) else {}
     payload_access = redaction_policy.get("payload_access", "unknown")
     redact_sensitive_values = redaction_policy.get("redact_sensitive_values", "unknown")
-    profile_id = str(bundle.get("profile_id") or "")
+    resolved_profile_id = str(profile_id or bundle.get("profile_id") or "")
     schema_display = str(schema_path) if schema_path is not None else "docs/schemas/issue.schema.json"
     target_note = _target_note(target)
-    skeleton = [_issue_skeleton()]
+    skeleton = [_issue_skeleton(), _issue_update_skeleton()]
     inline_evidence = _inline_evidence_json(bundle=bundle, evidence_path=evidence_path)
+    active_lines, open_issue_lines = _skillbook_context_lines(
+        db_path=db_path, profile_id=resolved_profile_id
+    )
 
     return "\n".join(
         [
@@ -360,17 +370,31 @@ def build_diagnosis_prompt(
             f"Evidence bundle: `{evidence_path}`",
             f"Issue schema: `{schema_display}`",
             "",
-            "You are acting as Kyoko's analysis operator. Read the evidence bundle, identify one or more concrete agent failures, and return a JSON array of strict `kyoko.issue.v1` issues.",
+            "You are acting as Kyoko's analysis operator. Read the evidence bundle, identify one or more concrete agent failures, and **integrate** them into the living skillbook below — returning a JSON array of strict `kyoko.issue.v1` items.",
             "",
-            "This is a **diagnosis-only** turn. Do NOT propose fixes, do NOT author a LearningProposal, and do NOT edit the skillbook. A proposal is authored in a separate step after a human (or autonomous policy) accepts an issue.",
+            "This is a **diagnosis-only** turn for the *problem space*: you evolve the problem-phase entries (the open issues) but do NOT author a fix/LearningProposal and do NOT activate or rewrite an active skill. Authoring and activating a fix is a separate, gated step after an issue is accepted.",
             "",
             target_note,
             "",
+            "## Current Skillbook (the living state)",
+            "",
+            "**Active skills** are ALREADY injected into runs. Treat them as **read-only** context: do not re-raise a problem they already cover, and do not try to edit them here (changing an active skill is the gate's job).",
+            "",
+            *active_lines,
+            "",
+            "**Open issues** are the mutable problem-phase entries. Integrate your findings INTO them instead of duplicating:",
+            "- `op: \"update\"` + `target_id` — refine an existing open issue (sharper `root_cause`, more evidence).",
+            "- `op: \"merge\"` + `target_id` — fold a recurrence of an existing open issue into it.",
+            "- `op: \"add\"` (the default) — only for a genuinely new problem not already listed.",
+            "",
+            *open_issue_lines,
+            "",
             "## Hard Constraints",
             "",
-            "- Return exactly one issues block on stdout containing a JSON array (one or more issues).",
+            "- Return exactly one issues block on stdout containing a JSON array (one or more items).",
             "- Cite only evidence IDs that exist in the evidence bundle.",
-            "- Each issue's `root_cause` is the diagnosis; do not include any fix, patch, or skill text.",
+            "- Each item's `root_cause` is the diagnosis; do not include any fix, patch, or skill text.",
+            "- `update`/`merge` may only target an OPEN issue id listed above — never an active skill id.",
             "- Set `section` to `context` when a prompt/skillbook fix would address it, or `harness` when it needs a check, test, replay adapter, tool wrapper, or repository patch.",
             "- If evidence is insufficient for a concrete failure, return an empty array `[]`.",
             "",
@@ -681,6 +705,7 @@ def _consolidation_proposal_skeleton(profile_id: str) -> dict[str, Any]:
 def _issue_skeleton() -> dict[str, Any]:
     return {
         "schema_version": "kyoko.issue.v1",
+        "op": "add",
         "title": "Short evidence-backed failure title",
         "section": "context",
         "root_cause": "Evidence-backed diagnosis of why the agent failed.",
@@ -697,6 +722,75 @@ def _issue_skeleton() -> dict[str, Any]:
         "affected_span_ids": ["replace_with_existing_span_id"],
         "affected_agent_identity_ids": ["replace_with_existing_agent_identity_id"],
     }
+
+
+def _issue_update_skeleton() -> dict[str, Any]:
+    """Shape guide for evolving an existing open issue instead of adding a duplicate."""
+
+    return {
+        "schema_version": "kyoko.issue.v1",
+        "op": "update",
+        "target_id": "issue_id_of_an_existing_open_issue_above",
+        "title": "Refined failure title (or keep the existing one)",
+        "section": "context",
+        "root_cause": "Sharper, evidence-backed diagnosis that supersedes the prior one.",
+        "evidence_refs": [
+            {
+                "entity_type": "span",
+                "entity_id": "replace_with_existing_span_id",
+                "role": "failure",
+                "note": "New evidence folded into the existing entry.",
+            }
+        ],
+        "affected_span_ids": ["replace_with_existing_span_id"],
+    }
+
+
+def _skillbook_context_lines(
+    *, db_path: Optional[Path], profile_id: str
+) -> tuple[list[str], list[str]]:
+    """Render the current living skillbook for the diagnosis turn: active (injected,
+    read-only) skills and open (mutable) problem-phase issues. Best-effort — falls back to
+    placeholders when the skillbook can't be read."""
+
+    if db_path is None or not profile_id:
+        return ["- (skillbook unavailable)"], ["- (no open issues)"]
+
+    try:
+        from .apply import list_skills
+
+        active_skills = [
+            skill for skill in list_skills(db_path, profile_id=profile_id) if skill.get("active")
+        ]
+        active_lines = [
+            "- `{id}` section=`{section}` keywords={keywords}".format(
+                id=skill.get("id"),
+                section=skill.get("section"),
+                keywords=skill.get("keywords"),
+            )
+            for skill in active_skills
+        ] or ["- (no active skills)"]
+    except Exception:  # noqa: BLE001 — skillbook context is advisory only
+        active_lines = ["- (active skills unavailable)"]
+
+    try:
+        from .issues import list_issues
+
+        issues = list_issues(db_path=db_path, profile_id=profile_id)
+        open_issue_lines = [
+            "- `{id}` [{status}] recurrence={rec} {title}".format(
+                id=issue.get("id"),
+                status=issue.get("status"),
+                rec=issue.get("recurrence_count"),
+                title=issue.get("title"),
+            )
+            for issue in issues
+            if issue.get("status") not in {"resolved", "guarded", "dismissed"}
+        ] or ["- (no open issues)"]
+    except Exception:  # noqa: BLE001 — issue listing is advisory only
+        open_issue_lines = ["- (open issues unavailable)"]
+
+    return active_lines, open_issue_lines
 
 
 def _check_capability_lines(capabilities: dict[str, Any]) -> list[str]:

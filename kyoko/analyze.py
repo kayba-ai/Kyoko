@@ -19,9 +19,12 @@ from .operator_prompts import (
     write_proposal_prompt_artifacts,
 )
 from .issues import (
+    IssueError,
     get_issue,
     link_proposal_to_issue,
+    merge_observation,
     surface_issue,
+    update_issue,
     validate_issue,
 )
 from .proposals import (
@@ -170,14 +173,73 @@ def _surface_issues(
     issues: Sequence[dict[str, Any]],
     profile_id: str,
 ) -> tuple[list[str], list[str], list[str]]:
-    """Surface a list of authored ``kyoko.issue.v1`` issues through the dedup net.
+    """Integrate authored ``kyoko.issue.v1`` findings into the living skillbook.
 
-    Returns ``(new_issue_ids, bundled_issue_ids, all_issue_ids)`` in surfaced order."""
+    Each finding carries an integration ``op`` (the analysing agent reconciled it against
+    the skillbook it was shown):
+
+    - ``update`` — refine the existing entry ``target_id`` in place.
+    - ``merge`` — fold this recurrence into ``target_id`` (union evidence, bump recurrence).
+    - ``add`` (default) — surface a fresh entry through the deterministic dedup net (a
+      run-independent signature backstop folds an obvious recurrence the agent missed).
+
+    An ``update``/``merge`` whose target has vanished or has gone ``active`` (injected —
+    its content evolves only through the gate) falls back to ``add`` so the observation is
+    never lost. Returns ``(new_issue_ids, bundled_issue_ids, all_issue_ids)`` in order;
+    ``update``/``merge`` count as bundled (folded into an existing entry)."""
 
     new_ids: list[str] = []
     bundled_ids: list[str] = []
     all_ids: list[str] = []
     for issue in issues:
+        op = issue.get("op") if isinstance(issue.get("op"), str) else "add"
+        target_id = issue.get("target_id") if isinstance(issue.get("target_id"), str) else None
+        evidence_refs = (
+            issue.get("evidence_refs") if isinstance(issue.get("evidence_refs"), list) else None
+        )
+        affected_span_ids = (
+            issue.get("affected_span_ids")
+            if isinstance(issue.get("affected_span_ids"), list)
+            else None
+        )
+
+        if op in ("update", "merge") and target_id:
+            try:
+                if op == "merge":
+                    integrated = merge_observation(
+                        db_path=db_path,
+                        issue_id=target_id,
+                        evidence_refs=evidence_refs,
+                        affected_span_ids=affected_span_ids,
+                    )
+                else:
+                    section = issue.get("section")
+                    integrated = update_issue(
+                        db_path=db_path,
+                        issue_id=target_id,
+                        title=issue.get("title") if isinstance(issue.get("title"), str) else None,
+                        body=issue.get("body") if isinstance(issue.get("body"), str) else None,
+                        section=section if section in ("context", "harness") else None,
+                        severity=issue.get("severity")
+                        if isinstance(issue.get("severity"), str)
+                        else None,
+                        category=issue.get("category")
+                        if isinstance(issue.get("category"), str)
+                        else None,
+                        root_cause=issue.get("root_cause")
+                        if isinstance(issue.get("root_cause"), str)
+                        else None,
+                        evidence_refs=evidence_refs,
+                        affected_span_ids=affected_span_ids,
+                    )
+                all_ids.append(integrated["id"])
+                bundled_ids.append(integrated["id"])
+                continue
+            except IssueError:
+                # Target vanished or has gone active (injected) — fall back to a fresh add
+                # so the observation is never lost; the gate reconciles active entries.
+                pass
+
         section = issue.get("section")
         status = "diagnosed" if issue.get("root_cause") else "open"
         surfaced, was_bundled = surface_issue(
@@ -187,12 +249,8 @@ def _surface_issues(
             section=section if section in ("context", "harness") else None,
             severity=issue.get("severity") if isinstance(issue.get("severity"), str) else None,
             status=status,
-            evidence_refs=issue.get("evidence_refs")
-            if isinstance(issue.get("evidence_refs"), list)
-            else None,
-            affected_span_ids=issue.get("affected_span_ids")
-            if isinstance(issue.get("affected_span_ids"), list)
-            else None,
+            evidence_refs=evidence_refs,
+            affected_span_ids=affected_span_ids,
             affected_agent_identity_ids=issue.get("affected_agent_identity_ids")
             if isinstance(issue.get("affected_agent_identity_ids"), list)
             else None,

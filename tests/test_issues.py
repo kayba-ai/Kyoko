@@ -14,10 +14,12 @@ from kyoko.issues import (
     get_issue,
     link_proposal_to_issue,
     list_issues,
+    merge_observation,
     set_issue_diagnosis,
     set_issue_evaluator,
     set_issue_rank,
     surface_issue,
+    update_issue,
     update_issue_status,
 )
 from kyoko.storage import connect
@@ -429,6 +431,80 @@ class IssueDedupAndAcceptTests(unittest.TestCase):
             issue = create_issue(db_path=db_path, title="Dismissed", status="dismissed")
             with self.assertRaises(IssueError):
                 accept_issue(db_path=db_path, issue_id=issue["id"])
+
+
+class AgentIntegrationOpTests(unittest.TestCase):
+    """The analysing agent reconciles findings into the living skillbook in place via
+    ``update``/``merge`` (the gate stays out of the problem-phase layer)."""
+
+    def test_update_refines_entry_in_place_without_bumping_recurrence(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "kyoko.db"
+            _seed(db_path)
+            issue = create_issue(
+                db_path=db_path, title="Fetch times out", section="harness",
+                root_cause="initial guess", severity="medium",
+                evidence_refs=[{"entity_type": "span", "entity_id": "span_fetch_timeout_001"}],
+            )
+            refined = update_issue(
+                db_path=db_path, issue_id=issue["id"],
+                title="Fetch times out (no backoff)", severity="high",
+                root_cause="No exponential backoff; the agent retries immediately",
+                evidence_refs=[{"entity_type": "run", "entity_id": "run_research_topic_001"}],
+            )
+            self.assertEqual(refined["id"], issue["id"])
+            self.assertEqual(refined["title"], "Fetch times out (no backoff)")
+            self.assertEqual(refined["severity"], "high")
+            self.assertIn("backoff", refined["root_cause"])
+            # Evidence unioned, not replaced; a refinement is not a recurrence.
+            self.assertEqual(len(refined["evidence_refs"]), 2)
+            self.assertEqual(refined["recurrence_count"], 1)
+            self.assertEqual(len(list_issues(db_path=db_path)), 1)
+
+    def test_merge_folds_recurrence_into_entry(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "kyoko.db"
+            _seed(db_path)
+            issue = create_issue(
+                db_path=db_path, title="Fetch times out", section="harness",
+                evidence_refs=[{"entity_type": "span", "entity_id": "span_fetch_timeout_001"}],
+            )
+            merged = merge_observation(
+                db_path=db_path, issue_id=issue["id"],
+                evidence_refs=[{"entity_type": "run", "entity_id": "run_research_topic_001"}],
+            )
+            self.assertEqual(merged["id"], issue["id"])
+            self.assertEqual(merged["recurrence_count"], 2)
+            self.assertEqual(len(merged["evidence_refs"]), 2)
+
+    def test_update_and_merge_refuse_active_entry(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "kyoko.db"
+            _seed(db_path)
+            issue = create_issue(
+                db_path=db_path, title="Active skill", section="context",
+                root_cause="rc", status="applied",
+            )
+            with connect(db_path) as connection:
+                connection.execute(
+                    "UPDATE skills SET active = 1 WHERE id = ?", (issue["id"],)
+                )
+            with self.assertRaisesRegex(IssueError, "issue_active"):
+                update_issue(db_path=db_path, issue_id=issue["id"], root_cause="should not apply")
+            with self.assertRaisesRegex(IssueError, "issue_active"):
+                merge_observation(
+                    db_path=db_path, issue_id=issue["id"],
+                    evidence_refs=[{"entity_type": "span", "entity_id": "span_fetch_timeout_001"}],
+                )
+            # The active entry's injected content is untouched.
+            self.assertEqual(get_issue(db_path=db_path, issue_id=issue["id"])["root_cause"], "rc")
+
+    def test_update_missing_entry_raises(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "kyoko.db"
+            _seed(db_path)
+            with self.assertRaisesRegex(IssueError, "issue_not_found"):
+                update_issue(db_path=db_path, issue_id="issue_does_not_exist", root_cause="x")
 
 
 class IssueMcpSafetyTests(unittest.TestCase):
