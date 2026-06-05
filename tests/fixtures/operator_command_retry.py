@@ -10,7 +10,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from kyoko.analyze import BEGIN_PROPOSAL_BLOCK, END_PROPOSAL_BLOCK, mock_learning_proposal
+from kyoko.analyze import mock_issues_from_bundle
+from kyoko.operator_prompts import BEGIN_ISSUES_BLOCK, END_ISSUES_BLOCK
 
 
 def main() -> int:
@@ -30,15 +31,12 @@ def main() -> int:
         return 3
 
     bundle = json.loads(Path(evidence_path).read_text())
-    proposal = mock_learning_proposal(bundle)
-    proposal["id"] = proposal["id"].replace("proposal_mock_", "proposal_retry_")
-    proposal["producer"]["name"] = "fixture-retry-command"
-    proposal["producer"]["session_id"] = "fixture_retry_command_session"
+    issues = mock_issues_from_bundle(bundle)
 
-    print("Corrected proposal after Kyoko retry feedback.")
-    print(BEGIN_PROPOSAL_BLOCK)
-    print(json.dumps(proposal, sort_keys=True))
-    print(END_PROPOSAL_BLOCK)
+    print("Corrected issues after Kyoko retry feedback.")
+    print(BEGIN_ISSUES_BLOCK)
+    print(json.dumps(issues, sort_keys=True))
+    print(END_ISSUES_BLOCK)
     return 0
 
 

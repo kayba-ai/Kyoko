@@ -10,7 +10,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from kyoko.analyze import BEGIN_PROPOSAL_BLOCK, END_PROPOSAL_BLOCK, mock_learning_proposal
+from kyoko.analyze import mock_issues_from_bundle
+from kyoko.operator_prompts import BEGIN_ISSUES_BLOCK, END_ISSUES_BLOCK
 
 
 def main() -> int:
@@ -21,32 +22,27 @@ def main() -> int:
         return 2
 
     print(f"fixture bad operator mode={mode}")
-    print(BEGIN_PROPOSAL_BLOCK)
+    print(BEGIN_ISSUES_BLOCK)
     if mode == "partial-json":
-        print('{"schema_version":"kyoko.learning_proposal.v1","id":"proposal_bad_partial"')
+        # Malformed JSON array — fails issues-block extraction (invalid_output).
+        print('[{"schema_version":"kyoko.issue.v1","title":"partial"')
     else:
         bundle = json.loads(Path(evidence_path).read_text())
-        proposal = mock_learning_proposal(bundle)
-        proposal["producer"]["name"] = "fixture-bad-command"
-        proposal["producer"]["session_id"] = f"fixture_bad_{mode}"
+        issues = mock_issues_from_bundle(bundle)
+        issue = issues[0]
         if mode == "hallucinated-evidence":
-            proposal["id"] = "proposal_bad_hallucinated_evidence_001"
-            proposal["evidence_refs"][0]["entity_id"] = "span_does_not_exist_001"
-        elif mode == "unsupported-change":
-            proposal["id"] = "proposal_bad_unsupported_change_001"
-            proposal["proposed_changes"] = [
-                {
-                    "type": "rewrite_agent_runtime",
-                    "operation": "replace",
-                    "target": "agent.py",
-                }
-            ]
+            # References a span that does not exist — referential-integrity failure.
+            issue["evidence_refs"][0]["entity_id"] = "span_does_not_exist_001"
+            issue["affected_span_ids"] = ["span_does_not_exist_001"]
+        elif mode == "missing-root-cause":
+            # Schema/enum failure — issue is missing a required diagnosis.
+            issue.pop("root_cause", None)
         else:
-            print(END_PROPOSAL_BLOCK)
+            print(END_ISSUES_BLOCK)
             print(f"unknown bad-output mode: {mode}", file=sys.stderr)
             return 3
-        print(json.dumps(proposal, sort_keys=True))
-    print(END_PROPOSAL_BLOCK)
+        print(json.dumps([issue], sort_keys=True))
+    print(END_ISSUES_BLOCK)
     return 0
 
 

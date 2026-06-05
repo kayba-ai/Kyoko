@@ -15,14 +15,17 @@ from .operator_prompts import (
     BEGIN_PROPOSAL_BLOCK,
     END_ISSUES_BLOCK,
     END_PROPOSAL_BLOCK,
-    write_operator_prompt_artifacts,
+    write_diagnosis_prompt_artifacts,
     write_proposal_prompt_artifacts,
 )
-from .autonomy import evaluate_issue_to_proposal_gate
-from .issues import IssueError, get_issue, link_proposal_to_issue
+from .issues import (
+    get_issue,
+    link_proposal_to_issue,
+    surface_issue,
+    validate_issue,
+)
 from .proposals import (
     ProposalError,
-    originate_issue_for_proposal,
     submit_learning_proposal_payload,
 )
 from .storage import connect, initialize_database, utc_now
@@ -30,26 +33,42 @@ from .storage import connect, initialize_database, utc_now
 
 @dataclass(frozen=True)
 class AnalyzeReport:
+    """Issue-centric analysis result (ST2 decoupling): analysis surfaces ISSUES only
+    (diagnosis), never a proposal. A proposal is authored in a separate, gate-#1-guarded
+    step (:func:`propose_for_issue`)."""
+
     operator: str
     profile_id: str
-    proposal_id: Optional[str]
+    issue_ids: tuple[str, ...]          # all surfaced (new + bundled), in order
+    new_issue_ids: tuple[str, ...]      # newly created this run
+    bundled_issue_ids: tuple[str, ...]  # folded into an existing issue
     evidence_path: Path
     prompt_path: Path
-    proposal_path: Optional[Path]
-    persisted: bool
+    persisted: bool                     # True iff >=1 issue surfaced
     operator_run_id: Optional[str] = None
     raw_output_path: Optional[Path] = None
     attempts: int = 1
-    issue_id: Optional[str] = None
-    # Gate #1 (issue -> proposal). When the section's autonomy mode is `off`, analysis
-    # still surfaces+diagnoses the Issue but generates no proposal (proposal_id is None).
-    gate1_mode: Optional[str] = None
-    gate1_allow: bool = True
-    gate1_reason: Optional[str] = None
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "operator": self.operator,
+            "profile_id": self.profile_id,
+            "issue_ids": list(self.issue_ids),
+            "new_issue_ids": list(self.new_issue_ids),
+            "bundled_issue_ids": list(self.bundled_issue_ids),
+            "evidence_path": str(self.evidence_path),
+            "prompt_path": str(self.prompt_path),
+            "persisted": self.persisted,
+            "operator_run_id": self.operator_run_id,
+            "raw_output_path": str(self.raw_output_path)
+            if self.raw_output_path is not None
+            else None,
+            "attempts": self.attempts,
+        }
 
 
 class AnalyzeError(Exception):
-    """Raised when analysis cannot produce or persist a proposal."""
+    """Raised when analysis cannot produce or persist surfaced issues."""
 
 
 @dataclass(frozen=True)
@@ -83,7 +102,11 @@ def analyze_with_mock_operator(
     schema_path: Optional[Path] = None,
     schedule_id: Optional[str] = None,
 ) -> AnalyzeReport:
-    prompt_report = write_operator_prompt_artifacts(
+    """Diagnosis turn (mock): deterministically surface ``kyoko.issue.v1`` issues from the
+    evidence bundle. No proposal and no gate is involved — a proposal is authored later in
+    a separate, gate-#1-guarded step (:func:`propose_for_issue`)."""
+
+    prompt_report = write_diagnosis_prompt_artifacts(
         db_path=db_path,
         output_dir=output_dir,
         target="mock",
@@ -110,85 +133,81 @@ def analyze_with_mock_operator(
     )
 
     try:
-        proposal = mock_learning_proposal(prompt_report.bundle)
+        issues = mock_issues_from_bundle(prompt_report.bundle)
     except AnalyzeError as exc:
         _update_operator_run(db_path, operator_run_id, status="failed", error=str(exc))
         raise
 
-    # Issue-centric spine: analysis surfaces+diagnoses an Issue first, and the proposal
-    # is born of it. originate_issue_for_proposal stamps proposal["issue_id"] in place.
-    issue = originate_issue_for_proposal(
+    new_ids, bundled_ids, all_ids = _surface_issues(
         db_path=db_path,
-        proposal=proposal,
-        source="analysis",
+        issues=issues,
         profile_id=prompt_report.profile_id,
     )
 
-    # Gate #1: may this issue generate a proposal? Reuses the section's autonomy mode.
-    gate = evaluate_issue_to_proposal_gate(
-        db_path=db_path,
-        section=proposal.get("section"),
-        profile_id=prompt_report.profile_id,
-    )
-    if not gate.allow_generate:
-        _update_operator_run(
-            db_path,
-            operator_run_id,
-            status="succeeded",
-            metadata_updates={"gate1": gate.to_json(), "issue_id": issue["id"]},
-        )
-        return AnalyzeReport(
-            operator="mock",
-            profile_id=prompt_report.profile_id,
-            proposal_id=None,
-            evidence_path=prompt_report.evidence_path,
-            prompt_path=prompt_report.prompt_path,
-            proposal_path=None,
-            persisted=False,
-            operator_run_id=operator_run_id,
-            issue_id=issue["id"],
-            gate1_mode=gate.mode,
-            gate1_allow=False,
-            gate1_reason=gate.reason,
-        )
-
-    proposal_path = output_dir / f"{proposal['id']}.json"
-    proposal_path.write_text(json.dumps(proposal, indent=2, sort_keys=True) + "\n")
-
-    try:
-        submit_learning_proposal_payload(
-            db_path=db_path,
-            proposal=proposal,
-            schema_path=resolved_schema_path,
-        )
-    except ProposalError as exc:
-        _update_operator_run(db_path, operator_run_id, status="failed", error=str(exc))
-        raise AnalyzeError(str(exc)) from exc
-
-    link_proposal_to_issue(
-        db_path=db_path, issue_id=issue["id"], proposal_id=str(proposal["id"])
-    )
     _update_operator_run(
         db_path,
         operator_run_id,
         status="succeeded",
-        proposal_id=str(proposal["id"]),
+        metadata_updates={"issue_ids": list(all_ids)},
     )
 
     return AnalyzeReport(
         operator="mock",
         profile_id=prompt_report.profile_id,
-        proposal_id=str(proposal["id"]),
+        issue_ids=tuple(all_ids),
+        new_issue_ids=tuple(new_ids),
+        bundled_issue_ids=tuple(bundled_ids),
         evidence_path=prompt_report.evidence_path,
         prompt_path=prompt_report.prompt_path,
-        proposal_path=proposal_path,
-        persisted=True,
+        persisted=bool(all_ids),
         operator_run_id=operator_run_id,
-        issue_id=issue["id"],
-        gate1_mode=gate.mode,
-        gate1_allow=True,
-        gate1_reason=gate.reason,
     )
+
+
+def _surface_issues(
+    *,
+    db_path: Path,
+    issues: Sequence[dict[str, Any]],
+    profile_id: str,
+) -> tuple[list[str], list[str], list[str]]:
+    """Surface a list of authored ``kyoko.issue.v1`` issues through the dedup net.
+
+    Returns ``(new_issue_ids, bundled_issue_ids, all_issue_ids)`` in surfaced order."""
+
+    new_ids: list[str] = []
+    bundled_ids: list[str] = []
+    all_ids: list[str] = []
+    for issue in issues:
+        section = issue.get("section")
+        status = "diagnosed" if issue.get("root_cause") else "open"
+        surfaced, was_bundled = surface_issue(
+            db_path=db_path,
+            title=str(issue.get("title") or "Surfaced agent failure"),
+            body=issue.get("body") if isinstance(issue.get("body"), str) else None,
+            section=section if section in ("context", "harness") else None,
+            severity=issue.get("severity") if isinstance(issue.get("severity"), str) else None,
+            status=status,
+            evidence_refs=issue.get("evidence_refs")
+            if isinstance(issue.get("evidence_refs"), list)
+            else None,
+            affected_span_ids=issue.get("affected_span_ids")
+            if isinstance(issue.get("affected_span_ids"), list)
+            else None,
+            affected_agent_identity_ids=issue.get("affected_agent_identity_ids")
+            if isinstance(issue.get("affected_agent_identity_ids"), list)
+            else None,
+            root_cause=issue.get("root_cause")
+            if isinstance(issue.get("root_cause"), str)
+            else None,
+            source="analysis",
+            profile_id=profile_id,
+        )
+        all_ids.append(surfaced["id"])
+        if was_bundled:
+            bundled_ids.append(surfaced["id"])
+        else:
+            new_ids.append(surfaced["id"])
+    return new_ids, bundled_ids, all_ids
 
 
 def analyze_with_command_operator(
@@ -213,7 +232,7 @@ def analyze_with_command_operator(
     if max_retries < 0:
         raise AnalyzeError("operator_max_retries_must_be_non_negative")
 
-    prompt_report = write_operator_prompt_artifacts(
+    prompt_report = write_diagnosis_prompt_artifacts(
         db_path=db_path,
         output_dir=output_dir,
         target=operator_kind if operator_kind else operator_label,
@@ -256,20 +275,24 @@ def analyze_with_command_operator(
     env["KYOKO_OPERATOR_PROMPT_PATH"] = str(prompt_report.prompt_path)
     env["KYOKO_PROFILE_ID"] = prompt_report.profile_id
     env["KYOKO_OPERATOR_TARGET"] = operator_kind
+    # Diagnosis turn now advertises the ISSUES block. The proposal-block vars are kept
+    # too (harmless) so an operator that also authors proposals elsewhere keeps working.
+    env["KYOKO_ISSUES_BLOCK_BEGIN"] = BEGIN_ISSUES_BLOCK
+    env["KYOKO_ISSUES_BLOCK_END"] = END_ISSUES_BLOCK
     env["KYOKO_PROPOSAL_BLOCK_BEGIN"] = BEGIN_PROPOSAL_BLOCK
     env["KYOKO_PROPOSAL_BLOCK_END"] = END_PROPOSAL_BLOCK
     if resolved_schema_path is not None:
-        env["KYOKO_LEARNING_PROPOSAL_SCHEMA_PATH"] = str(resolved_schema_path)
+        env["KYOKO_ISSUE_SCHEMA_PATH"] = str(resolved_schema_path)
     if run_id is not None:
         env["KYOKO_RUN_ID"] = run_id
 
     base_prompt_text = prompt_report.prompt_path.read_text()
     attempt_results: list[dict[str, Any]] = []
     last_error: Optional[str] = None
-    proposal: Optional[dict[str, Any]] = None
-    proposal_path: Optional[Path] = None
-    originated_issue: Optional[dict[str, Any]] = None
-    resolved_gate: Optional[Any] = None
+    surfaced_new: list[str] = []
+    surfaced_bundled: list[str] = []
+    surfaced_all: list[str] = []
+    surfaced_done = False
     for attempt in range(1, max_retries + 2):
         prompt_text = base_prompt_text if attempt == 1 else _retry_prompt_text(base_prompt_text, last_error)
         prompt_path = prompt_report.prompt_path
@@ -353,8 +376,20 @@ def analyze_with_command_operator(
             )
             raise AnalyzeError(last_error)
 
+        # Diagnosis turn: extract a JSON array of kyoko.issue.v1 issues and validate each.
         try:
-            proposal = extract_proposal_from_output(completed.stdout)
+            issues = extract_issues_from_output(completed.stdout)
+            with connect(db_path) as connection:
+                for issue in issues:
+                    result = validate_issue(
+                        connection=connection,
+                        issue=issue,
+                        schema_path=resolved_schema_path,
+                    )
+                    if not result.ok:
+                        raise AnalyzeError(
+                            "operator_issue_invalid:" + ",".join(result.errors)
+                        )
         except AnalyzeError as exc:
             last_error = str(exc)
             attempt_result["status"] = "invalid_output"
@@ -372,119 +407,42 @@ def analyze_with_command_operator(
             )
             raise
 
-        # Issue-centric spine: the proposal is born of an Issue. Create it once and
-        # reuse it across retries (each retry re-stamps the same issue_id) so a failed
-        # attempt does not orphan a fresh issue.
-        if originated_issue is None:
-            originated_issue = originate_issue_for_proposal(
-                db_path=db_path,
-                proposal=proposal,
-                source="analysis",
-                profile_id=prompt_report.profile_id,
-            )
-            # Gate #1: if the section's mode is `off`, surface+diagnose only — no
-            # proposal, no retries. The decision is fixed by the proposal's section.
-            gate = evaluate_issue_to_proposal_gate(
-                db_path=db_path,
-                section=proposal.get("section"),
-                profile_id=prompt_report.profile_id,
-            )
-            resolved_gate = gate
-            if not gate.allow_generate:
-                attempt_result["status"] = "succeeded"
-                _write_attempt_outputs(raw_output_path, attempt_results)
-                _update_operator_run(
-                    db_path,
-                    operator_run_id,
-                    status="succeeded",
-                    raw_output_path=raw_output_path,
-                    metadata_updates={
-                        "gate1": gate.to_json(),
-                        "issue_id": originated_issue["id"],
-                        **_attempt_metadata(attempt_results, max_retries),
-                    },
-                )
-                return AnalyzeReport(
-                    operator=operator_label,
-                    profile_id=prompt_report.profile_id,
-                    proposal_id=None,
-                    evidence_path=prompt_report.evidence_path,
-                    prompt_path=prompt_report.prompt_path,
-                    proposal_path=None,
-                    persisted=False,
-                    operator_run_id=operator_run_id,
-                    raw_output_path=raw_output_path,
-                    attempts=len(attempt_results),
-                    issue_id=originated_issue["id"],
-                    gate1_mode=gate.mode,
-                    gate1_allow=False,
-                    gate1_reason=gate.reason,
-                )
-        else:
-            proposal["issue_id"] = originated_issue["id"]
-
-        proposal_path = output_dir / f"{proposal['id']}.json"
-        proposal_path.write_text(json.dumps(proposal, indent=2, sort_keys=True) + "\n")
-        try:
-            submit_learning_proposal_payload(
-                db_path=db_path,
-                proposal=proposal,
-                schema_path=resolved_schema_path,
-            )
-        except ProposalError as exc:
-            last_error = str(exc)
-            attempt_result["status"] = "invalid_proposal"
-            attempt_result["error"] = last_error
-            _write_attempt_outputs(raw_output_path, attempt_results)
-            if attempt <= max_retries:
-                continue
-            _update_operator_run(
-                db_path,
-                operator_run_id,
-                status="failed",
-                raw_output_path=raw_output_path,
-                error=last_error,
-                metadata_updates=_attempt_metadata(attempt_results, max_retries),
-            )
-            raise AnalyzeError(last_error) from exc
-
+        surfaced_new, surfaced_bundled, surfaced_all = _surface_issues(
+            db_path=db_path,
+            issues=issues,
+            profile_id=prompt_report.profile_id,
+        )
+        surfaced_done = True
         attempt_result["status"] = "succeeded"
         _write_attempt_outputs(raw_output_path, attempt_results)
         break
 
-    if proposal is None or proposal_path is None:
+    if not surfaced_done:
         raise AnalyzeError(last_error or "operator_retry_exhausted")
 
-    if originated_issue is not None:
-        link_proposal_to_issue(
-            db_path=db_path,
-            issue_id=originated_issue["id"],
-            proposal_id=str(proposal["id"]),
-        )
     _update_operator_run(
         db_path,
         operator_run_id,
         status="succeeded",
         raw_output_path=raw_output_path,
-        proposal_id=str(proposal["id"]),
-        metadata_updates=_attempt_metadata(attempt_results, max_retries),
+        metadata_updates={
+            "issue_ids": list(surfaced_all),
+            **_attempt_metadata(attempt_results, max_retries),
+        },
     )
 
     return AnalyzeReport(
         operator=operator_label,
         profile_id=prompt_report.profile_id,
-        proposal_id=str(proposal["id"]),
+        issue_ids=tuple(surfaced_all),
+        new_issue_ids=tuple(surfaced_new),
+        bundled_issue_ids=tuple(surfaced_bundled),
         evidence_path=prompt_report.evidence_path,
         prompt_path=prompt_report.prompt_path,
-        proposal_path=proposal_path,
-        persisted=True,
+        persisted=bool(surfaced_all),
         operator_run_id=operator_run_id,
         raw_output_path=raw_output_path,
         attempts=len(attempt_results),
-        issue_id=originated_issue["id"] if originated_issue is not None else None,
-        gate1_mode=resolved_gate.mode if resolved_gate is not None else None,
-        gate1_allow=resolved_gate.allow_generate if resolved_gate is not None else True,
-        gate1_reason=resolved_gate.reason if resolved_gate is not None else None,
     )
 
 
@@ -520,10 +478,10 @@ def _retry_prompt_text(base_prompt_text: str, last_error: Optional[str]) -> str:
             "",
             "## Retry Correction",
             "",
-            "Your previous output was rejected by Kyoko and no proposal was persisted.",
+            "Your previous output was rejected by Kyoko and nothing was persisted.",
             f"Rejection reason: `{last_error or 'unknown'}`",
             "",
-            "Return exactly one corrected proposal block on stdout. Do not include extra proposal blocks.",
+            "Return exactly one corrected block on stdout. Do not include extra blocks.",
             "",
         ]
     )
@@ -822,11 +780,16 @@ def mock_proposal_from_issue(
     (:func:`propose_for_issue`); a direct caller should pass a fully-stored issue dict."""
 
     issue_key = str(issue.get("id") or "unknown")
-    proposal_id = f"proposal_mock_{issue_key}"
     section = issue.get("section") or "context"
     profile_id = issue.get("profile_id") or (bundle or {}).get("profile_id") or "unknown"
 
     span_ids = [str(s) for s in (issue.get("affected_span_ids") or [])]
+    # Deterministic, span-anchored id (matches the legacy `proposal_mock_span_<id>`
+    # convention) so the same failure always yields the same proposal id; fall back to the
+    # issue id only when no span anchor exists.
+    proposal_id = (
+        f"proposal_mock_{span_ids[0]}" if span_ids else f"proposal_mock_{issue_key}"
+    )
     agent_ids = [str(a) for a in (issue.get("affected_agent_identity_ids") or [])]
     target = (
         {"entity_type": "agent_identity", "entity_id": agent_ids[0]}
@@ -1297,6 +1260,12 @@ def _operator_failure_kind(status: Any, error: Any) -> Optional[str]:
     if error.startswith("operator_proposal_json_invalid:"):
         return "invalid_output"
     if error.startswith("operator_output_must_contain_exactly_one_proposal_block"):
+        return "invalid_output"
+    if error.startswith("operator_issues_json_invalid:"):
+        return "invalid_output"
+    if error.startswith("operator_output_must_contain_exactly_one_issues_block"):
+        return "invalid_output"
+    if error.startswith("operator_issue_invalid:"):
         return "invalid_output"
     if error.startswith("schema_error:"):
         return "invalid_proposal"

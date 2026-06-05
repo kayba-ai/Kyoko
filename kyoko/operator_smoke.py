@@ -31,14 +31,15 @@ class OperatorSmokeError(Exception):
 class OperatorSmokeReport:
     operator: str
     profile_id: str
-    proposal_id: str
+    issue_ids: tuple[str, ...]
+    new_issue_ids: tuple[str, ...]
+    bundled_issue_ids: tuple[str, ...]
     operator_run_id: Optional[str]
     db_path: Path
     output_dir: Path
     used_demo_database: bool
     evidence_path: Path
     prompt_path: Path
-    proposal_path: Path
     raw_output_path: Optional[Path]
     persisted: bool
     attempts: int
@@ -48,14 +49,15 @@ class OperatorSmokeReport:
         return {
             "operator": self.operator,
             "profile_id": self.profile_id,
-            "proposal_id": self.proposal_id,
+            "issue_ids": list(self.issue_ids),
+            "new_issue_ids": list(self.new_issue_ids),
+            "bundled_issue_ids": list(self.bundled_issue_ids),
             "operator_run_id": self.operator_run_id,
             "db_path": str(self.db_path),
             "output_dir": str(self.output_dir),
             "used_demo_database": self.used_demo_database,
             "evidence_path": str(self.evidence_path),
             "prompt_path": str(self.prompt_path),
-            "proposal_path": str(self.proposal_path),
             "raw_output_path": str(self.raw_output_path) if self.raw_output_path else None,
             "persisted": self.persisted,
             "attempts": self.attempts,
@@ -82,7 +84,7 @@ class OperatorFailureSmokeReport:
     expected_failure_kind: Optional[str]
     prompt_failure_mode: str
     live_operator_invoked: bool
-    proposal_id: Optional[str] = None
+    issue_ids: tuple[str, ...] = ()
     persisted: bool = False
 
     @property
@@ -112,7 +114,7 @@ class OperatorFailureSmokeReport:
             "expected_failure_kind": self.expected_failure_kind,
             "prompt_failure_mode": self.prompt_failure_mode,
             "live_operator_invoked": self.live_operator_invoked,
-            "proposal_id": self.proposal_id,
+            "issue_ids": list(self.issue_ids),
             "persisted": self.persisted,
             "passed": self.passed,
         }
@@ -334,14 +336,15 @@ def run_operator_smoke(
     return OperatorSmokeReport(
         operator=report.operator,
         profile_id=report.profile_id,
-        proposal_id=report.proposal_id,
+        issue_ids=report.issue_ids,
+        new_issue_ids=report.new_issue_ids,
+        bundled_issue_ids=report.bundled_issue_ids,
         operator_run_id=report.operator_run_id,
         db_path=selected_db_path,
         output_dir=selected_output_dir,
         used_demo_database=used_demo_database,
         evidence_path=report.evidence_path,
         prompt_path=report.prompt_path,
-        proposal_path=report.proposal_path,
         raw_output_path=report.raw_output_path,
         persisted=report.persisted,
         attempts=report.attempts,
@@ -420,7 +423,7 @@ def run_operator_failure_smoke(
         expected_failure_kind=expected_failure_kind,
         prompt_failure_mode=prompt_failure_mode,
         live_operator_invoked=success.operator != "mock",
-        proposal_id=success.proposal_id,
+        issue_ids=success.issue_ids,
         persisted=success.persisted,
     )
 
@@ -913,9 +916,18 @@ def _failure_report_from_run(
         expected_failure_kind=expected_failure_kind,
         prompt_failure_mode=prompt_failure_mode,
         live_operator_invoked=str(run.get("operator_label") or operator) != "mock",
-        proposal_id=str(run["proposal_id"]) if run.get("proposal_id") is not None else None,
-        persisted=run.get("proposal_id") is not None,
+        issue_ids=tuple(_issue_ids_from_run(run)),
+        persisted=bool(_issue_ids_from_run(run)),
     )
+
+
+def _issue_ids_from_run(run: dict[str, object]) -> list[str]:
+    metadata = run.get("metadata")
+    if isinstance(metadata, dict):
+        ids = metadata.get("issue_ids")
+        if isinstance(ids, list):
+            return [str(i) for i in ids]
+    return []
 
 
 def _path_or_none(value: object) -> Optional[Path]:

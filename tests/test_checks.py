@@ -25,7 +25,8 @@ from kyoko.checks import (
     run_replay_command,
     set_check_lock,
 )
-from kyoko.analyze import analyze_with_mock_operator
+from kyoko.analyze import analyze_with_mock_operator, propose_for_issue
+from kyoko.issues import accept_issue
 from kyoko.blobs import list_payload_blobs
 from kyoko.proposals import submit_learning_proposal
 from kyoko.storage import get_database_status, ingest_source_fixture, ingest_source_payload
@@ -142,12 +143,23 @@ class CheckTests(unittest.TestCase):
                 output_dir=Path(tmpdir) / "analysis",
                 schema_path=SCHEMA,
             )
+            # ST2 decoupling: analysis surfaces an issue; author a proposal from it.
+            issue_id = analyze.new_issue_ids[0]
+            accept_issue(db_path=db_path, issue_id=issue_id)
+            propose = propose_for_issue(
+                db_path=db_path,
+                output_dir=Path(tmpdir) / "propose",
+                issue_id=issue_id,
+                operator="mock",
+                schema_path=SCHEMA,
+            )
+            proposal_id = propose.proposal_id
 
-            report = generate_checks_for_proposal(db_path=db_path, proposal_id=analyze.proposal_id)
+            report = generate_checks_for_proposal(db_path=db_path, proposal_id=proposal_id)
             check_specs = list_check_specs(db_path)
 
-            self.assertEqual(report.check_spec_ids, (f"check_{analyze.proposal_id}_1",))
-            self.assertEqual(check_specs[0]["proposal_id"], analyze.proposal_id)
+            self.assertEqual(report.check_spec_ids, (f"check_{proposal_id}_1",))
+            self.assertEqual(check_specs[0]["proposal_id"], proposal_id)
             self.assertEqual(check_specs[0]["trust_level"], "L0_generated")
             self.assertEqual(check_specs[0]["side_effect_mode"], "network_mocked")
             self.assertEqual(check_specs[0]["definition"]["operator_definition"]["generated_by"], "kyoko_fallback_context_check")

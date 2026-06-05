@@ -221,11 +221,48 @@ class ImproveTests(unittest.TestCase):
             self.assertIsNotNone(report.source_import)
             self.assertEqual(report.source_import.candidate["id"], "openclaw_main")
             self.assertEqual(report.profile_id, "profile_openclaw_main")
-            self.assertEqual(report.proposal_id, "proposal_mock_span_openclaw_error_session_failure_1")
-            self.assertEqual(report.generated_check_spec_ids, ("check_proposal_mock_span_openclaw_error_session_failure_1_1",))
+            # Default context_mode is `propose`: analysis surfaces+diagnoses the issue but
+            # leaves it for a human to accept — no proposal is authored this run.
+            self.assertIsNone(report.proposal_id)
+            self.assertEqual(report.proposal_ids, ())
+            self.assertIsNotNone(report.analyze)
+            self.assertEqual(len(report.analyze.new_issue_ids), 1)
+            self.assertEqual(report.generated_check_spec_ids, ())
             self.assertEqual(report.replay_runs, ())
             self.assertIsNone(report.autonomy)
+            self.assertEqual(len(report.gate1_outcomes), 1)
+            self.assertEqual(report.gate1_outcomes[0]["mode"], "propose")
+            self.assertTrue(
+                any(
+                    note.startswith("gate1_propose_awaiting_acceptance:")
+                    for note in report.notes
+                )
+            )
             self.assertTrue(Path(report.source_import.to_json()["import"]["normalized_path"]).exists())
+
+    def test_improvement_loop_autonomous_authors_proposal_from_analysis(self) -> None:
+        # When the section's autonomy mode is `autonomous`, analysis surfaces the issue and
+        # the loop accepts it + authors a proposal that flows through the check/replay gate.
+        with TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            db_path = tmp_path / "kyoko.db"
+            ingest_source_fixture(db_path, SOURCE_FIXTURE)
+            update_autonomy_policy(db_path=db_path, context_mode="autonomous")
+
+            report = run_improvement_loop(
+                db_path=db_path,
+                output_dir=tmp_path / "improve",
+                schema_path=SCHEMA,
+                run_autonomy_after=True,
+            )
+
+            self.assertIsNotNone(report.analyze)
+            self.assertEqual(len(report.analyze.new_issue_ids), 1)
+            self.assertEqual(len(report.proposal_ids), 1)
+            self.assertEqual(report.proposal_id, report.proposal_ids[0])
+            self.assertTrue(report.generated_check_spec_ids)
+            self.assertIsNotNone(report.autonomy)
+            self.assertEqual(report.gate1_outcomes[0]["mode"], "autonomous")
 
 
 def _source_fixture_with_root(root_path: Path) -> dict:

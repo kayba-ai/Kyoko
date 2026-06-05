@@ -3,6 +3,7 @@ import importlib
 import importlib.metadata
 import json
 import os
+import re
 import shlex
 import sqlite3
 import sys
@@ -4013,15 +4014,15 @@ def _analyze_mock_contract(payload: dict, output_dir: Path) -> dict:
         "attempts": payload["attempts"],
         "evidence_path": _output_path_contract(payload["evidence_path"], output_dir),
         "evidence_path_exists": Path(payload["evidence_path"]).exists(),
+        "issue_id_count": len(payload["issue_ids"]),
+        "new_issue_id_count": len(payload["new_issue_ids"]),
+        "bundled_issue_id_count": len(payload["bundled_issue_ids"]),
         "operator": payload["operator"],
         "operator_run_id": _generated_id_contract(payload["operator_run_id"]),
         "persisted": payload["persisted"],
         "profile_id": payload["profile_id"],
         "prompt_path": _output_path_contract(payload["prompt_path"], output_dir),
         "prompt_path_exists": Path(payload["prompt_path"]).exists(),
-        "proposal_id": payload["proposal_id"],
-        "proposal_path": _output_path_contract(payload["proposal_path"], output_dir),
-        "proposal_path_exists": Path(payload["proposal_path"]).exists(),
         "raw_output_path": payload["raw_output_path"],
     }
 
@@ -4335,20 +4336,17 @@ def _operator_adapter_register_contract(payload: dict, output_dir: Path) -> dict
 
 
 def _operator_adapter_run_contract(payload: dict, output_dir: Path) -> dict:
-    proposal = json.loads(Path(payload["proposal_path"]).read_text(encoding="utf-8"))
     raw_output = Path(payload["raw_output_path"]).read_text(encoding="utf-8")
     return {
         "adapter_id": payload["adapter_id"],
         "artifact_exists": {
             "evidence_path": Path(payload["evidence_path"]).exists(),
             "prompt_path": Path(payload["prompt_path"]).exists(),
-            "proposal_path": Path(payload["proposal_path"]).exists(),
             "raw_output_path": Path(payload["raw_output_path"]).exists(),
         },
         "artifact_paths": {
             "evidence_path": _output_path_contract(payload["evidence_path"], output_dir),
             "prompt_path": _output_path_contract(payload["prompt_path"], output_dir),
-            "proposal_path": _output_path_contract(payload["proposal_path"], output_dir),
             "raw_output_path": _output_path_contract(payload["raw_output_path"], output_dir),
         },
         "attempts": payload["attempts"],
@@ -4356,17 +4354,13 @@ def _operator_adapter_run_contract(payload: dict, output_dir: Path) -> dict:
         "operator_run_id_present": bool(payload["operator_run_id"]),
         "persisted": payload["persisted"],
         "profile_id": payload["profile_id"],
-        "proposal_file": {
-            "id": proposal["id"],
-            "producer_name": proposal["producer"]["name"],
-            "producer_session_id": proposal["producer"]["session_id"],
-            "section": proposal["section"],
-        },
-        "proposal_id": payload["proposal_id"],
+        "issue_id_count": len(payload["issue_ids"]),
+        "new_issue_id_count": len(payload["new_issue_ids"]),
+        "bundled_issue_id_count": len(payload["bundled_issue_ids"]),
         "raw_output_contract": {
-            "contains_begin_marker": "BEGIN_KYOKO_LEARNING_PROPOSAL_JSON" in raw_output,
+            "contains_begin_marker": "BEGIN_KYOKO_ISSUES_JSON" in raw_output,
             "contains_done_marker": "Done." in raw_output,
-            "contains_end_marker": "END_KYOKO_LEARNING_PROPOSAL_JSON" in raw_output,
+            "contains_end_marker": "END_KYOKO_ISSUES_JSON" in raw_output,
         },
     }
 
@@ -6183,6 +6177,12 @@ def _issue_detail_contract(payload: dict) -> dict:
     }
 
 
+def _normalize_issue_ids(text: str) -> str:
+    """Replace non-deterministic ``issue_<uuid>`` ids with a stable placeholder so notes
+    that embed a surfaced issue id remain golden-stable."""
+    return re.sub(r"issue_[0-9a-f]{12}", "issue_<ID>", str(text))
+
+
 def _improve_contract(payload: dict) -> dict:
     autonomy = payload["autonomy"]
     replay_runs = []
@@ -6237,10 +6237,12 @@ def _improve_contract(payload: dict) -> dict:
         "check_spec_ids": payload["check_spec_ids"],
         "existing_check_spec_ids": payload["existing_check_spec_ids"],
         "generated_check_spec_ids": payload["generated_check_spec_ids"],
-        "notes": payload["notes"],
+        "gate1_outcome_count": len(payload["gate1_outcomes"]),
+        "notes": [_normalize_issue_ids(note) for note in payload["notes"]],
         "operator": payload["operator"],
         "profile_id": payload["profile_id"],
         "proposal_id": payload["proposal_id"],
+        "proposal_id_count": len(payload["proposal_ids"]),
         "replay_runs": replay_runs,
         "source_import_present": payload["source_import"] is not None,
     }
@@ -6516,7 +6518,6 @@ def _operator_smoke_plan_contract(plan: dict, output_dir: Path) -> dict:
 
 
 def _operator_smoke_report_contract(payload: dict, output_dir: Path) -> dict:
-    proposal = json.loads(Path(payload["proposal_path"]).read_text(encoding="utf-8"))
     raw_output = Path(payload["raw_output_path"]).read_text(encoding="utf-8")
     return {
         "artifact_exists": {
@@ -6524,7 +6525,6 @@ def _operator_smoke_report_contract(payload: dict, output_dir: Path) -> dict:
             "evidence_path": Path(payload["evidence_path"]).exists(),
             "output_dir": Path(payload["output_dir"]).exists(),
             "prompt_path": Path(payload["prompt_path"]).exists(),
-            "proposal_path": Path(payload["proposal_path"]).exists(),
             "raw_output_path": Path(payload["raw_output_path"]).exists(),
         },
         "artifact_paths": {
@@ -6532,7 +6532,6 @@ def _operator_smoke_report_contract(payload: dict, output_dir: Path) -> dict:
             "evidence_path": _output_path_contract(payload["evidence_path"], output_dir),
             "output_dir": _output_path_contract(payload["output_dir"], output_dir),
             "prompt_path": _output_path_contract(payload["prompt_path"], output_dir),
-            "proposal_path": _output_path_contract(payload["proposal_path"], output_dir),
             "raw_output_path": _output_path_contract(payload["raw_output_path"], output_dir),
         },
         "attempts": payload["attempts"],
@@ -6541,29 +6540,13 @@ def _operator_smoke_report_contract(payload: dict, output_dir: Path) -> dict:
         "operator_run_id_present": bool(payload["operator_run_id"]),
         "persisted": payload["persisted"],
         "profile_id": payload["profile_id"],
-        "proposal_file": {
-            "change_types": [
-                change["type"]
-                for change in proposal["proposed_changes"]
-            ],
-            "evidence_refs": [
-                {
-                    "entity_id": ref["entity_id"],
-                    "entity_type": ref["entity_type"],
-                    "role": ref["role"],
-                }
-                for ref in proposal["evidence_refs"]
-            ],
-            "id": proposal["id"],
-            "producer_name": proposal["producer"]["name"],
-            "producer_session_id": proposal["producer"]["session_id"],
-            "section": proposal["section"],
-        },
-        "proposal_id": payload["proposal_id"],
+        "issue_id_count": len(payload["issue_ids"]),
+        "new_issue_id_count": len(payload["new_issue_ids"]),
+        "bundled_issue_id_count": len(payload["bundled_issue_ids"]),
         "raw_output_contract": {
-            "contains_begin_marker": "BEGIN_KYOKO_LEARNING_PROPOSAL_JSON" in raw_output,
+            "contains_begin_marker": "BEGIN_KYOKO_ISSUES_JSON" in raw_output,
             "contains_done_marker": "Done." in raw_output,
-            "contains_end_marker": "END_KYOKO_LEARNING_PROPOSAL_JSON" in raw_output,
+            "contains_end_marker": "END_KYOKO_ISSUES_JSON" in raw_output,
         },
         "used_demo_database": payload["used_demo_database"],
     }
@@ -6603,11 +6586,11 @@ def _operator_failure_smoke_report_contract(payload: dict, output_dir: Path) -> 
             "contains_invalid_line": "KYOKO_EXPECTED_INVALID_OPERATOR_OUTPUT" in prompt,
         },
         "prompt_failure_mode": payload["prompt_failure_mode"],
-        "proposal_id": payload["proposal_id"],
+        "issue_id_count": len(payload["issue_ids"]),
         "raw_output_contract": {
             "contains_attempt_header": "attempt 1 status=invalid_output" in raw_output,
-            "contains_begin_marker": "BEGIN_KYOKO_LEARNING_PROPOSAL_JSON" in raw_output,
-            "contains_end_marker": "END_KYOKO_LEARNING_PROPOSAL_JSON" in raw_output,
+            "contains_begin_marker": "BEGIN_KYOKO_ISSUES_JSON" in raw_output,
+            "contains_end_marker": "END_KYOKO_ISSUES_JSON" in raw_output,
         },
         "status": payload["status"],
         "used_demo_database": payload["used_demo_database"],

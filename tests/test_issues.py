@@ -460,6 +460,44 @@ class IssueMcpSafetyTests(unittest.TestCase):
             self.assertEqual(safety["direct_apply_tools_exposed"], [])
             self.assertEqual(safety["direct_harness_write_tools_exposed"], [])
 
+    def test_submit_issue_tool_surfaces_against_issue_schema(self) -> None:
+        # Regression: the server is built with the *proposal* schema (as in real use); the
+        # submit-issue tool must validate against the issue schema, not server.schema_path.
+        with TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "kyoko.db"
+            _seed(db_path)
+            server = KyokoMcpServer(db_path=db_path, schema_path=SCHEMA)
+
+            result = server.handle_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "kyoko_submit_issue",
+                        "arguments": {
+                            "issue": {
+                                "schema_version": "kyoko.issue.v1",
+                                "title": "Fetch repeatedly times out",
+                                "section": "context",
+                                "root_cause": "no retry guidance for the fetch step",
+                                "evidence_refs": [
+                                    {"entity_type": "span", "entity_id": "span_fetch_timeout_001"}
+                                ],
+                                "affected_span_ids": ["span_fetch_timeout_001"],
+                            }
+                        },
+                    },
+                }
+            )["result"]["structuredContent"]
+            self.assertTrue(result["issue"]["id"].startswith("issue_"))
+            self.assertEqual(result["issue"]["status"], "diagnosed")
+
+            # Surfacing an issue is evidence-only — no proposal/skill/harness write.
+            status = get_database_status(db_path)
+            self.assertEqual(status.counts["issues"], 1)
+            self.assertEqual(status.counts["learning_proposals"], 0)
+
     def test_create_issue_tool_persists_evidence_only(self) -> None:
         with TemporaryDirectory() as tmp:
             db_path = Path(tmp) / "kyoko.db"

@@ -178,6 +178,24 @@ def run_registered_operator_adapter(
         raise OperatorAdapterError(str(exc)) from exc
 
 
+def get_operator_adapter_command(
+    *, db_path: Path, adapter_id: str
+) -> tuple[list[str], str]:
+    """Resolve a registered operator adapter's command + operator_kind (for the
+    proposal-authoring turn, which reuses the same operator command as analysis). Raises
+    :class:`OperatorAdapterError` when the adapter is missing or disabled."""
+
+    initialize_database(db_path)
+    with connect(db_path) as connection:
+        adapter = _get_adapter(connection, adapter_id)
+        if int(adapter["enabled"]) != 1:
+            raise OperatorAdapterError(f"operator_adapter_disabled:{adapter_id}")
+        command = _json_loads(adapter["command_json"], [])
+        operator_kind = str(adapter["operator_kind"])
+    _validate_command(command)
+    return [str(part) for part in command], operator_kind
+
+
 def parse_adapter_command(command: str) -> list[str]:
     try:
         return parse_operator_command(command)

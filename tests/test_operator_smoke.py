@@ -35,10 +35,10 @@ class OperatorSmokeTests(unittest.TestCase):
             self.assertTrue(report.used_demo_database)
             self.assertEqual(report.db_path, output_dir / "smoke.db")
             self.assertEqual(report.operator, "mock")
-            self.assertEqual(report.proposal_id, "proposal_mock_span_fetch_timeout_001")
+            self.assertEqual(len(report.new_issue_ids), 1)
+            self.assertTrue(report.persisted)
             self.assertTrue(report.evidence_path.exists())
             self.assertTrue(report.prompt_path.exists())
-            self.assertTrue(report.proposal_path.exists())
             self.assertFalse(report.live_operator_invoked)
 
     def test_mock_operator_smoke_reuses_output_dir_with_fresh_demo_database(self) -> None:
@@ -58,7 +58,7 @@ class OperatorSmokeTests(unittest.TestCase):
 
             self.assertNotEqual(first.db_path, second.db_path)
             self.assertTrue(second.db_path.exists())
-            self.assertEqual(second.proposal_id, "proposal_mock_span_fetch_timeout_001")
+            self.assertEqual(len(second.new_issue_ids), 1)
 
     def test_command_operator_smoke_records_raw_output(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -72,7 +72,7 @@ class OperatorSmokeTests(unittest.TestCase):
             )
 
             self.assertEqual(report.operator, "command")
-            self.assertEqual(report.proposal_id, "proposal_command_span_fetch_timeout_001")
+            self.assertEqual(len(report.new_issue_ids), 1)
             self.assertIsNotNone(report.raw_output_path)
             self.assertTrue(report.raw_output_path.exists())
             self.assertTrue(report.live_operator_invoked)
@@ -165,7 +165,7 @@ class OperatorSmokeTests(unittest.TestCase):
             self.assertFalse(report.used_demo_database)
             self.assertEqual(report.db_path, db_path)
             self.assertEqual(report.operator, "fixture_operator")
-            self.assertEqual(report.proposal_id, "proposal_command_span_fetch_timeout_001")
+            self.assertEqual(len(report.new_issue_ids), 1)
 
     def test_operator_smoke_matrix_skips_missing_presets(self) -> None:
         with TemporaryDirectory() as tmpdir:

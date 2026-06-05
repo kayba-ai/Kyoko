@@ -10,7 +10,12 @@ from pathlib import Path
 from typing import Any, Optional, Type
 from urllib.parse import parse_qs, quote, urlparse
 
-from .analyze import AnalyzeError, list_operator_runs, parse_operator_command
+from .analyze import (
+    AnalyzeError,
+    list_operator_runs,
+    parse_operator_command,
+    propose_for_issue,
+)
 from .apply import (
     ApplyError,
     apply_context_proposal,
@@ -46,7 +51,14 @@ from .llm_evals import (
     run_llm_eval,
     set_llm_eval_status,
 )
-from .issues import IssueError, create_issue, list_issues, set_issue_comment, update_issue_status
+from .issues import (
+    IssueError,
+    accept_issue,
+    create_issue,
+    list_issues,
+    set_issue_comment,
+    update_issue_status,
+)
 from .issue_guard import GuardError, mint_guard_for_issue
 from .doctor import DEFAULT_SMOKE_EVIDENCE_DIR, run_doctor
 from .evidence import build_evidence_bundle
@@ -1307,6 +1319,46 @@ def make_handler(
                         return
                     self._send_json({"guard": report.to_json()})
                     return
+                if path == "/api/issues/accept":
+                    payload = self._read_json()
+                    issue_id = _optional_str(payload.get("id")) or _optional_str(
+                        payload.get("issue_id")
+                    )
+                    if not issue_id:
+                        self._send_json(
+                            {"error": "id_required"}, status=HTTPStatus.BAD_REQUEST
+                        )
+                        return
+                    operator = _optional_str(payload.get("operator")) or "mock"
+                    if operator != "mock":
+                        # Loopback-only synchronous handler: only the deterministic mock
+                        # author is supported in-process (command operators shell out).
+                        self._send_json(
+                            {"error": f"unsupported_operator:{operator}"},
+                            status=HTTPStatus.BAD_REQUEST,
+                        )
+                        return
+                    try:
+                        issue = accept_issue(db_path=resolved_db_path, issue_id=issue_id)
+                        output_dir = (
+                            resolved_db_path.parent
+                            / ".kyoko"
+                            / "propose-runs"
+                            / issue_id
+                        )
+                        propose_report = propose_for_issue(
+                            db_path=resolved_db_path,
+                            output_dir=output_dir,
+                            issue_id=issue_id,
+                            operator="mock",
+                        )
+                    except (IssueError, AnalyzeError) as exc:
+                        self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                        return
+                    self._send_json(
+                        {"issue": issue, "propose": propose_report.to_json()}
+                    )
+                    return
                 # ---- eval (Python detector) measurement plane ----
                 if path == "/api/run-eval":
                     payload = self._read_json()
@@ -2327,11 +2379,12 @@ def make_handler(
                             "adapter_id": adapter_id,
                             "operator": report.operator,
                             "profile_id": report.profile_id,
-                            "proposal_id": report.proposal_id,
+                            "issue_ids": list(report.issue_ids),
+                            "new_issue_ids": list(report.new_issue_ids),
+                            "bundled_issue_ids": list(report.bundled_issue_ids),
                             "operator_run_id": report.operator_run_id,
                             "evidence_path": str(report.evidence_path),
                             "prompt_path": str(report.prompt_path),
-                            "proposal_path": str(report.proposal_path),
                             "persisted": report.persisted,
                             "raw_output_path": str(report.raw_output_path)
                             if report.raw_output_path

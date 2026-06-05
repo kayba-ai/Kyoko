@@ -446,10 +446,11 @@ class CliTests(unittest.TestCase):
             self.assertEqual(payload["status"], "executed")
             self.assertEqual(payload["reason"], "ran_operator_adapter")
             self.assertEqual(payload["result"]["adapter_id"], "fixture_operator")
-            self.assertEqual(payload["result"]["proposal_id"], "proposal_command_span_fetch_timeout_001")
+            # ST2 decoupling: the diagnosis adapter surfaces issues, not a proposal.
+            self.assertEqual(len(payload["result"]["new_issue_ids"]), 1)
+            self.assertTrue(payload["result"]["persisted"])
             self.assertTrue(payload["result"]["operator_run_id"])
             self.assertTrue(Path(payload["result"]["raw_output_path"]).exists())
-            self.assertEqual(payload["routing_after"]["state"], "needs_check_generation")
 
     def test_profile_next_rejects_unknown_all_profiles_flag(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -2213,11 +2214,12 @@ class CliTests(unittest.TestCase):
             self.assertEqual(improve_code, 0)
             self.assertEqual(payload["source_import"]["candidate"]["id"], "openclaw_main")
             self.assertEqual(payload["profile_id"], "profile_openclaw_main")
-            self.assertEqual(payload["proposal_id"], "proposal_mock_span_openclaw_error_session_failure_1")
-            self.assertEqual(
-                payload["generated_check_spec_ids"],
-                ["check_proposal_mock_span_openclaw_error_session_failure_1_1"],
-            )
+            # Default context_mode is `propose`: analysis surfaces+diagnoses an issue but
+            # no proposal is authored this run.
+            self.assertIsNone(payload["proposal_id"])
+            self.assertEqual(payload["proposal_ids"], [])
+            self.assertEqual(payload["generated_check_spec_ids"], [])
+            self.assertEqual(len(payload["analyze"]["new_issue_ids"]), 1)
 
     def test_check_and_replay_flow(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -3125,11 +3127,12 @@ class CliTests(unittest.TestCase):
             self.assertEqual(analyze_code, 0)
 
             payload = json.loads(analyze_out.getvalue())
-            self.assertEqual(payload["proposal_id"], "proposal_mock_span_fetch_timeout_001")
+            self.assertEqual(len(payload["new_issue_ids"]), 1)
+            self.assertEqual(payload["new_issue_ids"], payload["issue_ids"])
+            self.assertTrue(payload["persisted"])
             self.assertTrue(payload["operator_run_id"])
             self.assertTrue(Path(payload["evidence_path"]).exists())
             self.assertTrue(Path(payload["prompt_path"]).exists())
-            self.assertTrue(Path(payload["proposal_path"]).exists())
 
     def test_operator_prompt_flow(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -3203,7 +3206,8 @@ class CliTests(unittest.TestCase):
 
             payload = json.loads(analyze_out.getvalue())
             self.assertEqual(payload["operator"], "command")
-            self.assertEqual(payload["proposal_id"], "proposal_command_span_fetch_timeout_001")
+            self.assertEqual(len(payload["new_issue_ids"]), 1)
+            self.assertTrue(payload["persisted"])
             self.assertTrue(payload["operator_run_id"])
             self.assertEqual(payload["attempts"], 1)
             self.assertTrue(Path(payload["prompt_path"]).exists())
@@ -3215,10 +3219,8 @@ class CliTests(unittest.TestCase):
             self.assertEqual(runs_code, 0)
             runs_payload = json.loads(runs_out.getvalue())
             self.assertEqual(runs_payload["operator_runs"][0]["status"], "succeeded")
-            self.assertEqual(
-                runs_payload["operator_runs"][0]["proposal_id"],
-                "proposal_command_span_fetch_timeout_001",
-            )
+            # Diagnosis runs surface issues, not a proposal.
+            self.assertIsNone(runs_payload["operator_runs"][0]["proposal_id"])
 
     def test_analyze_command_retries_malformed_operator_output(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -3251,7 +3253,7 @@ class CliTests(unittest.TestCase):
 
             self.assertEqual(analyze_code, 0)
             payload = json.loads(analyze_out.getvalue())
-            self.assertEqual(payload["proposal_id"], "proposal_retry_span_fetch_timeout_001")
+            self.assertEqual(len(payload["new_issue_ids"]), 1)
             self.assertEqual(payload["attempts"], 2)
 
             runs_out = io.StringIO()
@@ -3357,7 +3359,8 @@ class CliTests(unittest.TestCase):
             self.assertEqual(analyze_code, 0)
             analyze_payload = json.loads(analyze_out.getvalue())
             self.assertEqual(analyze_payload["operator"], "fixture_operator")
-            self.assertEqual(analyze_payload["proposal_id"], "proposal_command_span_fetch_timeout_001")
+            self.assertEqual(len(analyze_payload["new_issue_ids"]), 1)
+            self.assertTrue(analyze_payload["persisted"])
             self.assertTrue(analyze_payload["operator_run_id"])
             self.assertTrue(Path(analyze_payload["prompt_path"]).exists())
 
@@ -3428,10 +3431,10 @@ class CliTests(unittest.TestCase):
             payload = json.loads(smoke_out.getvalue())
             self.assertTrue(payload["used_demo_database"])
             self.assertEqual(payload["operator"], "mock")
-            self.assertEqual(payload["proposal_id"], "proposal_mock_span_fetch_timeout_001")
+            self.assertEqual(len(payload["new_issue_ids"]), 1)
+            self.assertTrue(payload["persisted"])
             self.assertTrue(Path(payload["db_path"]).exists())
             self.assertTrue(Path(payload["prompt_path"]).exists())
-            self.assertTrue(Path(payload["proposal_path"]).exists())
 
     def test_operator_smoke_prepare_only_returns_command_contract(self) -> None:
         with TemporaryDirectory() as tmpdir:

@@ -8,15 +8,21 @@ from typing import Any, Optional, Sequence
 from .analyze import (
     AnalyzeError,
     AnalyzeReport,
+    ProposeForIssueReport,
     analyze_with_command_operator,
     analyze_with_mock_operator,
+    propose_for_issue,
 )
-from .autonomy import AutonomyError
+from .autonomy import AutonomyError, evaluate_issue_to_proposal_gate
 from .autonomy_runner import AutonomyRunError, AutonomyRunReport, run_autonomy
 from .checks import CheckError, generate_checks_for_proposal, list_check_specs
 from .issue_guard import GuardError, GuardReport, mint_guard_for_issue
-from .issues import IssueError, update_issue_status
-from .operator_adapters import OperatorAdapterError, run_registered_operator_adapter
+from .issues import IssueError, accept_issue, get_issue, update_issue_status
+from .operator_adapters import (
+    OperatorAdapterError,
+    get_operator_adapter_command,
+    run_registered_operator_adapter,
+)
 from .replay_adapters import ReplayAdapterError, run_registered_replay_adapter
 from .replay_servers import ReplayServerError
 from .source_discovery import (
@@ -34,7 +40,10 @@ class ImproveError(Exception):
 @dataclass(frozen=True)
 class ImproveReport:
     profile_id: str
+    # Back-compat: the first authored proposal id (or None when nothing was authored).
     proposal_id: Optional[str]
+    # All proposals authored this run (gate #1 `autonomous` issues), in order.
+    proposal_ids: tuple[str, ...]
     operator: Optional[str]
     analyze: Optional[AnalyzeReport]
     check_spec_ids: tuple[str, ...]
@@ -44,12 +53,15 @@ class ImproveReport:
     autonomy: Optional[AutonomyRunReport]
     source_import: Optional[DiscoveredSourceImportReport]
     notes: tuple[str, ...]
+    # Per-issue gate #1 outcomes surfaced this run (issue_id -> mode), structured for the API.
+    gate1_outcomes: tuple[dict[str, Any], ...] = ()
     guard_reports: tuple[GuardReport, ...] = ()
 
     def to_json(self) -> dict[str, Any]:
         return {
             "profile_id": self.profile_id,
             "proposal_id": self.proposal_id,
+            "proposal_ids": list(self.proposal_ids),
             "operator": self.operator,
             "analyze": _analyze_report_json(self.analyze),
             "check_spec_ids": list(self.check_spec_ids),
@@ -59,6 +71,7 @@ class ImproveReport:
             "autonomy": self.autonomy.to_json() if self.autonomy is not None else None,
             "source_import": self.source_import.to_json() if self.source_import is not None else None,
             "guards": [guard.to_json() for guard in self.guard_reports],
+            "gate1_outcomes": [dict(outcome) for outcome in self.gate1_outcomes],
             "notes": list(self.notes),
         }
 
@@ -109,7 +122,12 @@ def run_improvement_loop(
 
     analyze_report: Optional[AnalyzeReport] = None
     selected_operator: Optional[str] = None
+    notes: list[str] = []
+    gate1_outcomes: list[dict[str, Any]] = []
+    authored_proposal_ids: list[str] = []
+
     if proposal_id is None:
+        # ---- Diagnosis phase: analysis surfaces ISSUES only (no proposal). ----
         selected_operator = operator
         analyze_report = _run_analysis(
             db_path=db_path,
@@ -125,16 +143,56 @@ def run_improvement_loop(
             schema_path=schema_path,
             schedule_id=schedule_id,
         )
-        proposal_id = analyze_report.proposal_id
         profile_id = analyze_report.profile_id
 
-        if proposal_id is None:
-            # Gate #1 stopped at diagnosed: the issue was surfaced+diagnosed but the
-            # section's autonomy mode is `off`, so no proposal was generated. There is
-            # nothing to check/replay/apply — return the diagnosed-only outcome.
+        # ---- Gate #1: per newly-surfaced issue, the section's autonomy mode decides
+        # whether to author a proposal now (autonomous), leave it for a human to accept
+        # (propose), or stop at diagnosed (off). ----
+        for issue_id in analyze_report.new_issue_ids:
+            try:
+                issue = get_issue(db_path=db_path, issue_id=issue_id)
+            except IssueError as exc:
+                raise ImproveError(str(exc)) from exc
+            section = issue.get("section")
+            gate = evaluate_issue_to_proposal_gate(
+                db_path=db_path, section=section, profile_id=profile_id
+            )
+            gate1_outcomes.append(
+                {"issue_id": issue_id, "section": section, **gate.to_json()}
+            )
+            if gate.mode == "autonomous":
+                try:
+                    accept_issue(db_path=db_path, issue_id=issue_id)
+                    propose_report = _propose_for_each(
+                        db_path=db_path,
+                        output_dir=selected_output_dir,
+                        issue_id=issue_id,
+                        operator=operator,
+                        operator_command=operator_command,
+                        operator_adapter=operator_adapter,
+                        operator_timeout_seconds=operator_timeout_seconds,
+                        operator_max_retries=operator_max_retries,
+                        schema_path=schema_path,
+                        profile_id=profile_id,
+                    )
+                except (AnalyzeError, IssueError, OperatorAdapterError) as exc:
+                    raise ImproveError(str(exc)) from exc
+                authored_proposal_ids.append(propose_report.proposal_id)
+                notes.append(f"gate1_autonomous_authored:{issue_id}:{propose_report.proposal_id}")
+            elif gate.mode == "propose":
+                notes.append(f"gate1_propose_awaiting_acceptance:{issue_id}")
+            else:
+                notes.append(f"gate1_off_diagnosed:{issue_id}")
+
+        if not authored_proposal_ids:
+            # Nothing authored: every issue was diagnosed-only (off) or left for a human
+            # to accept (propose). There is nothing to check/replay/apply this run.
+            if profile_id is None:
+                profile_id = analyze_report.profile_id
             return ImproveReport(
-                profile_id=analyze_report.profile_id,
+                profile_id=profile_id,
                 proposal_id=None,
+                proposal_ids=(),
                 operator=selected_operator,
                 analyze=analyze_report,
                 check_spec_ids=(),
@@ -143,13 +201,16 @@ def run_improvement_loop(
                 replay_runs=(),
                 autonomy=None,
                 source_import=source_import_report,
-                notes=(f"gate1_blocked:{analyze_report.gate1_reason}",),
+                gate1_outcomes=tuple(gate1_outcomes),
+                notes=tuple(notes),
             )
+        target_proposal_ids = authored_proposal_ids
+    else:
+        # ---- Direct proposal path (skip analysis): gate #2 over this one proposal. ----
+        target_proposal_ids = [proposal_id]
 
-    if proposal_id is None:
-        raise ImproveError("proposal_id_required")
     if profile_id is None:
-        profile_id = _proposal_profile_id(db_path, proposal_id)
+        profile_id = _proposal_profile_id(db_path, target_proposal_ids[0])
     profile_harness_workspace_root = None
     if run_autonomy_after and harness_workspace_root is None:
         profile_harness_workspace_root = _profile_workspace_root_if_available(
@@ -157,44 +218,53 @@ def run_improvement_loop(
             profile_id,
         )
 
-    notes: list[str] = []
-    generated_check_spec_ids: tuple[str, ...] = ()
-    existing_check_spec_ids: tuple[str, ...] = ()
-    try:
-        check_generation = generate_checks_for_proposal(
-            db_path=db_path,
-            proposal_id=proposal_id,
-        )
-        generated_check_spec_ids = check_generation.check_spec_ids
-        existing_check_spec_ids = check_generation.existing_check_spec_ids
-        profile_id = check_generation.profile_id
-    except CheckError as exc:
-        if str(exc).startswith("no_check_spec_changes:"):
-            notes.append(str(exc))
-        else:
-            raise ImproveError(str(exc)) from exc
-    except StorageError as exc:
-        raise ImproveError(str(exc)) from exc
-
-    check_spec_ids = _check_spec_ids_for_proposal(db_path, proposal_id)
+    # ---- Gate #2: generate checks + replay for every targeted proposal. ----
+    generated_check_spec_ids: list[str] = []
+    existing_check_spec_ids: list[str] = []
+    check_spec_ids: list[str] = []
     replay_runs: list[dict[str, Any]] = []
-    selected_replay_adapter_id = replay_adapter_id or _default_replay_adapter_id(db_path, profile_id)
-    if selected_replay_adapter_id is not None:
-        if not check_spec_ids:
-            notes.append(f"replay_adapter_skipped_no_check_specs:{selected_replay_adapter_id}")
-        for check_spec_id in check_spec_ids:
-            try:
-                replay_report = run_registered_replay_adapter(
-                    db_path=db_path,
-                    adapter_id=selected_replay_adapter_id,
-                    check_spec_id=check_spec_id,
-                    output_dir=replay_output_dir,
-                    timeout_seconds=replay_timeout_seconds,
-                    run_check_after=True,
-                )
-            except (CheckError, ReplayAdapterError, ReplayServerError, StorageError) as exc:
+    for target_proposal_id in target_proposal_ids:
+        try:
+            check_generation = generate_checks_for_proposal(
+                db_path=db_path,
+                proposal_id=target_proposal_id,
+            )
+            generated_check_spec_ids.extend(check_generation.check_spec_ids)
+            existing_check_spec_ids.extend(check_generation.existing_check_spec_ids)
+            profile_id = check_generation.profile_id
+        except CheckError as exc:
+            if str(exc).startswith("no_check_spec_changes:"):
+                notes.append(str(exc))
+            else:
                 raise ImproveError(str(exc)) from exc
-            replay_runs.append(_replay_report_json(replay_report, selected_replay_adapter_id))
+        except StorageError as exc:
+            raise ImproveError(str(exc)) from exc
+
+        proposal_check_spec_ids = _check_spec_ids_for_proposal(db_path, target_proposal_id)
+        check_spec_ids.extend(proposal_check_spec_ids)
+        selected_replay_adapter_id = replay_adapter_id or _default_replay_adapter_id(
+            db_path, profile_id
+        )
+        if selected_replay_adapter_id is not None:
+            if not proposal_check_spec_ids:
+                notes.append(
+                    f"replay_adapter_skipped_no_check_specs:{selected_replay_adapter_id}"
+                )
+            for check_spec_id in proposal_check_spec_ids:
+                try:
+                    replay_report = run_registered_replay_adapter(
+                        db_path=db_path,
+                        adapter_id=selected_replay_adapter_id,
+                        check_spec_id=check_spec_id,
+                        output_dir=replay_output_dir,
+                        timeout_seconds=replay_timeout_seconds,
+                        run_check_after=True,
+                    )
+                except (CheckError, ReplayAdapterError, ReplayServerError, StorageError) as exc:
+                    raise ImproveError(str(exc)) from exc
+                replay_runs.append(
+                    _replay_report_json(replay_report, selected_replay_adapter_id)
+                )
 
     autonomy_report: Optional[AutonomyRunReport] = None
     guard_reports: list[GuardReport] = []
@@ -234,17 +304,80 @@ def run_improvement_loop(
 
     return ImproveReport(
         profile_id=profile_id,
-        proposal_id=proposal_id,
+        proposal_id=target_proposal_ids[0] if target_proposal_ids else None,
+        proposal_ids=tuple(target_proposal_ids),
         operator=selected_operator,
         analyze=analyze_report,
         check_spec_ids=tuple(check_spec_ids),
-        generated_check_spec_ids=generated_check_spec_ids,
-        existing_check_spec_ids=existing_check_spec_ids,
+        generated_check_spec_ids=tuple(generated_check_spec_ids),
+        existing_check_spec_ids=tuple(existing_check_spec_ids),
         replay_runs=tuple(replay_runs),
         autonomy=autonomy_report,
         source_import=source_import_report,
+        gate1_outcomes=tuple(gate1_outcomes),
         notes=tuple(notes),
         guard_reports=tuple(guard_reports),
+    )
+
+
+def _propose_for_each(
+    *,
+    db_path: Path,
+    output_dir: Path,
+    issue_id: str,
+    operator: str,
+    operator_command: Optional[Sequence[str]],
+    operator_adapter: Optional[str],
+    operator_timeout_seconds: int,
+    operator_max_retries: int,
+    schema_path: Optional[Path],
+    profile_id: Optional[str],
+) -> ProposeForIssueReport:
+    """Author one proposal from an accepted issue using the SAME operator as analysis."""
+
+    if operator == "mock":
+        return propose_for_issue(
+            db_path=db_path,
+            output_dir=output_dir,
+            issue_id=issue_id,
+            operator="mock",
+            schema_path=schema_path,
+            profile_id=profile_id,
+        )
+    if operator == "command":
+        if operator_command is None:
+            raise ImproveError("operator_command_required")
+        return propose_for_issue(
+            db_path=db_path,
+            output_dir=output_dir,
+            issue_id=issue_id,
+            operator="command",
+            command=operator_command,
+            timeout_seconds=operator_timeout_seconds,
+            max_retries=operator_max_retries,
+            schema_path=schema_path,
+            profile_id=profile_id,
+        )
+
+    # adapter / named-operator: resolve the registered adapter's command + kind.
+    adapter_id = operator_adapter if operator == "adapter" else operator
+    if not adapter_id:
+        raise ImproveError("operator_adapter_required")
+    command, operator_kind = get_operator_adapter_command(
+        db_path=db_path, adapter_id=adapter_id
+    )
+    return propose_for_issue(
+        db_path=db_path,
+        output_dir=output_dir,
+        issue_id=issue_id,
+        operator="command",
+        command=command,
+        operator_kind=operator_kind,
+        adapter_id=adapter_id,
+        timeout_seconds=operator_timeout_seconds,
+        max_retries=operator_max_retries,
+        schema_path=schema_path,
+        profile_id=profile_id,
     )
 
 
@@ -397,17 +530,14 @@ def _analyze_report_json(report: Optional[AnalyzeReport]) -> Optional[dict[str, 
     return {
         "operator": report.operator,
         "profile_id": report.profile_id,
-        "proposal_id": report.proposal_id,
-        "issue_id": report.issue_id,
+        "issue_ids": list(report.issue_ids),
+        "new_issue_ids": list(report.new_issue_ids),
+        "bundled_issue_ids": list(report.bundled_issue_ids),
         "operator_run_id": report.operator_run_id,
         "evidence_path": str(report.evidence_path),
         "prompt_path": str(report.prompt_path),
-        "proposal_path": str(report.proposal_path) if report.proposal_path is not None else None,
         "persisted": report.persisted,
         "attempts": report.attempts,
-        "gate1_mode": report.gate1_mode,
-        "gate1_allow": report.gate1_allow,
-        "gate1_reason": report.gate1_reason,
         "raw_output_path": str(report.raw_output_path)
         if report.raw_output_path is not None
         else None,

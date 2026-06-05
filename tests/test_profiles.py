@@ -325,10 +325,11 @@ class ProfileTests(unittest.TestCase):
             self.assertEqual(report.reason, "ran_operator_adapter")
             self.assertEqual(report.result["adapter_id"], "fixture_operator")
             self.assertEqual(report.result["operator"], "fixture_operator")
-            self.assertEqual(report.result["proposal_id"], "proposal_command_span_fetch_timeout_001")
+            # ST2 decoupling: the diagnosis adapter surfaces issues, not a proposal.
+            self.assertEqual(len(report.result["new_issue_ids"]), 1)
+            self.assertTrue(report.result["persisted"])
             self.assertTrue(report.result["operator_run_id"])
             self.assertTrue(Path(report.result["raw_output_path"]).exists())
-            self.assertEqual(report.routing_after["state"], "needs_check_generation")
 
     def test_profile_next_step_explicit_operator_target_keeps_prompt_only_with_registered_adapter(self) -> None:
         with TemporaryDirectory() as tmpdir:

@@ -16,6 +16,7 @@ from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 from kyoko.apply import apply_context_proposal
+from kyoko.autonomy import update_autonomy_policy
 from kyoko.blobs import put_blob
 from kyoko.proposals import submit_learning_proposal, submit_learning_proposal_payload
 from kyoko.operator_adapters import register_operator_adapter
@@ -534,8 +535,9 @@ class WebTests(unittest.TestCase):
             self.assertEqual(executed["status"], "executed")
             self.assertEqual(executed["reason"], "ran_operator_adapter")
             self.assertEqual(executed["result"]["adapter_id"], "fixture_operator")
-            self.assertEqual(executed["result"]["proposal_id"], "proposal_command_span_fetch_timeout_001")
-            self.assertEqual(executed["routing_after"]["state"], "needs_check_generation")
+            # ST2 decoupling: the diagnosis adapter surfaces issues, not a proposal.
+            self.assertEqual(len(executed["result"]["new_issue_ids"]), 1)
+            self.assertTrue(executed["result"]["persisted"])
 
     def test_profile_next_endpoint_ignores_all_profiles_and_runs_single(self) -> None:
         # Single implicit profile (SCOPE Decision 1): no multi-profile batch mode.
@@ -1535,17 +1537,16 @@ class WebTests(unittest.TestCase):
                         "run_autonomy": False,
                     },
                 )
-                proposals = server.get_json("/api/proposals")
-                checks = server.get_json("/api/checks")
+                issues = server.get_json("/api/issues")
 
             self.assertEqual(improve["source_import"]["candidate"]["id"], "openclaw_main")
             self.assertEqual(improve["profile_id"], "profile_openclaw_main")
-            self.assertEqual(improve["proposal_id"], "proposal_mock_span_openclaw_error_session_failure_1")
-            self.assertEqual(proposals["proposals"][0]["id"], "proposal_mock_span_openclaw_error_session_failure_1")
-            self.assertEqual(
-                checks["check_specs"][0]["id"],
-                "check_proposal_mock_span_openclaw_error_session_failure_1_1",
-            )
+            # Default context_mode is `propose`: analysis surfaces+diagnoses an issue but
+            # no proposal is authored this run.
+            self.assertIsNone(improve["proposal_id"])
+            self.assertEqual(improve["proposal_ids"], [])
+            self.assertEqual(len(improve["analyze"]["new_issue_ids"]), 1)
+            self.assertEqual(len(issues["issues"]), 1)
 
     def test_improve_endpoint_uses_selected_operator_adapter_for_discovered_source(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -1554,6 +1555,12 @@ class WebTests(unittest.TestCase):
             home = tmp_path / "home"
             _write_failed_openclaw_session(home)
             ingest_source_fixture(db_path, FIXTURE)
+            # Gate #1 autonomous so the analysis adapter's surfaced issue gets a proposal.
+            update_autonomy_policy(
+                db_path=db_path,
+                profile_id="profile_news_research_001",
+                context_mode="autonomous",
+            )
             register_operator_adapter(
                 db_path=db_path,
                 adapter_id="fixture_operator",
@@ -1582,8 +1589,11 @@ class WebTests(unittest.TestCase):
             self.assertEqual(improve["profile_id"], "profile_news_research_001")
             self.assertEqual(improve["operator"], "adapter")
             self.assertEqual(improve["analyze"]["operator"], "fixture_operator")
+            # The adapter authors the fix via its command operator (proposal_command_*).
             self.assertTrue(improve["proposal_id"].startswith("proposal_command_"))
-            self.assertEqual(operator_runs["operator_runs"][0]["operator_label"], "fixture_operator")
+            # Two operator runs: the diagnosis (adapter) and the proposal-authoring turn.
+            labels = {r["operator_label"] for r in operator_runs["operator_runs"]}
+            self.assertIn("fixture_operator", labels)
 
     def test_improve_endpoint_runs_selected_replay_adapter_for_discovered_source(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -1593,6 +1603,12 @@ class WebTests(unittest.TestCase):
             output_dir = tmp_path / "selected-discovery-replay"
             _write_failed_openclaw_session(home)
             ingest_source_fixture(db_path, FIXTURE)
+            # Gate #1 autonomous so a proposal is authored and the replay adapter runs.
+            update_autonomy_policy(
+                db_path=db_path,
+                profile_id="profile_news_research_001",
+                context_mode="autonomous",
+            )
             register_replay_adapter(
                 db_path=db_path,
                 adapter_id="fixture_replay",
@@ -1711,12 +1727,15 @@ class WebTests(unittest.TestCase):
 
             self.assertEqual(adapters["operator_adapters"][0]["id"], "fixture_operator")
             self.assertEqual(analysis["operator"], "fixture_operator")
-            self.assertEqual(analysis["proposal_id"], "proposal_command_span_fetch_timeout_001")
+            # ST2 decoupling: the diagnosis adapter surfaces issues, not a proposal.
+            self.assertEqual(len(analysis["new_issue_ids"]), 1)
+            self.assertTrue(analysis["persisted"])
             self.assertTrue(analysis["operator_run_id"])
             self.assertTrue(Path(analysis["prompt_path"]).exists())
-            self.assertEqual(proposals["proposals"][0]["id"], "proposal_command_span_fetch_timeout_001")
+            self.assertEqual(proposals["proposals"], [])
             self.assertEqual(status["counts"]["operator_adapters"], 1)
             self.assertEqual(status["counts"]["operator_runs"], 1)
+            self.assertEqual(status["counts"]["issues"], 1)
             self.assertEqual(operator_runs["operator_runs"][0]["status"], "succeeded")
             self.assertEqual(operator_runs["operator_runs"][0]["attempt_count"], 1)
             self.assertIsNone(operator_runs["operator_runs"][0]["failure_kind"])
@@ -1766,7 +1785,7 @@ class WebTests(unittest.TestCase):
             )
             self.assertTrue(Path(prepare_all["targets"][0]["plan"]["prompt_path"]).exists())
             self.assertTrue(smoke["used_demo_database"])
-            self.assertEqual(smoke["proposal_id"], "proposal_mock_span_fetch_timeout_001")
+            self.assertEqual(len(smoke["new_issue_ids"]), 1)
             self.assertEqual(status["counts"]["learning_proposals"], 0)
             self.assertEqual(status["counts"]["operator_adapters"], 1)
 

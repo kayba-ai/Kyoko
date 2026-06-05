@@ -25,6 +25,7 @@ from .analyze import (
     analyze_with_mock_operator,
     list_operator_runs,
     parse_operator_command,
+    propose_for_issue,
 )
 from .apply import (
     ApplyError,
@@ -64,7 +65,14 @@ from .details import (
     get_run_detail,
     list_runs,
 )
-from .issues import IssueError, create_issue, list_issues, set_issue_comment, update_issue_status
+from .issues import (
+    IssueError,
+    accept_issue,
+    create_issue,
+    list_issues,
+    set_issue_comment,
+    update_issue_status,
+)
 from .issue_guard import GuardError, mint_guard_for_issue
 from .eval_detectors import (
     DetectorError,
@@ -1056,6 +1064,41 @@ def build_parser() -> argparse.ArgumentParser:
         "comment", help="Review comment text (empty string clears it)."
     )
     issue_comment.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+
+    accept_issue_cmd = subcommands.add_parser(
+        "accept-issue",
+        help="Gate #1: accept a diagnosed issue for a fix and author a proposal from it "
+        "(the proposal still flows through the check/replay autonomy gate).",
+    )
+    _add_db_argument(accept_issue_cmd)
+    accept_issue_cmd.add_argument("issue_id", help="Issue id to accept.")
+    accept_issue_cmd.add_argument(
+        "--operator",
+        choices=["mock", "command"],
+        default="mock",
+        help="Operator that authors the proposal (default: mock).",
+    )
+    accept_issue_cmd.add_argument(
+        "--operator-command",
+        help="Shell command for --operator command (the proposal-authoring operator).",
+    )
+    accept_issue_cmd.add_argument(
+        "--output-dir",
+        type=Path,
+        help="Directory for the proposal-authoring prompt/proposal artifacts.",
+    )
+    accept_issue_cmd.add_argument(
+        "--schema",
+        type=Path,
+        default=Path("docs/schemas/learning-proposal.schema.json"),
+        help="LearningProposal schema path.",
+    )
+    accept_issue_cmd.add_argument(
+        "--no-propose",
+        action="store_true",
+        help="Only accept the issue; do not author a proposal.",
+    )
+    accept_issue_cmd.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
 
     # --- measurement plane: `eval` (deterministic Python detectors) ---------
     evals_cmd = subcommands.add_parser(
@@ -4738,6 +4781,42 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(f"{issue['id']}  comment set")
         return 0
 
+    if args.command == "accept-issue":
+        try:
+            issue = accept_issue(db_path=args.db, issue_id=args.issue_id)
+            propose_payload = None
+            if not args.no_propose:
+                output_dir = args.output_dir or (
+                    args.db.parent / ".kyoko" / "propose-runs" / args.issue_id
+                )
+                command = (
+                    parse_operator_command(args.operator_command)
+                    if args.operator == "command" and args.operator_command
+                    else None
+                )
+                if args.operator == "command" and not command:
+                    raise AnalyzeError("operator_command_required")
+                propose_report = propose_for_issue(
+                    db_path=args.db,
+                    output_dir=output_dir,
+                    issue_id=args.issue_id,
+                    operator=args.operator,
+                    command=command,
+                    schema_path=args.schema,
+                )
+                propose_payload = propose_report.to_json()
+        except (IssueError, AnalyzeError, StorageError) as exc:
+            print(f"accept-issue failed: {exc}", file=sys.stderr)
+            return 1
+        if args.json:
+            print(json.dumps({"issue": issue, "propose": propose_payload}, sort_keys=True))
+        else:
+            print(f"accepted: {issue['id']}  status={issue['status']}")
+            if propose_payload is not None:
+                print(f"proposal: {propose_payload['proposal_id']}")
+                print(f"proposal_path: {propose_payload['proposal_path']}")
+        return 0
+
     if args.command == "evals":
         try:
             detectors = list_detectors(db_path=args.db)
@@ -6177,34 +6256,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(f"analysis failed: {exc}", file=sys.stderr)
             return 1
         if args.json:
-            print(
-                json.dumps(
-                    {
-                        "operator": report.operator,
-                        "profile_id": report.profile_id,
-                        "proposal_id": report.proposal_id,
-                        "operator_run_id": report.operator_run_id,
-                        "evidence_path": str(report.evidence_path),
-                        "prompt_path": str(report.prompt_path),
-                        "proposal_path": str(report.proposal_path),
-                        "persisted": report.persisted,
-                        "attempts": report.attempts,
-                        "raw_output_path": str(report.raw_output_path)
-                        if report.raw_output_path
-                        else None,
-                    },
-                    sort_keys=True,
-                )
-            )
+            print(json.dumps(report.to_json(), sort_keys=True))
         else:
-            print(f"analysis complete: {report.proposal_id}")
+            print(f"analysis complete: {len(report.issue_ids)} issue(s)")
             print(f"operator: {report.operator}")
             print(f"profile: {report.profile_id}")
             if report.operator_run_id:
                 print(f"operator_run: {report.operator_run_id}")
             print(f"evidence: {report.evidence_path}")
             print(f"prompt: {report.prompt_path}")
-            print(f"proposal: {report.proposal_path}")
+            for issue_id in report.new_issue_ids:
+                print(f"issue (new): {issue_id}")
+            for issue_id in report.bundled_issue_ids:
+                print(f"issue (bundled): {issue_id}")
             if report.raw_output_path:
                 print(f"raw_output: {report.raw_output_path}")
             print(f"persisted: {report.persisted}")
@@ -6242,8 +6306,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         if args.json:
             print(json.dumps(payload, sort_keys=True))
         else:
-            print(f"improve complete: {report.proposal_id}")
+            if report.proposal_ids:
+                print(f"improve complete: {', '.join(report.proposal_ids)}")
+            else:
+                print("improve complete: no proposals authored")
             print(f"profile: {report.profile_id}")
+            for outcome in report.gate1_outcomes:
+                print(
+                    f"gate1: {outcome.get('issue_id')} "
+                    f"section={outcome.get('section')} mode={outcome.get('mode')}"
+                )
             if report.source_import:
                 print(f"source_import: {report.source_import.candidate['id']}")
             if report.operator:
@@ -6399,11 +6471,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "adapter_id": args.adapter_id,
             "operator": report.operator,
             "profile_id": report.profile_id,
-            "proposal_id": report.proposal_id,
+            "issue_ids": list(report.issue_ids),
+            "new_issue_ids": list(report.new_issue_ids),
+            "bundled_issue_ids": list(report.bundled_issue_ids),
             "operator_run_id": report.operator_run_id,
             "evidence_path": str(report.evidence_path),
             "prompt_path": str(report.prompt_path),
-            "proposal_path": str(report.proposal_path),
             "persisted": report.persisted,
             "attempts": report.attempts,
             "raw_output_path": str(report.raw_output_path)
@@ -6417,10 +6490,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(f"profile: {report.profile_id}")
             if report.operator_run_id:
                 print(f"operator_run: {report.operator_run_id}")
-            print(f"proposal: {report.proposal_id}")
+            for issue_id in report.new_issue_ids:
+                print(f"issue (new): {issue_id}")
+            for issue_id in report.bundled_issue_ids:
+                print(f"issue (bundled): {issue_id}")
             print(f"evidence: {report.evidence_path}")
             print(f"prompt: {report.prompt_path}")
-            print(f"proposal_path: {report.proposal_path}")
             if report.raw_output_path:
                 print(f"raw_output: {report.raw_output_path}")
         return 0

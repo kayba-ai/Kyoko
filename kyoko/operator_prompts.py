@@ -274,7 +274,14 @@ def resolve_operator_issue_schema_path(schema_path: Optional[Path]) -> Optional[
     issue schema."""
 
     default_docs = Path("docs/schemas/issue.schema.json")
-    if schema_path is not None and schema_path.exists() and schema_path != DEFAULT_SCHEMA_PATH:
+    # Never substitute the LearningProposal schema: a caller that passes the proposal
+    # schema (by relative default or by any path whose name is the proposal schema) in the
+    # diagnosis turn is ignored in favor of the issue schema.
+    is_proposal_schema = schema_path is not None and (
+        schema_path == DEFAULT_SCHEMA_PATH
+        or schema_path.name == DEFAULT_SCHEMA_PATH.name
+    )
+    if schema_path is not None and schema_path.exists() and not is_proposal_schema:
         return schema_path.resolve()
     local = Path.cwd() / default_docs
     if local.exists():

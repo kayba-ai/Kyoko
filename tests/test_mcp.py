@@ -243,8 +243,9 @@ class McpTests(unittest.TestCase):
             self.assertEqual(result["status"], "executed")
             self.assertEqual(result["reason"], "ran_operator_adapter")
             self.assertEqual(result["result"]["adapter_id"], "fixture_operator")
-            self.assertEqual(result["result"]["proposal_id"], "proposal_command_span_fetch_timeout_001")
-            self.assertEqual(result["routing_after"]["state"], "needs_check_generation")
+            # ST2 decoupling: the diagnosis adapter surfaces ISSUES, not a proposal.
+            self.assertEqual(len(result["result"]["new_issue_ids"]), 1)
+            self.assertTrue(result["result"]["persisted"])
 
     def test_mcp_prepare_operator_smoke_matrix_writes_prompt_artifacts(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -569,14 +570,12 @@ class McpTests(unittest.TestCase):
             self.assertTrue(payload["mcp_autonomy_disabled"])
             self.assertEqual(payload["source_import"]["candidate"]["id"], "openclaw_main")
             self.assertEqual(payload["profile_id"], "profile_openclaw_main")
-            self.assertEqual(
-                payload["proposal_id"],
-                "proposal_mock_span_openclaw_error_session_failure_1",
-            )
-            self.assertEqual(
-                payload["generated_check_spec_ids"],
-                ["check_proposal_mock_span_openclaw_error_session_failure_1_1"],
-            )
+            # Default context_mode is `propose`: analysis surfaces+diagnoses the issue but
+            # no proposal is authored (left for a human to accept). Diagnosis-only outcome.
+            self.assertIsNone(payload["proposal_id"])
+            self.assertEqual(payload["proposal_ids"], [])
+            self.assertEqual(payload["generated_check_spec_ids"], [])
+            self.assertEqual(len(payload["analyze"]["new_issue_ids"]), 1)
             self.assertEqual(payload["replay_runs"], [])
             self.assertIsNone(payload["autonomy"])
 

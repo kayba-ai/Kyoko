@@ -32,7 +32,13 @@ from .details import (
     get_run_detail,
     list_runs,
 )
-from .issues import create_issue, link_proposal_to_issue, list_issues
+from .issues import (
+    create_issue,
+    link_proposal_to_issue,
+    list_issues,
+    surface_issue,
+    validate_issue,
+)
 from .doctor import DEFAULT_SMOKE_EVIDENCE_DIR, DoctorError, run_doctor
 from .evidence import build_evidence_bundle
 from .checks import (
@@ -67,7 +73,6 @@ from .profile_next import ProfileNextError, run_profile_next_step
 from .profiles import list_profiles
 from .proposals import (
     list_learning_proposals,
-    originate_issue_for_proposal,
     submit_learning_proposal_payload,
 )
 from .replay_adapters import list_replay_adapters, run_registered_replay_adapter
@@ -1190,6 +1195,24 @@ def _build_tools(server: KyokoMcpServer) -> dict[str, McpTool]:
             idempotent=False,
         ),
         McpTool(
+            name="kyoko_submit_issue",
+            title="Kyoko Submit Issue",
+            description=(
+                "Submit one diagnosed `kyoko.issue.v1` issue (the diagnosis-turn contract): "
+                "Kyoko validates it (schema + referential integrity) and surfaces it through "
+                "the deterministic dedup net (folding a recurrence into an existing issue). "
+                "Evidence only — surfacing an issue never authors a proposal, applies a "
+                "change, or bypasses the check/replay gate."
+            ),
+            input_schema=_object_schema(
+                {"issue": {"type": "object"}},
+                required=["issue"],
+            ),
+            handler=lambda args: _submit_issue(server, args),
+            read_only=False,
+            idempotent=False,
+        ),
+        McpTool(
             name="kyoko_run_doctor",
             title="Run Kyoko Doctor",
             description=(
@@ -1923,9 +1946,9 @@ def _submit_proposal(server: KyokoMcpServer, args: dict[str, Any]) -> dict[str, 
     # proposal can never exist without an origin. Still pure propose — no apply.
     originated_issue = None
     if not proposal.get("issue_id"):
-        originated_issue = originate_issue_for_proposal(
-            db_path=server.db_path, proposal=proposal, source="analysis"
-        )
+        originated_issue = _surface_issue_for_proposal(server.db_path, proposal)
+        if originated_issue is not None:
+            proposal["issue_id"] = originated_issue["id"]
     report = submit_learning_proposal_payload(
         db_path=server.db_path,
         proposal=proposal,
@@ -1945,6 +1968,91 @@ def _submit_proposal(server: KyokoMcpServer, args: dict[str, Any]) -> dict[str, 
         "title": report.title,
         "issue_id": proposal.get("issue_id"),
     }
+
+
+def _submit_issue(server: KyokoMcpServer, args: dict[str, Any]) -> dict[str, Any]:
+    issue = args.get("issue")
+    if not isinstance(issue, dict):
+        raise McpError("issue_object_required")
+    from .storage import connect
+
+    initialize_database(server.db_path)
+    with connect(server.db_path) as connection:
+        # Validate against the kyoko.issue.v1 schema (None => bundled issue schema), NOT
+        # server.schema_path, which is the LearningProposal schema.
+        result = validate_issue(
+            connection=connection,
+            issue=issue,
+            schema_path=None,
+        )
+    if not result.ok:
+        raise McpError("issue_invalid:" + ",".join(result.errors))
+
+    section = issue.get("section")
+    surfaced, bundled = surface_issue(
+        db_path=server.db_path,
+        title=str(issue.get("title")),
+        body=issue.get("body") if isinstance(issue.get("body"), str) else None,
+        section=section if section in ("context", "harness") else None,
+        severity=issue.get("severity") if isinstance(issue.get("severity"), str) else None,
+        status="diagnosed" if issue.get("root_cause") else "open",
+        evidence_refs=issue.get("evidence_refs")
+        if isinstance(issue.get("evidence_refs"), list)
+        else None,
+        affected_span_ids=issue.get("affected_span_ids")
+        if isinstance(issue.get("affected_span_ids"), list)
+        else None,
+        affected_agent_identity_ids=issue.get("affected_agent_identity_ids")
+        if isinstance(issue.get("affected_agent_identity_ids"), list)
+        else None,
+        root_cause=issue.get("root_cause") if isinstance(issue.get("root_cause"), str) else None,
+        source=issue.get("source") if issue.get("source") in ("analysis", "eval", "llm_eval", "manual") else "analysis",
+        profile_id=issue.get("profile_id") if isinstance(issue.get("profile_id"), str) else None,
+    )
+    return {"issue": surfaced, "bundled": bundled}
+
+
+def _surface_issue_for_proposal(
+    db_path: Path, proposal: dict[str, Any]
+) -> Optional[dict[str, Any]]:
+    """Surface the originating Issue for an agent-submitted proposal (deterministic dedup
+    net). Mirrors the diagnosis-turn surfacing: section/evidence/root-cause are derived from
+    the proposal's own problem block. Evidence only — never changes behavior."""
+
+    problem = proposal.get("problem") if isinstance(proposal.get("problem"), dict) else {}
+    raw_title = problem.get("issue") or proposal.get("title") or "Surfaced agent failure"
+    title = str(raw_title).strip()[:500] or "Surfaced agent failure"
+    section = proposal.get("section") if proposal.get("section") in ("context", "harness") else None
+    evidence_refs = proposal.get("evidence_refs") if isinstance(proposal.get("evidence_refs"), list) else None
+    root_cause = proposal.get("insight") if isinstance(proposal.get("insight"), str) else None
+    if not root_cause:
+        rc = problem.get("root_cause") if isinstance(problem, dict) else None
+        root_cause = rc if isinstance(rc, str) and rc.strip() else None
+    body = proposal.get("summary") if isinstance(proposal.get("summary"), str) else None
+
+    span_ids: list[str] = []
+    target = problem.get("target") if isinstance(problem, dict) else None
+    if (
+        isinstance(target, dict)
+        and target.get("entity_type") == "span"
+        and isinstance(target.get("entity_id"), str)
+    ):
+        span_ids = [target["entity_id"]]
+
+    issue, _bundled = surface_issue(
+        db_path=db_path,
+        title=title,
+        body=body,
+        section=section,
+        category="analysis",
+        status="diagnosed" if root_cause else "open",
+        evidence_refs=evidence_refs,
+        affected_span_ids=span_ids or None,
+        source="analysis",
+        root_cause=root_cause,
+        profile_id=proposal.get("profile_id"),
+    )
+    return issue
 
 
 def _generate_checks(server: KyokoMcpServer, args: dict[str, Any]) -> dict[str, Any]:

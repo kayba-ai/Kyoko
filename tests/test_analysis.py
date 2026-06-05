@@ -76,8 +76,13 @@ class ComputeNextRunTests(unittest.TestCase):
 
 class ExecuteAnalysisJobTests(unittest.TestCase):
     def test_mock_all_scope_produces_proposal_and_operator_run(self) -> None:
+        from kyoko.autonomy import update_autonomy_policy
+
         with TemporaryDirectory() as tmpdir:
             db_path = _demo_db(tmpdir)
+            # ST2 decoupling: analysis surfaces issues; a proposal is authored only when the
+            # section's autonomy mode is `autonomous`.
+            update_autonomy_policy(db_path=db_path, context_mode="autonomous")
             result = execute_analysis_job(
                 db_path, AnalysisJob(analyzer="mock", scope="all", run_autonomy=False)
             )
@@ -294,8 +299,12 @@ class AnalysisApiTests(unittest.TestCase):
             self.assertEqual(payload["schedulable"], ["openclaw", "hermes"])
 
     def test_run_then_list_runs(self) -> None:
+        from kyoko.autonomy import update_autonomy_policy
+
         with TemporaryDirectory() as tmpdir:
             db_path = _demo_db(tmpdir)
+            # Author a proposal so the run records a proposal id (gate #1 autonomous).
+            update_autonomy_policy(db_path=db_path, context_mode="autonomous")
             with _Server(db_path) as server:
                 status, body = server.post(
                     "/api/analysis/run", {"analyzer": "mock", "scope": "all", "run_autonomy": False}
@@ -304,8 +313,13 @@ class AnalysisApiTests(unittest.TestCase):
                 self.assertEqual(body["status"], "queued")
                 runs = server.get("/api/analysis/runs")["runs"]
             self.assertTrue(runs)
-            self.assertEqual(runs[0]["status"], "succeeded")
-            self.assertTrue(runs[0]["proposal_id"].startswith("proposal_mock_"))
+            self.assertTrue(all(r["status"] == "succeeded" for r in runs))
+            # Decoupled flow records two operator runs (diagnosis + propose); only the
+            # propose run carries a proposal id, and their started_at can tie — assert on
+            # the proposal-bearing run rather than ordering.
+            proposal_runs = [r for r in runs if r.get("proposal_id")]
+            self.assertTrue(proposal_runs, "expected a propose run with a proposal id")
+            self.assertTrue(proposal_runs[0]["proposal_id"].startswith("proposal_mock_"))
 
     def test_schedule_crud(self) -> None:
         with TemporaryDirectory() as tmpdir:

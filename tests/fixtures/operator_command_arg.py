@@ -10,7 +10,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from kyoko.analyze import BEGIN_PROPOSAL_BLOCK, END_PROPOSAL_BLOCK, mock_learning_proposal
+from kyoko.analyze import mock_issues_from_bundle
+from kyoko.operator_prompts import BEGIN_ISSUES_BLOCK, END_ISSUES_BLOCK
 
 
 def main() -> int:
@@ -24,7 +25,7 @@ def main() -> int:
     prompt_path = Path(sys.argv[4])
     schema_path = Path(sys.argv[5])
 
-    if "Kyoko Operator Task" not in prompt_text or "span_fetch_timeout_001" not in prompt_text:
+    if "Kyoko Diagnosis Task" not in prompt_text or "span_fetch_timeout_001" not in prompt_text:
         print("operator prompt was not expanded into argv", file=sys.stderr)
         return 3
     if profile_id != os.environ.get("KYOKO_PROFILE_ID"):
@@ -35,15 +36,12 @@ def main() -> int:
         return 5
 
     bundle = json.loads(evidence_path.read_text())
-    proposal = mock_learning_proposal(bundle)
-    proposal["id"] = proposal["id"].replace("proposal_mock_", "proposal_arg_")
-    proposal["producer"]["name"] = "fixture-arg-command"
-    proposal["producer"]["session_id"] = "fixture_arg_command_session"
+    issues = mock_issues_from_bundle(bundle)
 
     print("ARG_PROFILE=" + profile_id)
-    print(BEGIN_PROPOSAL_BLOCK)
-    print(json.dumps(proposal, sort_keys=True))
-    print(END_PROPOSAL_BLOCK)
+    print(BEGIN_ISSUES_BLOCK)
+    print(json.dumps(issues, sort_keys=True))
+    print(END_ISSUES_BLOCK)
     return 0
 
 

@@ -10,7 +10,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from kyoko.analyze import BEGIN_PROPOSAL_BLOCK, END_PROPOSAL_BLOCK, mock_learning_proposal
+from kyoko.analyze import mock_issues_from_bundle
+from kyoko.operator_prompts import BEGIN_ISSUES_BLOCK, END_ISSUES_BLOCK
 
 
 def main() -> int:
@@ -18,7 +19,7 @@ def main() -> int:
         print("expected Hermes one-shot shape: hermes -z <prompt>", file=sys.stderr)
         return 2
     inline_prompt = sys.argv[2]
-    if "BEGIN_KYOKO_LEARNING_PROPOSAL_JSON" not in inline_prompt:
+    if "BEGIN_KYOKO_ISSUES_JSON" not in inline_prompt:
         print("Kyoko prompt was not passed through -z", file=sys.stderr)
         return 3
     stdin_prompt = sys.stdin.read()
@@ -31,16 +32,12 @@ def main() -> int:
         return 5
 
     bundle = json.loads(Path(evidence_path).read_text())
-    proposal = mock_learning_proposal(bundle)
-    proposal["id"] = proposal["id"].replace("proposal_mock_", "proposal_hermes_")
-    proposal["producer"]["kind"] = "operator_agent"
-    proposal["producer"]["name"] = "hermes"
-    proposal["producer"]["session_id"] = "hermes_one_shot_session"
+    issues = mock_issues_from_bundle(bundle)
 
-    print("Hermes one-shot operator completed analysis.")
-    print(BEGIN_PROPOSAL_BLOCK)
-    print(json.dumps(proposal, sort_keys=True))
-    print(END_PROPOSAL_BLOCK)
+    print("Hermes one-shot operator completed diagnosis.")
+    print(BEGIN_ISSUES_BLOCK)
+    print(json.dumps(issues, sort_keys=True))
+    print(END_ISSUES_BLOCK)
     return 0
 
 

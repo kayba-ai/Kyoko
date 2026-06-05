@@ -229,7 +229,7 @@ def _dispatch(
     )
     operator_run_id = report.analyze.operator_run_id if report.analyze is not None else None
     autonomy = report.autonomy.to_json() if report.autonomy is not None else None
-    return [report.proposal_id], operator_run_id, autonomy
+    return list(report.proposal_ids), operator_run_id, autonomy
 
 
 def _dispatch_ace(
