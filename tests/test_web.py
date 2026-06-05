@@ -143,49 +143,6 @@ class WebTests(unittest.TestCase):
         self.assertIn("npm run build", page)
         self.assertIn("loopback-only", page)
 
-    def test_skillbook_consolidate_endpoint_proposes_merge(self) -> None:
-        with TemporaryDirectory() as tmpdir:
-            db_path = Path(tmpdir) / "kyoko.db"
-            ingest_source_fixture(db_path, FIXTURE)
-            for proposal_id in ("proposal_dup_a_001", "proposal_dup_b_001"):
-                proposal = json.loads(VALID_PROPOSAL.read_text())
-                proposal["id"] = proposal_id
-                proposal["producer"]["session_id"] = proposal_id
-                proposal["proposed_changes"] = [
-                    {
-                        "type": "skillbook_update",
-                        "operation": "create",
-                        "section": "context",
-                        "issue": "Source fetch timeouts are treated as final failures.",
-                        "insight": "Retry transient fetch failures once before handoff.",
-                        "keywords": ["fetch", "timeout", "retry"],
-                        "occurrence_refs": [
-                            {"entity_type": "span", "entity_id": "span_fetch_timeout_001", "role": "failure"}
-                        ],
-                    }
-                ]
-                proposal["evidence_refs"] = [
-                    {"entity_type": "span", "entity_id": "span_fetch_timeout_001", "role": "failure"}
-                ]
-                submit_learning_proposal_payload(
-                    db_path=db_path, proposal=proposal, schema_path=SCHEMA
-                )
-                apply_context_proposal(db_path=db_path, proposal_id=proposal_id)
-
-            with RunningServer(db_path) as server:
-                report = server.post_json(
-                    "/api/skillbook/consolidate",
-                    {"profile_id": "profile_news_research_001"},
-                )
-
-            self.assertEqual(report["duplicate_group_count"], 1)
-            self.assertEqual(
-                report["proposal_ids"],
-                ["proposal_consolidate_skill_proposal_dup_a_001_1"],
-            )
-            self.assertEqual(report["applied_proposal_ids"], [])
-            self.assertEqual(report["profile_id"], "profile_news_research_001")
-
     def test_dashboard_and_api_return_runtime_data(self) -> None:
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"

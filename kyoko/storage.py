@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 
-SCHEMA_VERSION = 32
+SCHEMA_VERSION = 33
 
 
 class StorageError(Exception):
@@ -347,17 +347,6 @@ CREATE TABLE IF NOT EXISTS skills (
   FOREIGN KEY (source_run_id) REFERENCES runs(id)
 );
 
-CREATE TABLE IF NOT EXISTS skill_similarity_decisions (
-  id TEXT PRIMARY KEY,
-  profile_id TEXT NOT NULL,
-  pair_key TEXT NOT NULL,                -- sorted "skill_id_a,skill_id_b"
-  decision TEXT NOT NULL,               -- KEEP
-  reasoning TEXT,
-  similarity_at_decision REAL,
-  decided_at TEXT NOT NULL,
-  FOREIGN KEY (profile_id) REFERENCES profiles(id)
-);
-
 CREATE TABLE IF NOT EXISTS context_delivery_rules (
   id TEXT PRIMARY KEY,
   profile_id TEXT NOT NULL,
@@ -651,7 +640,6 @@ CREATE INDEX IF NOT EXISTS idx_handoffs_profile_id ON handoffs(profile_id);
 CREATE INDEX IF NOT EXISTS idx_timeline_events_profile_id ON timeline_events(profile_id);
 CREATE INDEX IF NOT EXISTS idx_learning_proposals_profile_id ON learning_proposals(profile_id);
 CREATE INDEX IF NOT EXISTS idx_skills_profile_id ON skills(profile_id);
-CREATE INDEX IF NOT EXISTS idx_skill_similarity_decisions_profile_id ON skill_similarity_decisions(profile_id);
 CREATE INDEX IF NOT EXISTS idx_context_delivery_rules_profile_id ON context_delivery_rules(profile_id);
 CREATE INDEX IF NOT EXISTS idx_context_delivery_rules_proposal_id ON context_delivery_rules(proposal_id);
 CREATE INDEX IF NOT EXISTS idx_skill_revisions_skill_id ON skill_revisions(skill_id);
@@ -1024,7 +1012,6 @@ STATUS_TABLES = [
     "operator_adapters",
     "operator_runs",
     "patch_transactions",
-    "skill_similarity_decisions",
     "analysis_schedules",
 ]
 
@@ -1082,6 +1069,14 @@ def initialize_database(db_path: Path) -> None:
             ):
                 connection.execute(f"DROP INDEX IF EXISTS {_issue_index}")
             connection.execute("DROP TABLE IF EXISTS issues")
+        # v33: the `skill_similarity_decisions` table (ACE's KEEP memory) and the separate
+        # skillbook-consolidation pass are retired — the analysing agent reconciles the
+        # skillbook in place at authoring time (spec 0019). Drop the dead table + index.
+        if existing_version < 33:
+            connection.execute(
+                "DROP INDEX IF EXISTS idx_skill_similarity_decisions_profile_id"
+            )
+            connection.execute("DROP TABLE IF EXISTS skill_similarity_decisions")
         for _old_index in (
             "idx_eval_specs_profile_id",
             "idx_eval_spec_locks_profile_id",

@@ -153,7 +153,6 @@ ISSUES_GOLDEN = ROOT / "docs/fixtures/cli-json/issues.contract.golden.json"
 ISSUE_DETAIL_GOLDEN = ROOT / "docs/fixtures/cli-json/issue-detail.contract.golden.json"
 PROFILE_NEXT_GOLDEN = ROOT / "docs/fixtures/cli-json/profile-next-context.contract.golden.json"
 IMPROVE_GOLDEN = ROOT / "docs/fixtures/cli-json/improve-existing-proposal.contract.golden.json"
-CONSOLIDATE_SKILLBOOK_GOLDEN = ROOT / "docs/fixtures/cli-json/consolidate-skillbook.contract.golden.json"
 AUTONOMY_EVENTS_GOLDEN = ROOT / "docs/fixtures/cli-json/autonomy-events.contract.golden.json"
 CHECK_CAPABILITIES_GOLDEN = ROOT / "docs/fixtures/cli-json/check-capabilities.contract.golden.json"
 GENERATE_CHECKS_GOLDEN = ROOT / "docs/fixtures/cli-json/generate-checks.contract.golden.json"
@@ -2341,28 +2340,6 @@ def replay(request):
 
             self.assertEqual(code, 0)
             self.assertEqual(_improve_contract(payload), _load_json(IMPROVE_GOLDEN))
-
-    def test_consolidate_skillbook_json_matches_golden_contract_projection(self) -> None:
-        with TemporaryDirectory() as tmpdir:
-            kyoko_db = Path(tmpdir) / "kyoko.db"
-            _seed_two_duplicate_skills_db(kyoko_db)
-
-            code, payload = _run_json(
-                [
-                    "consolidate-skillbook",
-                    "--db",
-                    str(kyoko_db),
-                    "--profile-id",
-                    "profile_news_research_001",
-                    "--json",
-                ]
-            )
-
-            self.assertEqual(code, 0)
-            self.assertEqual(
-                _consolidate_skillbook_contract(payload),
-                _load_json(CONSOLIDATE_SKILLBOOK_GOLDEN),
-            )
 
     def test_autonomy_events_json_matches_golden_contract_projection(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -5695,37 +5672,6 @@ def _seed_context_proposal_db(db_path: Path) -> None:
         raise AssertionError("failed to seed proposal")
 
 
-def _seed_two_duplicate_skills_db(db_path: Path) -> None:
-    """Seed two near-duplicate ACTIVE context skills (same section + keyword set)."""
-    from kyoko.apply import apply_context_proposal
-    from kyoko.proposals import submit_learning_proposal_payload
-
-    _seed_source_fixture_db(db_path)
-    for proposal_id in ("proposal_dup_a_001", "proposal_dup_b_001"):
-        proposal = json.loads(VALID_PROPOSAL.read_text())
-        proposal["id"] = proposal_id
-        proposal["producer"]["session_id"] = proposal_id
-        proposal["title"] = f"Seed skill {proposal_id}"
-        proposal["proposed_changes"] = [
-            {
-                "type": "skillbook_update",
-                "operation": "create",
-                "section": "context",
-                "issue": "Source fetch timeouts are treated as final failures.",
-                "insight": "Retry transient fetch failures once before handoff.",
-                "keywords": ["fetch", "timeout", "retry"],
-                "occurrence_refs": [
-                    {"entity_type": "span", "entity_id": "span_fetch_timeout_001", "role": "failure"}
-                ],
-            }
-        ]
-        proposal["evidence_refs"] = [
-            {"entity_type": "span", "entity_id": "span_fetch_timeout_001", "role": "failure"}
-        ]
-        submit_learning_proposal_payload(db_path=db_path, proposal=proposal, schema_path=SCHEMA)
-        apply_context_proposal(db_path=db_path, proposal_id=proposal_id)
-
-
 def _seed_issue_db(db_path: Path) -> str:
     """Seed one deterministic issue (over the context proposal fixture) and return its id."""
     _seed_context_proposal_db(db_path)
@@ -6273,7 +6219,6 @@ def _improve_contract(payload: dict) -> dict:
             },
             "profile_id": autonomy["profile_id"],
         },
-        "consolidation_present": payload["consolidation"] is not None,
         "gate1_outcome_count": len(payload["gate1_outcomes"]),
         "guard_count": len(payload["guards"]),
         "notes": [_normalize_issue_ids(note) for note in payload["notes"]],
@@ -6282,16 +6227,6 @@ def _improve_contract(payload: dict) -> dict:
         "proposal_id": payload["proposal_id"],
         "proposal_id_count": len(payload["proposal_ids"]),
         "source_import_present": payload["source_import"] is not None,
-    }
-
-
-def _consolidate_skillbook_contract(payload: dict) -> dict:
-    return {
-        "applied_proposal_ids": payload["applied_proposal_ids"],
-        "duplicate_group_count": payload["duplicate_group_count"],
-        "notes": payload["notes"],
-        "profile_id": payload["profile_id"],
-        "proposal_ids": payload["proposal_ids"],
     }
 
 

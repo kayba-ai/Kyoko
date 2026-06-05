@@ -339,17 +339,6 @@ export interface AcceptIssueResult {
   propose: { proposal_id?: string | null; [k: string]: unknown } | null;
 }
 
-// Report from the deterministic skillbook merge/dedup pass
-// (POST /api/skillbook/consolidate). Authored proposals still pass the gate;
-// `applied_proposal_ids` is the subset that the autonomy policy auto-applied.
-export interface ConsolidationReport {
-  profile_id: string;
-  duplicate_group_count: number;
-  proposal_ids: string[];
-  applied_proposal_ids: string[];
-  notes: string[];
-}
-
 // Issue-centric analysis report (POST /api/analyze). Analysis surfaces Issues
 // only (diagnosis); proposal authoring is a separate, autonomy-gated step, so
 // there is NO proposal_id here.
@@ -384,7 +373,6 @@ export interface ImproveReport {
   proposal_id?: string | null;
   proposal_ids?: string[];
   gate1_outcomes?: Gate1Outcome[];
-  consolidation?: ConsolidationReport | null;
   guards?: GuardReport[];
   analyze?: AnalyzeReport | null;
   [k: string]: unknown;

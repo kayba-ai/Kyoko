@@ -13,7 +13,6 @@ import type {
   AutonomyPolicy,
   GuardMonitorReport,
   Comparison,
-  ConsolidationReport,
   CreateScheduleBody,
   DashboardMetrics,
   ChecksBundle,
@@ -202,11 +201,6 @@ export const api = {
   // autonomy mode). `propose` is null when authoring was skipped.
   acceptIssue: (issueId: string, operator?: string) =>
     postJson<AcceptIssueResult>("/api/issues/accept", { issue_id: issueId, operator }),
-
-  // Deterministic skillbook merge/dedup pass. Optional `run_autonomy` lets the
-  // gate auto-apply the authored proposals.
-  consolidateSkillbook: (body: { operator?: string; run_autonomy?: boolean } = {}) =>
-    postJson<ConsolidationReport>("/api/skillbook/consolidate", body),
 
   policy: () => getJson<{ policy: AutonomyPolicy }>("/api/policy").then((d) => d.policy),
   updatePolicy: (body: PolicyUpdate) =>

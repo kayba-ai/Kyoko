@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import uuid
 from pathlib import Path
 from typing import Any, Optional
 
@@ -92,55 +91,6 @@ def mark_skills_used(db_path: Path, skill_ids: list[str]) -> int:
     return bumped
 
 
-def _pair_key(skill_id_a: str, skill_id_b: str) -> str:
-    return ",".join(sorted((skill_id_a, skill_id_b)))
-
-
-def set_similarity_decision(
-    db_path: Path,
-    *,
-    skill_id_a: str,
-    skill_id_b: str,
-    reasoning: str = "",
-    similarity: float = 0.0,
-    profile_id: Optional[str] = None,
-) -> dict[str, Any]:
-    """Remember a SkillManager decision to KEEP two similar entries separate (ACE
-    ``set_similarity_decision``) so dedup does not re-surface the pair. Measurement only."""
-
-    pair_key = _pair_key(skill_id_a, skill_id_b)
-    now = utc_now()
-    with connect(db_path) as connection:
-        resolved_profile_id = profile_id or _any_profile_id(connection)
-        if resolved_profile_id is None:
-            raise SkillbookError("no_profiles_found")
-        connection.execute(
-            "DELETE FROM skill_similarity_decisions WHERE profile_id = ? AND pair_key = ?",
-            (resolved_profile_id, pair_key),
-        )
-        connection.execute(
-            """
-            INSERT INTO skill_similarity_decisions
-              (id, profile_id, pair_key, decision, reasoning, similarity_at_decision, decided_at)
-            VALUES (?, ?, ?, 'KEEP', ?, ?, ?)
-            """,
-            (f"simdec_{uuid.uuid4().hex[:12]}", resolved_profile_id, pair_key, reasoning, float(similarity), now),
-        )
-    return {"pair_key": pair_key, "decision": "KEEP", "decided_at": now}
-
-
-def has_keep_decision(db_path: Path, skill_id_a: str, skill_id_b: str) -> bool:
-    """True if the pair has a stored KEEP decision (ACE ``has_keep_decision``)."""
-
-    pair_key = _pair_key(skill_id_a, skill_id_b)
-    with connect(db_path) as connection:
-        row = connection.execute(
-            "SELECT 1 FROM skill_similarity_decisions WHERE pair_key = ? AND decision = 'KEEP' LIMIT 1",
-            (pair_key,),
-        ).fetchone()
-    return row is not None
-
-
 def _json_loads_list(value: Any) -> list[Any]:
     if not isinstance(value, str):
         return []
@@ -149,11 +99,6 @@ def _json_loads_list(value: Any) -> list[Any]:
     except json.JSONDecodeError:
         return []
     return parsed if isinstance(parsed, list) else []
-
-
-def _any_profile_id(connection: sqlite3.Connection) -> Optional[str]:
-    row = connection.execute("SELECT id FROM profiles ORDER BY id LIMIT 1").fetchone()
-    return str(row[0]) if row is not None else None
 
 
 def export_skillbook(

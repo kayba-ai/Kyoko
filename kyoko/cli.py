@@ -141,10 +141,6 @@ from .harness import (
 from .hermes_import import HermesImportError, ingest_hermes_kanban_db
 from .improve import ImproveError, run_improvement_loop
 from .improve_smoke import ImproveSmokeError, run_generated_improve_smoke
-from .skillbook_manager import (
-    SkillbookManagerError,
-    run_skillbook_consolidation,
-)
 from .integration_smoke import (
     IntegrationSmokeError,
     run_replay_server_smoke,
@@ -2488,58 +2484,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Workspace root for eligible autonomous harness patch application.",
     )
     improve.add_argument(
-        "--json",
-        action="store_true",
-        help="Print machine-readable JSON.",
-    )
-
-    consolidate_skillbook = subcommands.add_parser(
-        "consolidate-skillbook",
-        help="Detect duplicate skills and propose gated consolidation merges (add/update/merge/prune).",
-    )
-    _add_db_argument(consolidate_skillbook)
-    consolidate_skillbook.add_argument("--profile-id", help="Profile id whose skillbook to consolidate.")
-    consolidate_skillbook.add_argument(
-        "--operator",
-        choices=("mock", "command"),
-        default="mock",
-        help="mock (deterministic) or command (operator-authored).",
-    )
-    consolidate_skillbook.add_argument(
-        "--operator-command",
-        dest="operator_command",
-        help="External operator command for --operator command.",
-    )
-    consolidate_skillbook.add_argument(
-        "--output-dir",
-        type=Path,
-        help="Directory for consolidation artifacts (command operator). Defaults under <db-parent>/.kyoko.",
-    )
-    consolidate_skillbook.add_argument(
-        "--schema",
-        type=Path,
-        default=Path("docs/schemas/learning-proposal.schema.json"),
-        help="Path to the LearningProposal JSON Schema.",
-    )
-    consolidate_skillbook.add_argument(
-        "--run-autonomy",
-        dest="run_autonomy",
-        action="store_true",
-        default=False,
-        help="Run the policy-gated autonomy evaluator so eligible merges apply.",
-    )
-    consolidate_skillbook.add_argument(
-        "--no-run-autonomy",
-        dest="run_autonomy",
-        action="store_false",
-        help="Leave consolidation proposals pending for human review (default).",
-    )
-    consolidate_skillbook.add_argument(
-        "--harness-workspace-root",
-        type=Path,
-        help="Workspace root passed through to autonomy when --run-autonomy.",
-    )
-    consolidate_skillbook.add_argument(
         "--json",
         action="store_true",
         help="Print machine-readable JSON.",
@@ -6471,36 +6415,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                         print(f"context_rule: {rule_id}")
                     for patch_transaction_id in decision.patch_transaction_ids:
                         print(f"patch_transaction: {patch_transaction_id}")
-            for note in report.notes:
-                print(f"note: {note}")
-        return 0
-
-    if args.command == "consolidate-skillbook":
-        try:
-            report = run_skillbook_consolidation(
-                db_path=args.db,
-                output_dir=args.output_dir,
-                profile_id=args.profile_id,
-                operator=args.operator,
-                command=parse_operator_command(args.operator_command)
-                if args.operator_command
-                else None,
-                schema_path=args.schema,
-                run_autonomy_after=args.run_autonomy,
-                harness_workspace_root=args.harness_workspace_root,
-            )
-        except (SkillbookManagerError, StorageError) as exc:
-            print(f"consolidate-skillbook failed: {exc}", file=sys.stderr)
-            return 1
-        payload = report.to_json()
-        if args.json:
-            print(json.dumps(payload, sort_keys=True))
-        else:
-            print(f"duplicate_groups: {report.duplicate_group_count}")
-            for proposal_id in report.proposal_ids:
-                print(f"proposal: {proposal_id}")
-            for proposal_id in report.applied_proposal_ids:
-                print(f"applied: {proposal_id}")
             for note in report.notes:
                 print(f"note: {note}")
         return 0

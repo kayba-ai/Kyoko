@@ -2,7 +2,6 @@ import * as React from "react";
 import { Link } from "react-router-dom";
 import {
   CalendarClock,
-  Layers,
   Loader2,
   Play,
   Plus,
@@ -18,7 +17,6 @@ import type {
   AnalysisRunEvent,
   AnalysisRunScope,
   AnalysisSchedule,
-  ConsolidationReport,
 } from "@/lib/types";
 import { ago } from "@/lib/format";
 import { useApi } from "@/hooks/useApi";
@@ -541,85 +539,6 @@ function RunsCard({
   );
 }
 
-// ---- Skillbook consolidation ------------------------------------------------
-//
-// A deterministic merge/dedup pass over the skillbook. It authors proposals for
-// the duplicate groups it finds; those still pass the autonomy gate. Modest by
-// design — one button plus the resulting report.
-
-function ConsolidateCard() {
-  const [busy, setBusy] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-  const [report, setReport] = React.useState<ConsolidationReport | null>(null);
-
-  async function run() {
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await api.consolidateSkillbook();
-      setReport(res);
-    } catch (e) {
-      setError(errMessage(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Consolidate skillbook</CardTitle>
-        <Badge tone="neutral">Deterministic dedup</Badge>
-      </CardHeader>
-      <CardBody className="space-y-4">
-        <p className="text-xs text-muted-foreground">
-          Merge and de-duplicate skillbook entries. Authored proposals still pass the check/replay gate and your
-          autonomy policy.
-        </p>
-
-        {error && (
-          <div className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">{error}</div>
-        )}
-
-        {report && (
-          <div className="space-y-2 rounded-lg border border-border bg-muted/50 px-3 py-2.5 text-xs">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge tone={report.duplicate_group_count > 0 ? "warn" : "ok"}>
-                {report.duplicate_group_count} duplicate group{report.duplicate_group_count === 1 ? "" : "s"}
-              </Badge>
-              <Badge tone="neutral">
-                {report.proposal_ids.length} proposal{report.proposal_ids.length === 1 ? "" : "s"}
-              </Badge>
-              {report.applied_proposal_ids.length > 0 && (
-                <Badge tone="ok">{report.applied_proposal_ids.length} applied</Badge>
-              )}
-              {report.proposal_ids.length > 0 && (
-                <Link to="/proposals" className="ml-auto font-medium text-primary hover:underline">
-                  View proposals
-                </Link>
-              )}
-            </div>
-            {report.notes.length > 0 && (
-              <ul className="list-disc space-y-0.5 pl-4 text-muted-foreground">
-                {report.notes.map((n, i) => (
-                  <li key={i}>{n}</li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
-
-        <div className="flex items-center justify-end pt-1">
-          <Button onClick={run} disabled={busy}>
-            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Layers className="h-3.5 w-3.5" />}
-            Consolidate
-          </Button>
-        </div>
-      </CardBody>
-    </Card>
-  );
-}
-
 // ---- Page -------------------------------------------------------------------
 
 const TERMINAL_PHASES = new Set(["succeeded", "failed", "skipped"]);
@@ -661,8 +580,6 @@ export function AnalysisPage() {
             onLaunched={() => runsState.reload()}
           />
         )}
-
-        <ConsolidateCard />
 
         <SchedulesCard
           schedules={schedulesState.data ?? []}
