@@ -139,7 +139,7 @@ def _row_to_dict(row: Any) -> dict[str, Any]:
     return {
         "id": row["id"],
         "profile_id": row["profile_id"],
-        "title": row["title"],
+        "title": row["issue"],
         "body": row["body"],
         "section": row["section"],
         "category": row["category"],
@@ -178,6 +178,12 @@ def _row_to_dict(row: Any) -> dict[str, Any]:
         "autonomy_blocked_reason": (
             row["autonomy_blocked_reason"] if "autonomy_blocked_reason" in row.keys() else None
         ),
+        "source_eval_definition_id": (
+            row["source_eval_definition_id"] if "source_eval_definition_id" in row.keys() else None
+        ),
+        "source_measure_run_id": (
+            row["source_measure_run_id"] if "source_measure_run_id" in row.keys() else None
+        ),
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
@@ -215,6 +221,8 @@ def create_issue(
     rank: Optional[int] = None,
     signature: Optional[str] = None,
     recurrence_count: int = 1,
+    source_eval_definition_id: Optional[str] = None,
+    source_measure_run_id: Optional[str] = None,
     profile_id: Optional[str] = None,
 ) -> dict:
     """Persist one issue (evidence only) and return its stored record.
@@ -253,14 +261,15 @@ def create_issue(
         resolved_profile_id = _resolve_profile_id(connection, profile_id)
         connection.execute(
             """
-            INSERT INTO issues (
-              id, profile_id, title, body, section, category, severity, status,
+            INSERT INTO skills (
+              id, profile_id, issue, body, section, category, severity, status,
               evidence_refs_json, affected_agent_identity_ids_json,
               affected_workflow_node_ids_json, affected_task_ids_json,
               affected_span_ids_json, proposal_ids_json,
               source, root_cause, rank, signature, recurrence_count,
+              source_eval_definition_id, source_measure_run_id,
               created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 issue_id,
@@ -282,8 +291,10 @@ def create_issue(
                 rank,
                 signature,
                 int(recurrence_count),
+                source_eval_definition_id,
+                source_measure_run_id,
                 created_at,
-                None,
+                created_at,
             ),
         )
 
@@ -311,7 +322,7 @@ def create_issue(
         "recurrence_count": int(recurrence_count),
         "accepted_at": None,
         "created_at": created_at,
-        "updated_at": None,
+        "updated_at": created_at,
     }
 
 
@@ -345,7 +356,7 @@ def list_issues(
     where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
     with connect(db_path) as connection:
         rows = connection.execute(
-            f"SELECT * FROM issues{where} ORDER BY created_at DESC, id ASC LIMIT ?",
+            f"SELECT * FROM skills{where} ORDER BY created_at DESC, id ASC LIMIT ?",
             (*params, bounded_limit),
         ).fetchall()
     return [_row_to_dict(row) for row in rows]
@@ -357,7 +368,7 @@ def get_issue(*, db_path: Path, issue_id: str) -> dict:
     initialize_database(db_path)
     with connect(db_path) as connection:
         row = connection.execute(
-            "SELECT * FROM issues WHERE id = ?", (issue_id,)
+            "SELECT * FROM skills WHERE id = ?", (issue_id,)
         ).fetchone()
         if row is None:
             raise IssueError(f"issue_not_found:{issue_id}")
@@ -373,12 +384,12 @@ def update_issue_status(*, db_path: Path, issue_id: str, status: str) -> dict:
     updated_at = utc_now()
     with connect(db_path) as connection:
         row = connection.execute(
-            "SELECT * FROM issues WHERE id = ?", (issue_id,)
+            "SELECT * FROM skills WHERE id = ?", (issue_id,)
         ).fetchone()
         if row is None:
             raise IssueError(f"issue_not_found:{issue_id}")
         connection.execute(
-            "UPDATE issues SET status = ?, updated_at = ? WHERE id = ?",
+            "UPDATE skills SET status = ?, updated_at = ? WHERE id = ?",
             (status, updated_at, issue_id),
         )
         record = _row_to_dict(row)
@@ -396,12 +407,12 @@ def set_issue_comment(*, db_path: Path, issue_id: str, comment: Optional[str]) -
     updated_at = utc_now()
     with connect(db_path) as connection:
         row = connection.execute(
-            "SELECT * FROM issues WHERE id = ?", (issue_id,)
+            "SELECT * FROM skills WHERE id = ?", (issue_id,)
         ).fetchone()
         if row is None:
             raise IssueError(f"issue_not_found:{issue_id}")
         connection.execute(
-            "UPDATE issues SET review_comment = ?, updated_at = ? WHERE id = ?",
+            "UPDATE skills SET review_comment = ?, updated_at = ? WHERE id = ?",
             (normalized, updated_at, issue_id),
         )
         record = _row_to_dict(row)
@@ -423,12 +434,12 @@ def _apply_issue_update(
     values = [assignments[column] for column in columns]
     with connect(db_path) as connection:
         row = connection.execute(
-            "SELECT * FROM issues WHERE id = ?", (issue_id,)
+            "SELECT * FROM skills WHERE id = ?", (issue_id,)
         ).fetchone()
         if row is None:
             raise IssueError(f"issue_not_found:{issue_id}")
         connection.execute(
-            f"UPDATE issues SET {set_clause}, updated_at = ? WHERE id = ?",
+            f"UPDATE skills SET {set_clause}, updated_at = ? WHERE id = ?",
             (*values, updated_at, issue_id),
         )
         record = _row_to_dict(row)
@@ -601,7 +612,7 @@ def find_issue_by_signature(
         clause += " AND id != ?"
         params.append(exclude_id)
     row = connection.execute(
-        f"SELECT * FROM issues WHERE {clause} ORDER BY created_at DESC, id ASC LIMIT 1",
+        f"SELECT * FROM skills WHERE {clause} ORDER BY created_at DESC, id ASC LIMIT 1",
         tuple(params),
     ).fetchone()
     return _row_to_dict(row) if row is not None else None

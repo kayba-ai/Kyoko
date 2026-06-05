@@ -87,6 +87,8 @@ def raise_issue_for_run(
         evidence_refs=evidence_refs,
         affected_span_ids=list(worst_unit_refs) if span_like else None,
         source=source,
+        source_eval_definition_id=str(definition["id"]),
+        source_measure_run_id=eval_run_id,
         profile_id=profile_id,
     )
     return issue

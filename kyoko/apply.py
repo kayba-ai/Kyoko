@@ -372,7 +372,7 @@ def list_skills(db_path: Path, *, profile_id: Optional[str] = None) -> list[dict
                 f"""
                 SELECT id, profile_id, proposal_id, section, issue, insight,
                        keywords_json, occurrences_json, helpful_count,
-                       harmful_count, neutral_count, active, human_locked,
+                       harmful_count, neutral_count, used_count, active, human_locked,
                        human_lock_reason, source_run_id, created_at, updated_at
                 FROM skills
                 {where_sql}
@@ -825,6 +825,72 @@ def _apply_skillbook_updates(
             raise ApplyError(f"human_locked_skill:{skill_id}")
 
         if operation == "create":
+            # Unified skillbook (spec 0019): when the proposal originates from a
+            # skillbook entry (its problem-phase row), ACTIVATE that entry's insight in
+            # place — the entry is the living unit; we don't spawn a second row. Only
+            # when there is no originating entry (a direct context proposal) do we insert
+            # a fresh, already-active skill.
+            origin_id = proposal["issue_id"] if "issue_id" in proposal.keys() else None
+            origin = None
+            if isinstance(origin_id, str) and origin_id:
+                origin = connection.execute(
+                    "SELECT * FROM skills WHERE id = ?", (origin_id,)
+                ).fetchone()
+            if origin is not None:
+                if int(origin["human_locked"]) == 1:
+                    raise ApplyError(f"human_locked_skill:{origin_id}")
+                before = _skill_snapshot(origin)
+                occurrences = _merge_occurrences(
+                    _json_loads(origin["occurrences_json"], []),
+                    change.get("occurrence_refs", []),
+                )
+                source_run_id = (
+                    _first_source_run_id(connection, occurrences)
+                    or before.get("source_run_id")
+                )
+                connection.execute(
+                    """
+                    UPDATE skills
+                    SET proposal_id = ?,
+                        section = ?,
+                        issue = ?,
+                        insight = ?,
+                        keywords_json = ?,
+                        occurrences_json = ?,
+                        source_run_id = ?,
+                        active = 1,
+                        status = 'applied',
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        proposal_id,
+                        change["section"],
+                        change["issue"],
+                        change["insight"],
+                        _json_dumps(change.get("keywords", [])),
+                        _json_dumps(occurrences),
+                        source_run_id,
+                        now,
+                        origin_id,
+                    ),
+                )
+                after = _skill_snapshot(
+                    connection.execute("SELECT * FROM skills WHERE id = ?", (origin_id,)).fetchone()
+                )
+                _record_skill_revision(
+                    connection,
+                    skill_id=str(origin_id),
+                    profile_id=profile_id,
+                    proposal_id=proposal_id,
+                    operation="create",
+                    before=before,
+                    after=after,
+                    now=now,
+                )
+                applied_skill_ids.append(str(origin_id))
+                continue
+
             if existing is not None:
                 raise ApplyError(f"skill_already_exists:{skill_id}")
 
@@ -845,12 +911,13 @@ def _apply_skillbook_updates(
                   harmful_count,
                   neutral_count,
                   active,
+                  status,
                   human_locked,
                   source_run_id,
                   created_at,
                   updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     skill_id,
@@ -865,6 +932,7 @@ def _apply_skillbook_updates(
                     0,
                     0,
                     1,
+                    "applied",
                     0,
                     source_run_id,
                     now,
@@ -1236,9 +1304,9 @@ def _skill_snapshot(row: Optional[sqlite3.Row]) -> dict[str, Any]:
         "id": str(row["id"]),
         "profile_id": str(row["profile_id"]),
         "proposal_id": row["proposal_id"],
-        "section": str(row["section"]),
+        "section": row["section"],
         "issue": str(row["issue"]),
-        "insight": str(row["insight"]),
+        "insight": row["insight"],
         "keywords": _json_loads(row["keywords_json"], []),
         "occurrences": _json_loads(row["occurrences_json"], []),
         "helpful_count": int(row["helpful_count"]),

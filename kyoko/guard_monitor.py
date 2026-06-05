@@ -141,7 +141,7 @@ def _watermarked_issue_ids(db_path: Path, profile_id: str) -> tuple[str, ...]:
     with connect(db_path) as connection:
         rows = connection.execute(
             """
-            SELECT id FROM issues
+            SELECT id FROM skills
             WHERE profile_id = ?
               AND applied_at IS NOT NULL
               AND (autonomy_blocked IS NULL OR autonomy_blocked = 0)

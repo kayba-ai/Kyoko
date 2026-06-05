@@ -312,7 +312,7 @@ def _gate1_candidate_issue_ids(db_path: Path, profile_id: Optional[str]) -> tupl
     with connect(db_path) as connection:
         rows = connection.execute(
             f"""
-            SELECT id FROM issues
+            SELECT id FROM skills
             WHERE profile_id = ? AND status IN ({placeholders})
             ORDER BY rank IS NULL, rank, created_at, id
             """,

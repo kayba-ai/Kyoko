@@ -62,7 +62,7 @@ ENTITY_TABLES = {
     "timeline_event": "timeline_events",
     "proposal": "learning_proposals",
     "learning_proposal": "learning_proposals",
-    "issue": "issues",
+    "issue": "skills",
     "skill": "skills",
     "context_delivery_rule": "context_delivery_rules",
     "check_run": "check_runs",
@@ -168,7 +168,7 @@ def validate_learning_proposal(
     # schema-optional (so legacy static fixtures validate) but referentially checked
     # when present; production producers stamp it via propose_for_issue.
     issue_id = _string_field(proposal, "issue_id")
-    if issue_id and not _row_exists(connection, "issues", issue_id):
+    if issue_id and not _row_exists(connection, "skills", issue_id):
         errors.append(f"issue_not_found:{issue_id}")
 
     producer = proposal.get("producer")
@@ -215,14 +215,27 @@ def validate_learning_proposal(
     return ProposalValidationResult(errors=tuple(errors))
 
 
-def list_learning_proposals(db_path: Path, *, profile_id: Optional[str] = None) -> list[dict[str, Any]]:
+def list_learning_proposals(
+    db_path: Path,
+    *,
+    profile_id: Optional[str] = None,
+    state: Optional[str] = None,
+) -> list[dict[str, Any]]:
     if not db_path.exists():
         return []
 
     with connect(db_path) as connection:
         try:
-            where_sql = "WHERE profile_id = ?" if profile_id else ""
-            params = (profile_id,) if profile_id else ()
+            clauses: list[str] = []
+            params_list: list[Any] = []
+            if profile_id:
+                clauses.append("profile_id = ?")
+                params_list.append(profile_id)
+            if state:
+                clauses.append("state = ?")
+                params_list.append(state)
+            where_sql = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+            params = tuple(params_list)
             rows = connection.execute(
                 f"""
                 SELECT *
