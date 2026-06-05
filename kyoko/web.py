@@ -562,11 +562,13 @@ def make_handler(
                     return
                 if path == "/api/proposals":
                     profile_id = _query_param(self.path, "profile_id")
+                    state = _query_param(self.path, "state")
                     self._send_json(
                         {
                             "proposals": list_learning_proposals(
                                 resolved_db_path,
                                 profile_id=profile_id if profile_id else None,
+                                state=state if state else None,
                             )
                         }
                     )

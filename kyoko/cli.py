@@ -1742,6 +1742,11 @@ def build_parser() -> argparse.ArgumentParser:
     _add_db_argument(proposals)
     proposals.add_argument("--profile-id", help="Optional profile id to filter proposals.")
     proposals.add_argument(
+        "--state",
+        choices=("pending", "applied", "rolled_back", "failed"),
+        help="Optional proposal state to filter by (per-step view).",
+    )
+    proposals.add_argument(
         "--json",
         action="store_true",
         help="Print machine-readable JSON.",
@@ -5594,7 +5599,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 0
 
     if args.command == "proposals":
-        proposals = list_learning_proposals(args.db, profile_id=args.profile_id)
+        proposals = list_learning_proposals(
+            args.db, profile_id=args.profile_id, state=getattr(args, "state", None)
+        )
         if args.json:
             print(json.dumps({"proposals": proposals}, sort_keys=True))
         else:

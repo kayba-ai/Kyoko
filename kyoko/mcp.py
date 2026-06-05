@@ -77,7 +77,7 @@ from .proposals import (
 )
 from .replay_adapters import list_replay_adapters, run_registered_replay_adapter
 from .retention import prune_retained_data
-from .skillbook import render_skillbook_prompt
+from .skillbook import export_skillbook, mark_skills_used, render_skillbook_prompt
 from .source_discovery import discover_local_sources
 from .storage import default_db_path, get_database_status, initialize_database, status_to_json
 
@@ -1366,12 +1366,21 @@ def _build_tools(server: KyokoMcpServer) -> dict[str, McpTool]:
         McpTool(
             name="kyoko_list_proposals",
             title="Kyoko Learning Proposals",
-            description="List persisted learning proposals.",
-            input_schema=_object_schema({"profile_id": {"type": "string"}}),
+            description="List persisted learning proposals (optionally filtered by state).",
+            input_schema=_object_schema(
+                {
+                    "profile_id": {"type": "string"},
+                    "state": {
+                        "type": "string",
+                        "enum": ["pending", "applied", "rolled_back", "failed"],
+                    },
+                }
+            ),
             handler=lambda args: {
                 "proposals": list_learning_proposals(
                     server.db_path,
                     profile_id=_optional_string(args, "profile_id"),
+                    state=_optional_string(args, "state"),
                 )
             },
         ),
@@ -1445,22 +1454,7 @@ def _build_tools(server: KyokoMcpServer) -> dict[str, McpTool]:
                     "target_id": {"type": "string"},
                 }
             ),
-            handler=lambda args: {
-                "section": args.get("section", "context"),
-                "target": {
-                    "entity_type": args.get("target_type"),
-                    "entity_id": args.get("target_id"),
-                }
-                if args.get("target_type") and args.get("target_id")
-                else None,
-                "context": render_skillbook_prompt(
-                    server.db_path,
-                    section=str(args.get("section", "context")),
-                    include_inactive=bool(args.get("include_inactive", False)),
-                    target_entity_type=str(args["target_type"]) if args.get("target_type") else None,
-                    target_entity_id=str(args["target_id"]) if args.get("target_id") else None,
-                ),
-            },
+            handler=lambda args: _get_context_payload(server, args),
         ),
         McpTool(
             name="kyoko_list_skills",
@@ -1935,6 +1929,38 @@ def _build_tools(server: KyokoMcpServer) -> dict[str, McpTool]:
         ),
     ]
     return {tool.name: tool for tool in tools}
+
+
+def _get_context_payload(server: KyokoMcpServer, args: dict[str, Any]) -> dict[str, Any]:
+    """Render the active skillbook context for a prompt and, on a real (non-preview)
+    fetch, bump ``used_count`` on the active entries injected (ACE ``mark_used``)."""
+
+    section = str(args.get("section", "context"))
+    include_inactive = bool(args.get("include_inactive", False))
+    target_type = str(args["target_type"]) if args.get("target_type") else None
+    target_id = str(args["target_id"]) if args.get("target_id") else None
+    context = render_skillbook_prompt(
+        server.db_path,
+        section=section,
+        include_inactive=include_inactive,
+        target_entity_type=target_type,
+        target_entity_id=target_id,
+    )
+    if not include_inactive:
+        try:
+            injected = export_skillbook(
+                server.db_path, section=section if section in {"context", "harness"} else "all"
+            )
+            mark_skills_used(server.db_path, list(injected.get("skills", {}).keys()))
+        except Exception:  # pragma: no cover - usage telemetry must never break a fetch
+            pass
+    return {
+        "section": args.get("section", "context"),
+        "target": {"entity_type": target_type, "entity_id": target_id}
+        if target_type and target_id
+        else None,
+        "context": context,
+    }
 
 
 def _submit_proposal(server: KyokoMcpServer, args: dict[str, Any]) -> dict[str, Any]:
