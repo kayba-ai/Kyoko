@@ -1827,7 +1827,7 @@ def utc_now() -> str:
 # rows. No autonomy shortcut lives here — a fired schedule runs the normal gate.
 # ---------------------------------------------------------------------------
 
-ANALYSIS_SCHEDULE_ANALYZER_KINDS = ("openclaw", "hermes")
+ANALYSIS_SCHEDULE_ANALYZER_KINDS = ("openclaw", "hermes", "llm_judge")
 _ANALYZER_SOURCE_KIND = {
     "openclaw": "openclaw_sessions",
     "hermes": "hermes_kanban",
@@ -1862,6 +1862,10 @@ def create_analysis_schedule(
 ) -> dict[str, Any]:
     if analyzer_kind not in ANALYSIS_SCHEDULE_ANALYZER_KINDS:
         raise StorageError(f"unsupported_schedule_analyzer:{analyzer_kind}")
+    if analyzer_kind == "llm_judge" and not adapter_id:
+        # The judge runs through an operator adapter (the backend CLI); there is no
+        # source to import from, so the adapter is what makes the schedule runnable.
+        raise StorageError("llm_judge_schedule_requires_adapter_id")
     if int(interval_hours) <= 0:
         raise StorageError("interval_hours_must_be_positive")
     if at_time is not None and not _valid_hhmm(at_time):

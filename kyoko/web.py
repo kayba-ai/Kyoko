@@ -185,6 +185,7 @@ from .source_templates import (
 )
 from .source_discovery import SourceDiscoveryError, discover_local_sources, import_discovered_source
 from .storage import (
+    ANALYSIS_SCHEDULE_ANALYZER_KINDS,
     StorageError,
     checkpoint_database,
     create_analysis_schedule,
@@ -1439,6 +1440,8 @@ def make_handler(
                             llm_eval_id=llm_eval_id,
                             corpus=corpus,
                             command=list(command) if isinstance(command, list) else None,
+                            operator_adapter_id=_optional_str(payload.get("operator_adapter_id"))
+                            or _optional_str(payload.get("operator")),
                             persist=persist,
                             prepare_only=prepare_only,
                             output_dir=None,
@@ -2454,33 +2457,45 @@ def make_handler(
                 if path == "/api/analysis/schedules/create":
                     payload = self._read_json()
                     analyzer = payload.get("analyzer") or payload.get("analyzer_kind")
-                    if not isinstance(analyzer, str) or analyzer not in SCHEDULABLE_ANALYZERS:
+                    if not isinstance(analyzer, str) or analyzer not in ANALYSIS_SCHEDULE_ANALYZER_KINDS:
                         self._send_json(
                             {
                                 "error": "unschedulable_analyzer",
-                                "detail": f"schedulable analyzers: {list(SCHEDULABLE_ANALYZERS)}",
+                                "detail": f"schedulable analyzers: {list(ANALYSIS_SCHEDULE_ANALYZER_KINDS)}",
                             },
                             status=HTTPStatus.BAD_REQUEST,
                         )
                         return
                     interval_hours = payload.get("interval_hours", 24)
                     at_time = payload.get("at_time")
-                    schedule = create_analysis_schedule(
-                        db_path=resolved_db_path,
-                        analyzer_kind=analyzer,
-                        adapter_id=_optional_str(payload.get("adapter_id")),
-                        source_path=_optional_str(payload.get("source_path")),
-                        refresh_import=bool(payload.get("refresh_import", True)),
-                        interval_hours=interval_hours if isinstance(interval_hours, int) else 24,
-                        at_time=_optional_str(at_time),
-                        enabled=bool(payload.get("enabled", True)),
-                        run_autonomy=bool(payload.get("run_autonomy", True)),
-                        next_run_at=next_run_at_iso(
-                            interval_hours if isinstance(interval_hours, int) else 24,
-                            _optional_str(at_time),
-                        ),
-                        profile_id=_optional_str(payload.get("profile_id")),
-                    )
+                    metadata = None
+                    templates = payload.get("templates") or payload.get("llm_eval_ids")
+                    if isinstance(templates, list) and templates:
+                        metadata = {"llm_eval_ids": [str(t) for t in templates]}
+                    try:
+                        schedule = create_analysis_schedule(
+                            db_path=resolved_db_path,
+                            analyzer_kind=analyzer,
+                            adapter_id=_optional_str(payload.get("adapter_id")),
+                            source_path=_optional_str(payload.get("source_path")),
+                            refresh_import=bool(payload.get("refresh_import", True)),
+                            interval_hours=interval_hours if isinstance(interval_hours, int) else 24,
+                            at_time=_optional_str(at_time),
+                            enabled=bool(payload.get("enabled", True)),
+                            run_autonomy=bool(payload.get("run_autonomy", True)),
+                            next_run_at=next_run_at_iso(
+                                interval_hours if isinstance(interval_hours, int) else 24,
+                                _optional_str(at_time),
+                            ),
+                            profile_id=_optional_str(payload.get("profile_id")),
+                            metadata=metadata,
+                        )
+                    except StorageError as exc:
+                        self._send_json(
+                            {"error": "invalid_schedule", "detail": str(exc)},
+                            status=HTTPStatus.BAD_REQUEST,
+                        )
+                        return
                     self._send_json({"schedule": schedule})
                     return
                 if path == "/api/analysis/schedules/update":

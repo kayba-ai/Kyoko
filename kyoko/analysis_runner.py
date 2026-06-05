@@ -40,6 +40,10 @@ from .storage import (
 # additionally be scheduled (they are connected trace sources). "mock"/"command" exist
 # for tests and ad-hoc CLI use.
 DASHBOARD_ANALYZERS = ("ace", "codex", "claude", "openclaw", "hermes")
+# Proposal-source analyzers offered as recurring schedules in the analysis dashboard.
+# "llm_judge" is ALSO schedulable but is measurement-only (never the autonomy gate, not a
+# proposal analyzer); it is validated against storage.ANALYSIS_SCHEDULE_ANALYZER_KINDS and
+# dispatched on its own path, so it is deliberately kept out of this proposal-UI list.
 SCHEDULABLE_ANALYZERS = ("openclaw", "hermes")
 _OPERATOR_ADAPTER_ANALYZERS = {"codex", "claude", "openclaw", "hermes", "generic", "adapter"}
 
@@ -66,6 +70,7 @@ class AnalysisJob:
     schedule_id: Optional[str] = None
     profile_id: Optional[str] = None
     output_dir: Optional[Path] = None
+    llm_eval_ids: Optional[Sequence[str]] = None  # llm_judge: which templates (None = all active)
     job_id: str = field(default_factory=lambda: f"analysis_{uuid.uuid4().hex[:12]}")
 
 
@@ -82,7 +87,9 @@ def execute_analysis_job(
     misuse (bad ``analyzer``) raises :class:`AnalysisRunError` before any work starts.
     """
 
-    if job.analyzer not in DASHBOARD_ANALYZERS and job.analyzer not in {"mock", "command", "generic", "adapter"}:
+    if job.analyzer not in DASHBOARD_ANALYZERS and job.analyzer not in {
+        "mock", "command", "generic", "adapter", "llm_judge",
+    }:
         raise AnalysisRunError(f"unsupported_analyzer:{job.analyzer}")
     if job.scope not in {"all", "new", "run"}:
         raise AnalysisRunError(f"unsupported_scope:{job.scope}")
@@ -111,6 +118,25 @@ def execute_analysis_job(
             return result
 
         publish("analyzing", {**base, "since": since, "new_run_count": new_run_count})
+
+        if job.analyzer == "llm_judge":
+            judge = _dispatch_llm_judge(db_path, job, profile_id, since, bus=bus)
+            result = {
+                **base,
+                "status": "succeeded",
+                "profile_id": profile_id,
+                "proposal_ids": [],
+                "operator_run_id": None,
+                "autonomy": None,
+                "llm_judge": judge,
+                "since": since,
+                "new_run_count": new_run_count,
+                "ended_at": utc_now(),
+            }
+            _record_schedule(db_path, job, result, watermark_after)
+            publish("succeeded", result)
+            return result
+
         proposal_ids, operator_run_id, autonomy = _dispatch(db_path, job, profile_id, since)
 
         result = {
@@ -230,6 +256,58 @@ def _dispatch(
     operator_run_id = report.analyze.operator_run_id if report.analyze is not None else None
     autonomy = report.autonomy.to_json() if report.autonomy is not None else None
     return list(report.proposal_ids), operator_run_id, autonomy
+
+
+def _dispatch_llm_judge(
+    db_path: Path,
+    job: AnalysisJob,
+    profile_id: str,
+    since: Optional[str],
+    *,
+    bus: Optional[LiveBus] = None,
+) -> dict[str, Any]:
+    """Score new traces with LLM-as-judge templates through a registered operator adapter.
+
+    Measurement-only: results land in ``eval_measure_*`` and never touch the autonomy gate.
+    Scoping to ``since`` (the schedule watermark) means each tick judges only new runs;
+    ``since=None`` (first arming / catch-up) judges the whole corpus once. Templates default
+    to every active ``llm`` definition.
+    """
+    if not job.adapter_id:
+        raise AnalysisRunError("llm_judge_requires_adapter_id")
+    from .llm_evals import list_llm_evals, run_llm_eval
+
+    if job.llm_eval_ids:
+        template_ids = list(job.llm_eval_ids)
+    else:
+        template_ids = [
+            d["id"]
+            for d in list_llm_evals(db_path=db_path, profile_id=profile_id)
+            if d.get("status", "active") == "active"
+        ]
+
+    corpus: dict[str, Any] = {"since": since} if since else {}
+    runs: list[dict[str, Any]] = []
+    for template_id in template_ids:
+        report = run_llm_eval(
+            db_path=db_path,
+            llm_eval_id=template_id,
+            corpus=dict(corpus),
+            operator_adapter_id=job.adapter_id,
+            persist=True,
+            profile_id=profile_id,
+            timeout_seconds=job.timeout_seconds,
+            bus=bus,
+        )
+        runs.append(
+            {
+                "llm_eval_id": template_id,
+                "eval_run_id": report.eval_run_id,
+                "status": report.status,
+                "aggregate": report.aggregate,
+            }
+        )
+    return {"adapter_id": job.adapter_id, "template_count": len(template_ids), "runs": runs}
 
 
 def _dispatch_ace(
@@ -485,6 +563,8 @@ class Scheduler:
 
 
 def job_from_schedule(schedule: dict[str, Any]) -> AnalysisJob:
+    metadata = schedule.get("metadata") or {}
+    llm_eval_ids = metadata.get("llm_eval_ids")
     return AnalysisJob(
         analyzer=str(schedule["analyzer_kind"]),
         adapter_id=schedule.get("adapter_id") or str(schedule["analyzer_kind"]),
@@ -496,4 +576,5 @@ def job_from_schedule(schedule: dict[str, Any]) -> AnalysisJob:
         run_autonomy=bool(schedule.get("run_autonomy", True)),
         profile_id=schedule.get("profile_id"),
         schedule_id=schedule.get("id"),
+        llm_eval_ids=list(llm_eval_ids) if isinstance(llm_eval_ids, list) and llm_eval_ids else None,
     )

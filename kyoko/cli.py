@@ -237,6 +237,7 @@ from .source_templates import (
     write_source_adapter_template,
 )
 from .storage import (
+    ANALYSIS_SCHEDULE_ANALYZER_KINDS,
     StorageError,
     checkpoint_database,
     create_analysis_schedule,
@@ -1207,7 +1208,12 @@ def build_parser() -> argparse.ArgumentParser:
     run_llm_eval_cmd.add_argument(
         "--command",
         dest="judge_command",
-        help="Judge command (BYO model CLI); required unless --prepare-only.",
+        help="Judge command (BYO model CLI); required unless --operator or --prepare-only.",
+    )
+    run_llm_eval_cmd.add_argument(
+        "--operator",
+        dest="judge_operator",
+        help="Registered operator adapter id (claude/codex/hermes/openclaw/generic) to judge with.",
     )
     run_llm_eval_cmd.add_argument(
         "--prepare-only",
@@ -2559,13 +2565,23 @@ def build_parser() -> argparse.ArgumentParser:
 
     analysis_schedule_add = subcommands.add_parser(
         "analysis-schedule-add",
-        help="Create a recurring openclaw/hermes analysis schedule (fires while `kyoko serve` runs).",
+        help="Create a recurring analysis/judge schedule (fires while `kyoko serve` runs).",
     )
     _add_db_argument(analysis_schedule_add)
     analysis_schedule_add.add_argument(
-        "--analyzer", required=True, choices=tuple(SCHEDULABLE_ANALYZERS), help="openclaw | hermes."
+        "--analyzer",
+        required=True,
+        choices=tuple(ANALYSIS_SCHEDULE_ANALYZER_KINDS),
+        help="openclaw | hermes (proposal sources) | llm_judge (LLM-as-judge over new traces).",
     )
-    analysis_schedule_add.add_argument("--adapter-id", help="Operator adapter id (defaults to the analyzer).")
+    analysis_schedule_add.add_argument(
+        "--adapter-id",
+        help="Operator adapter id (defaults to the analyzer; REQUIRED for llm_judge — the backend CLI to judge with).",
+    )
+    analysis_schedule_add.add_argument(
+        "--templates",
+        help="llm_judge only: comma-separated template ids to run (default: all active llm templates).",
+    )
     analysis_schedule_add.add_argument("--source-path", help="Source path re-imported on each fire.")
     analysis_schedule_add.add_argument("--interval-hours", type=int, default=24, help="Cadence in hours.")
     analysis_schedule_add.add_argument("--at-time", help="Local anchor time 'HH:MM' (e.g. 03:30).")
@@ -5032,6 +5048,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 llm_eval_id=args.llm_eval_id,
                 corpus=corpus,
                 command=command,
+                operator_adapter_id=args.judge_operator,
                 persist=args.persist,
                 prepare_only=args.prepare_only,
                 raise_issues=args.raise_issues,
@@ -6199,6 +6216,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 0 if result.get("status") in {"succeeded", "skipped"} else 1
 
     if args.command == "analysis-schedule-add":
+        metadata = None
+        if args.templates:
+            template_ids = [t.strip() for t in args.templates.split(",") if t.strip()]
+            if template_ids:
+                metadata = {"llm_eval_ids": template_ids}
         try:
             schedule = create_analysis_schedule(
                 db_path=args.db,
@@ -6211,6 +6233,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 run_autonomy=not args.no_autonomy,
                 next_run_at=next_run_at_iso(args.interval_hours, args.at_time),
                 profile_id=args.profile_id,
+                metadata=metadata,
             )
         except (StorageError, AnalysisRunError) as exc:
             print(f"schedule add failed: {exc}", file=sys.stderr)
