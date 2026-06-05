@@ -230,7 +230,8 @@ class WebTests(unittest.TestCase):
                     for candidate in source_discovery["candidates"]
                 )
             )
-            self.assertEqual(policy["policy"]["context_mode"], "propose")
+            self.assertEqual(policy["policy"]["mode"], "hitl")
+            self.assertEqual(policy["policy"]["recurrence_threshold"], 3)
             self.assertFalse(policy["policy"]["allow_repo_patch"])
             self.assertEqual(status["counts"]["runs"], 1)
             self.assertEqual(status["counts"]["spans"], 2)
@@ -958,23 +959,27 @@ class WebTests(unittest.TestCase):
                 updated = server.post_json(
                     "/api/policy",
                     {
-                        "allow_profile_config_write": True,
-                        "allow_replay_server_patch": True,
-                        "required_check_level_context": "L2_regression",
-                        "required_check_level_harness": "L3_human_approved",
-                        "rollback_on_regression": False,
+                        "mode": "autonomous",
+                        "recurrence_threshold": 5,
+                        "regression_threshold": 4,
+                        "auto_rollback_on_regression": False,
+                        "max_auto_fix_attempts": 3,
+                        "allow_repo_patch": True,
+                        "dirty_worktree_policy": "allow_touched_only",
                     },
                 )["policy"]
                 reread = server.get_json("/api/policy")["policy"]
 
             for policy in (updated, reread):
-                self.assertTrue(policy["allow_profile_config_write"])
-                self.assertTrue(policy["allow_replay_server_patch"])
-                self.assertEqual(policy["required_check_level_context"], "L2_regression")
-                self.assertEqual(policy["required_check_level_harness"], "L3_human_approved")
-                self.assertFalse(policy["rollback_on_regression"])
+                self.assertEqual(policy["mode"], "autonomous")
+                self.assertEqual(policy["recurrence_threshold"], 5)
+                self.assertEqual(policy["regression_threshold"], 4)
+                self.assertFalse(policy["auto_rollback_on_regression"])
+                self.assertEqual(policy["max_auto_fix_attempts"], 3)
+                self.assertTrue(policy["allow_repo_patch"])
+                self.assertEqual(policy["dirty_worktree_policy"], "allow_touched_only")
 
-    def test_autonomy_endpoint_gates_context_proposal(self) -> None:
+    def test_proposals_apply_endpoint_applies_pending_context_proposal(self) -> None:
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
             ingest_source_fixture(db_path, FIXTURE)
@@ -985,7 +990,49 @@ class WebTests(unittest.TestCase):
             )
 
             with RunningServer(db_path) as server:
-                policy = server.post_json("/api/policy", {"context_mode": "autonomous"})
+                result = server.post_json(
+                    "/api/proposals/apply",
+                    {"proposal_id": "proposal_context_timeout_001"},
+                )
+                proposals = server.get_json("/api/proposals")
+
+            self.assertEqual(result["proposal_id"], "proposal_context_timeout_001")
+            self.assertEqual(result["section"], "context")
+            self.assertEqual(result["state"], "applied")
+            self.assertEqual(
+                result["applied_skill_ids"], ["skill_proposal_context_timeout_001_1"]
+            )
+            applied = {
+                proposal["id"]: proposal["state"]
+                for proposal in proposals["proposals"]
+            }
+            self.assertEqual(applied["proposal_context_timeout_001"], "applied")
+
+    def test_guard_monitor_endpoint_reports_actions(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "kyoko.db"
+            ingest_source_fixture(db_path, FIXTURE)
+
+            with RunningServer(db_path) as server:
+                server.post_json("/api/policy", {"mode": "autonomous"})
+                report = server.post_json("/api/guard-monitor", {})
+
+            self.assertEqual(report["mode"], "autonomous")
+            self.assertEqual(report["regression_threshold"], 2)
+            self.assertIsInstance(report["actions"], list)
+
+    def test_autonomy_endpoint_auto_applies_context_proposal_in_autonomous_mode(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "kyoko.db"
+            ingest_source_fixture(db_path, FIXTURE)
+            submit_learning_proposal(
+                db_path=db_path,
+                proposal_path=VALID_PROPOSAL,
+                schema_path=SCHEMA,
+            )
+
+            with RunningServer(db_path) as server:
+                policy = server.post_json("/api/policy", {"mode": "autonomous"})
                 autonomy = server.post_json("/api/autonomy/run", {})
                 autonomy_events = server.get_json("/api/autonomy-events?limit=10")
                 decision_events = server.get_json(
@@ -993,8 +1040,45 @@ class WebTests(unittest.TestCase):
                     "kind=autonomy_decision&entity_type=learning_proposal&"
                     "entity_id=proposal_context_timeout_001"
                 )
-                gated_events = server.get_json("/api/autonomy-events?kind=autonomy_gated")
+                applied_events = server.get_json("/api/autonomy-events?kind=autonomy_applied")
                 proposals = server.get_json("/api/proposals")
+                detail = server.get_json("/api/proposal-detail?id=proposal_context_timeout_001")
+
+            self.assertEqual(policy["policy"]["mode"], "autonomous")
+            self.assertEqual(autonomy["decisions"][0]["action"], "applied")
+            self.assertEqual(autonomy["decisions"][0]["reason"], "autonomous_auto_apply")
+            self.assertEqual(
+                {event["kind"] for event in autonomy_events["autonomy_events"]},
+                {"autonomy_applied", "autonomy_decision"},
+            )
+            self.assertEqual(len(decision_events["autonomy_events"]), 1)
+            self.assertEqual(decision_events["autonomy_events"][0]["kind"], "autonomy_decision")
+            self.assertEqual(
+                decision_events["autonomy_events"][0]["metadata"]["reason"],
+                "autonomous_auto_apply",
+            )
+            self.assertEqual(len(applied_events["autonomy_events"]), 1)
+            self.assertEqual(applied_events["autonomy_events"][0]["kind"], "autonomy_applied")
+            self.assertEqual(proposals["proposals"][0]["state"], "applied")
+            self.assertEqual(detail["gate_history"][-1]["kind"], "autonomy_decision")
+            self.assertEqual(detail["gate_history"][-1]["reason"], "autonomous_auto_apply")
+            self.assertEqual(detail["evidence_chain"]["steps"][-1]["status"], "already_applied")
+
+    def test_check_spec_lock_and_approve_endpoints(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "kyoko.db"
+            ingest_source_fixture(db_path, FIXTURE)
+            submit_learning_proposal(
+                db_path=db_path,
+                proposal_path=VALID_PROPOSAL,
+                schema_path=SCHEMA,
+            )
+
+            with RunningServer(db_path) as server:
+                server.post_json(
+                    "/api/checks/generate",
+                    {"proposal_id": "proposal_context_timeout_001"},
+                )
                 checks = server.get_json("/api/checks")
                 lock = server.post_json(
                     "/api/check-specs/lock",
@@ -1006,7 +1090,6 @@ class WebTests(unittest.TestCase):
                     },
                 )
                 locks = server.get_json("/api/check-locks")
-                detail = server.get_json("/api/proposal-detail?id=proposal_context_timeout_001")
                 unlock = server.post_json(
                     "/api/check-specs/lock",
                     {
@@ -1026,28 +1109,11 @@ class WebTests(unittest.TestCase):
                 active_locks_after_unlock = server.get_json("/api/check-locks")
                 checks_after_approval = server.get_json("/api/checks")
 
-            self.assertEqual(policy["policy"]["context_mode"], "autonomous")
-            self.assertEqual(autonomy["decisions"][0]["action"], "gated")
-            self.assertEqual(autonomy["decisions"][0]["reason"], "missing_check_run")
-            self.assertEqual(
-                {event["kind"] for event in autonomy_events["autonomy_events"]},
-                {"autonomy_gated", "autonomy_decision"},
-            )
-            self.assertEqual(len(decision_events["autonomy_events"]), 1)
-            self.assertEqual(decision_events["autonomy_events"][0]["kind"], "autonomy_decision")
-            self.assertEqual(
-                decision_events["autonomy_events"][0]["metadata"]["reason"],
-                "missing_check_run",
-            )
-            self.assertEqual(len(gated_events["autonomy_events"]), 1)
-            self.assertEqual(gated_events["autonomy_events"][0]["kind"], "autonomy_gated")
-            self.assertEqual(proposals["proposals"][0]["state"], "pending")
             self.assertEqual(checks["check_specs"][0]["id"], "check_proposal_context_timeout_001_1")
             self.assertFalse(checks["check_specs"][0]["human_locked"])
             self.assertTrue(lock["human_locked"])
             self.assertEqual(lock["actor_agent_identity_id"], "agent_researcher_001")
             self.assertEqual(locks["check_locks"][0]["check_spec_id"], "check_proposal_context_timeout_001_1")
-            self.assertTrue(detail["check_specs"][0]["human_locked"])
             self.assertFalse(unlock["human_locked"])
             self.assertEqual(unlock["actor_agent_identity_id"], "agent_researcher_001")
             self.assertEqual(approval["previous_trust_level"], "L0_generated")
@@ -1056,9 +1122,6 @@ class WebTests(unittest.TestCase):
             self.assertEqual(approval["actor_agent_identity_id"], "agent_researcher_001")
             self.assertEqual(active_locks_after_unlock["check_locks"], [])
             self.assertEqual(checks_after_approval["check_specs"][0]["trust_level"], "L3_human_approved")
-            self.assertEqual(detail["gate_history"][-1]["kind"], "autonomy_decision")
-            self.assertEqual(detail["gate_history"][-1]["reason"], "missing_check_run")
-            self.assertEqual(detail["evidence_chain"]["steps"][-1]["status"], "gated")
 
     def test_evidence_summary_is_redacted_by_default(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -1196,7 +1259,7 @@ class WebTests(unittest.TestCase):
                 server.post_json(
                     "/api/policy",
                     {
-                        "harness_mode": "autonomous",
+                        "mode": "autonomous",
                         "allow_repo_patch": True,
                     },
                 )
@@ -1205,17 +1268,13 @@ class WebTests(unittest.TestCase):
                     {"harness_workspace_root": str(workspace)},
                 )
 
-            self.assertEqual(report["decisions"][0]["action"], "gated")
-            self.assertEqual(report["decisions"][0]["reason"], "missing_check_run")
-            self.assertEqual(
-                report["decisions"][0]["check_spec_ids"],
-                ["check_proposal_harness_generated_check_001_1"],
-            )
+            self.assertEqual(report["decisions"][0]["action"], "applied")
+            self.assertEqual(report["decisions"][0]["reason"], "autonomous_auto_apply")
             self.assertEqual(
                 report["decisions"][0]["patch_transaction_ids"],
                 ["patch_proposal_harness_generated_check_001_1"],
             )
-            self.assertFalse((workspace / "checks/generated_timeout_check.py").exists())
+            self.assertTrue((workspace / "checks/generated_timeout_check.py").exists())
 
     def test_harness_apply_and_rollback_endpoints_support_unified_diff(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -1423,55 +1482,39 @@ class WebTests(unittest.TestCase):
             self.assertEqual(status["counts"]["replay_adapters"], 1)
             self.assertEqual(status["counts"]["replay_runs"], 1)
 
-    def test_improve_endpoint_runs_registered_replay_and_autonomy(self) -> None:
+    def test_improve_endpoint_auto_applies_explicit_proposal_in_autonomous_mode(self) -> None:
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
-            output_dir = Path(tmpdir) / "improve-replay"
             ingest_source_fixture(db_path, FIXTURE)
             submit_learning_proposal(
                 db_path=db_path,
                 proposal_path=VALID_PROPOSAL,
                 schema_path=SCHEMA,
             )
-            register_replay_adapter(
-                db_path=db_path,
-                adapter_id="fixture_replay",
-                name="Fixture replay",
-                command=[sys.executable, str(REPLAY_COMMAND)],
-                output_dir=output_dir,
-                default_side_effect_mode="network_mocked",
-            )
 
             with RunningServer(db_path) as server:
-                policy = server.post_json("/api/policy", {"context_mode": "autonomous"})
+                policy = server.post_json("/api/policy", {"mode": "autonomous"})
                 improve = server.post_json(
                     "/api/improve",
-                    {
-                        "proposal_id": "proposal_context_timeout_001",
-                        "replay_adapter_id": "fixture_replay",
-                    },
+                    {"proposal_id": "proposal_context_timeout_001"},
                 )
                 proposals = server.get_json("/api/proposals")
                 skills = server.get_json("/api/skills")
-                checks = server.get_json("/api/checks")
 
-            self.assertEqual(policy["policy"]["context_mode"], "autonomous")
+            self.assertEqual(policy["policy"]["mode"], "autonomous")
             self.assertEqual(improve["proposal_id"], "proposal_context_timeout_001")
-            self.assertEqual(improve["check_spec_ids"], ["check_proposal_context_timeout_001_1"])
-            self.assertEqual(improve["replay_runs"][0]["adapter_id"], "fixture_replay")
-            self.assertEqual(improve["replay_runs"][0]["status"], "passed")
-            self.assertEqual(improve["replay_runs"][0]["check_run"]["status"], "passed")
             self.assertEqual(improve["autonomy"]["decisions"][0]["action"], "applied")
+            self.assertEqual(
+                improve["autonomy"]["decisions"][0]["reason"], "autonomous_auto_apply"
+            )
             self.assertEqual(proposals["proposals"][0]["state"], "applied")
             self.assertEqual(skills["skills"][0]["id"], "skill_proposal_context_timeout_001_1")
-            self.assertEqual(checks["check_runs"][0]["status"], "passed")
 
     def test_improve_endpoint_applies_harness_patch_with_workspace_root(self) -> None:
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
             workspace = Path(tmpdir) / "workspace"
             workspace.mkdir()
-            output_dir = Path(tmpdir) / "improve-replay"
             proposal = json.loads(VALID_GENERATED_FILE_PROPOSAL.read_text())
             proposal["gate_expectations"]["requires_human_review"] = False
             ingest_source_fixture(db_path, FIXTURE)
@@ -1480,20 +1523,12 @@ class WebTests(unittest.TestCase):
                 proposal=proposal,
                 schema_path=SCHEMA,
             )
-            register_replay_adapter(
-                db_path=db_path,
-                adapter_id="fixture_replay",
-                name="Fixture replay",
-                command=[sys.executable, str(REPLAY_COMMAND)],
-                output_dir=output_dir,
-                default_side_effect_mode="network_mocked",
-            )
 
             with RunningServer(db_path) as server:
                 server.post_json(
                     "/api/policy",
                     {
-                        "harness_mode": "autonomous",
+                        "mode": "autonomous",
                         "allow_repo_patch": True,
                     },
                 )
@@ -1501,18 +1536,15 @@ class WebTests(unittest.TestCase):
                     "/api/improve",
                     {
                         "proposal_id": "proposal_harness_generated_check_001",
-                        "replay_adapter_id": "fixture_replay",
                         "harness_workspace_root": str(workspace),
                     },
                 )
 
             target = workspace / "checks/generated_timeout_check.py"
-            self.assertEqual(
-                improve["generated_check_spec_ids"],
-                ["check_proposal_harness_generated_check_001_1"],
-            )
-            self.assertEqual(improve["replay_runs"][0]["check_run"]["status"], "passed")
             self.assertEqual(improve["autonomy"]["decisions"][0]["action"], "applied")
+            self.assertEqual(
+                improve["autonomy"]["decisions"][0]["reason"], "autonomous_auto_apply"
+            )
             self.assertTrue(target.exists())
 
     def test_improve_endpoint_uses_profile_root_for_harness_patch_after_replay(self) -> None:
@@ -1520,7 +1552,6 @@ class WebTests(unittest.TestCase):
             db_path = Path(tmpdir) / "kyoko.db"
             workspace = Path(tmpdir) / "workspace"
             workspace.mkdir()
-            output_dir = Path(tmpdir) / "improve-replay"
             proposal = json.loads(VALID_GENERATED_FILE_PROPOSAL.read_text())
             proposal["gate_expectations"]["requires_human_review"] = False
             ingest_source_payload(
@@ -1533,34 +1564,25 @@ class WebTests(unittest.TestCase):
                 proposal=proposal,
                 schema_path=SCHEMA,
             )
-            register_replay_adapter(
-                db_path=db_path,
-                adapter_id="fixture_replay",
-                name="Fixture replay",
-                command=[sys.executable, str(REPLAY_COMMAND)],
-                output_dir=output_dir,
-                default_side_effect_mode="network_mocked",
-            )
 
             with RunningServer(db_path) as server:
                 server.post_json(
                     "/api/policy",
                     {
-                        "harness_mode": "autonomous",
+                        "mode": "autonomous",
                         "allow_repo_patch": True,
                     },
                 )
                 improve = server.post_json(
                     "/api/improve",
-                    {
-                        "proposal_id": "proposal_harness_generated_check_001",
-                        "replay_adapter_id": "fixture_replay",
-                    },
+                    {"proposal_id": "proposal_harness_generated_check_001"},
                 )
 
             target = workspace / "checks/generated_timeout_check.py"
-            self.assertEqual(improve["replay_runs"][0]["check_run"]["status"], "passed")
             self.assertEqual(improve["autonomy"]["decisions"][0]["action"], "applied")
+            self.assertEqual(
+                improve["autonomy"]["decisions"][0]["reason"], "autonomous_auto_apply"
+            )
             self.assertTrue(target.exists())
 
     def test_improve_endpoint_can_import_discovered_source_before_analysis(self) -> None:
@@ -1584,8 +1606,8 @@ class WebTests(unittest.TestCase):
 
             self.assertEqual(improve["source_import"]["candidate"]["id"], "openclaw_main")
             self.assertEqual(improve["profile_id"], "profile_openclaw_main")
-            # Default context_mode is `propose`: analysis surfaces+diagnoses an issue but
-            # no proposal is authored this run.
+            # Default mode is `hitl`: analysis surfaces+diagnoses an issue but
+            # no proposal is authored this run (it awaits a human accept).
             self.assertIsNone(improve["proposal_id"])
             self.assertEqual(improve["proposal_ids"], [])
             self.assertEqual(len(improve["analyze"]["new_issue_ids"]), 1)
@@ -1602,7 +1624,8 @@ class WebTests(unittest.TestCase):
             update_autonomy_policy(
                 db_path=db_path,
                 profile_id="profile_news_research_001",
-                context_mode="autonomous",
+                mode="autonomous",
+                recurrence_threshold=1,
             )
             register_operator_adapter(
                 db_path=db_path,
@@ -1638,28 +1661,20 @@ class WebTests(unittest.TestCase):
             labels = {r["operator_label"] for r in operator_runs["operator_runs"]}
             self.assertIn("fixture_operator", labels)
 
-    def test_improve_endpoint_runs_selected_replay_adapter_for_discovered_source(self) -> None:
+    def test_improve_endpoint_authors_proposal_for_recurring_discovered_issue(self) -> None:
         with TemporaryDirectory() as tmpdir:
             tmp_path = Path(tmpdir)
             db_path = tmp_path / "kyoko.db"
             home = tmp_path / "home"
-            output_dir = tmp_path / "selected-discovery-replay"
             _write_failed_openclaw_session(home)
             ingest_source_fixture(db_path, FIXTURE)
-            # Gate #1 autonomous so a proposal is authored and the replay adapter runs.
+            # Gate #1 autonomous + low recurrence threshold so the surfaced issue
+            # immediately clears gate #1 and a proposal is authored.
             update_autonomy_policy(
                 db_path=db_path,
                 profile_id="profile_news_research_001",
-                context_mode="autonomous",
-            )
-            register_replay_adapter(
-                db_path=db_path,
-                adapter_id="fixture_replay",
-                name="Fixture replay",
-                command=[sys.executable, str(REPLAY_COMMAND)],
-                profile_id="profile_news_research_001",
-                output_dir=output_dir,
-                default_side_effect_mode="network_mocked",
+                mode="autonomous",
+                recurrence_threshold=1,
             )
 
             with RunningServer(db_path) as server:
@@ -1670,19 +1685,21 @@ class WebTests(unittest.TestCase):
                         "source_home": str(home),
                         "source_import_output_dir": str(tmp_path / "normalized"),
                         "profile_id": "profile_news_research_001",
-                        "replay_adapter_id": "fixture_replay",
                         "run_autonomy": False,
                     },
                 )
-                checks = server.get_json("/api/checks")
+                proposals = server.get_json("/api/proposals?profile_id=profile_news_research_001")
 
             self.assertEqual(improve["source_import"]["candidate"]["id"], "openclaw_main")
             self.assertEqual(improve["profile_id"], "profile_news_research_001")
-            self.assertTrue(improve["replay_runs"])
-            self.assertEqual(improve["replay_runs"][0]["adapter_id"], "fixture_replay")
-            self.assertEqual(improve["replay_runs"][0]["check_run"]["status"], "passed")
-            self.assertIsNone(improve["autonomy"])
-            self.assertEqual(len(checks["replay_runs"]), 1)
+            self.assertTrue(improve["proposal_ids"])
+            self.assertIn(improve["proposal_id"], improve["proposal_ids"])
+            self.assertEqual(improve["gate1_outcomes"][0]["gate"], "gate1")
+            self.assertTrue(improve["gate1_outcomes"][0]["allow"])
+            self.assertIn(
+                improve["proposal_id"],
+                [proposal["id"] for proposal in proposals["proposals"]],
+            )
 
     def test_replay_server_lifecycle_endpoints_control_managed_adapter(self) -> None:
         with TemporaryDirectory() as tmpdir:

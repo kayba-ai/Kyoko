@@ -293,7 +293,7 @@ def _routing_summary(connection: Any, profile_id: str, counts: dict[str, int]) -
 
     policy = _policy_for_profile(connection, profile_id)
     section = str(active_proposal["section"])
-    mode = str(policy.get(f"{section}_mode", "propose"))
+    mode = str(policy.get("mode", "hitl"))
     routing = {
         "state": "ready_for_autonomy",
         "next_action": "run_autonomy" if mode == "autonomous" else "review_proposal",
@@ -464,7 +464,7 @@ def _latest_replay_run_for_proposal(connection: Any, proposal_id: str) -> dict[s
 def _policy_for_profile(connection: Any, profile_id: str) -> dict[str, Any]:
     row = connection.execute(
         """
-        SELECT context_mode, harness_mode, allow_repo_patch
+        SELECT mode, recurrence_threshold, allow_repo_patch
         FROM autonomy_policies
         WHERE profile_id = ?
         """,
@@ -472,13 +472,13 @@ def _policy_for_profile(connection: Any, profile_id: str) -> dict[str, Any]:
     ).fetchone()
     if row is None:
         return {
-            "context_mode": "propose",
-            "harness_mode": "propose",
+            "mode": "hitl",
+            "recurrence_threshold": 3,
             "allow_repo_patch": False,
         }
     return {
-        "context_mode": row["context_mode"],
-        "harness_mode": row["harness_mode"],
+        "mode": row["mode"],
+        "recurrence_threshold": int(row["recurrence_threshold"]),
         "allow_repo_patch": bool(row["allow_repo_patch"]),
     }
 

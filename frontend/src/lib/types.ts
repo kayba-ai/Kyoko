@@ -299,6 +299,17 @@ export interface Issue {
   recurrence_count?: number | null;
   // When this issue was accepted at gate #1 (iso), null until accepted.
   accepted_at?: string | null;
+  // When the fix for this issue was applied (iso), null until applied.
+  applied_at?: string | null;
+  // The recurrence_count snapshotted at apply time; post-apply recurrences are
+  // `recurrence_count - recurrence_count_at_apply` and feed the regression guard.
+  recurrence_count_at_apply?: number | null;
+  // How many auto-fix cycles the guard monitor has spent on this issue.
+  auto_fix_attempts?: number | null;
+  // Set when autonomy has been blocked for this issue (escalated to HITL) after
+  // exhausting max_auto_fix_attempts; carries a human-readable reason.
+  autonomy_blocked?: boolean | null;
+  autonomy_blocked_reason?: string | null;
   evidence_refs: Record<string, unknown>[];
   affected_agent_identity_ids: string[];
   affected_workflow_node_ids: string[];
@@ -379,19 +390,23 @@ export interface ImproveReport {
   [k: string]: unknown;
 }
 
+export type AutonomyMode = "hitl" | "autonomous";
+
 export interface AutonomyPolicy {
   profile_id: string;
-  context_mode: string;
-  harness_mode: string;
+  // Two-mode autonomy (spec 0018): `hitl` = human accepts/approves every change;
+  // `autonomous` = Kyoko auto-applies a fix once it has recurred enough times.
+  mode: AutonomyMode;
+  // How many times a failure must recur before autonomous mode authors+applies a fix.
+  recurrence_threshold: number;
+  // Post-apply recurrences (count - count_at_apply) that trip the regression guard.
+  regression_threshold: number;
+  // In autonomous mode, auto-revert an applied fix once it regresses past the threshold.
+  auto_rollback_on_regression: boolean;
+  // How many auto-fix cycles the guard monitor will attempt before escalating to HITL.
+  max_auto_fix_attempts: number;
   allow_repo_patch: boolean;
-  allow_check_write: boolean;
-  allow_skillbook_write: boolean;
-  allow_profile_config_write: boolean;
-  allow_replay_server_patch: boolean;
   dirty_worktree_policy: string;
-  required_check_level_context: string;
-  required_check_level_harness: string;
-  rollback_on_regression: boolean;
   allowed_paths: string[];
   protected_paths: string[];
   updated_at?: string;
@@ -422,17 +437,43 @@ export interface Skill {
 /** Fields the loopback dashboard may update via POST /api/policy. Paths are
  *  intentionally not editable here (CLI/storage only). */
 export interface PolicyUpdate {
-  context_mode?: string;
-  harness_mode?: string;
+  mode?: AutonomyMode;
+  recurrence_threshold?: number;
+  regression_threshold?: number;
+  auto_rollback_on_regression?: boolean;
+  max_auto_fix_attempts?: number;
   allow_repo_patch?: boolean;
-  allow_check_write?: boolean;
-  allow_skillbook_write?: boolean;
-  allow_profile_config_write?: boolean;
-  allow_replay_server_patch?: boolean;
   dirty_worktree_policy?: string;
-  required_check_level_context?: string;
-  required_check_level_harness?: string;
-  rollback_on_regression?: boolean;
+}
+
+/** Result of applying a proposal at HITL gate #2 (POST /api/proposals/apply). */
+export interface ApplyProposalResult {
+  proposal_id: string;
+  profile_id: string;
+  section: string;
+  state: string;
+  applied_skill_ids: string[];
+  applied_context_rule_ids: string[];
+  patch_transaction_ids: string[];
+  [k: string]: unknown;
+}
+
+/** One guard-monitor action from POST /api/guard-monitor. Shape is permissive
+ *  since the server may attach extra detail. */
+export interface GuardMonitorAction {
+  issue_id?: string;
+  action?: string;
+  reason?: string;
+  [k: string]: unknown;
+}
+
+/** Report from the guard monitor (POST /api/guard-monitor). */
+export interface GuardMonitorReport {
+  profile_id: string;
+  mode: AutonomyMode;
+  regression_threshold: number;
+  actions: GuardMonitorAction[];
+  [k: string]: unknown;
 }
 
 export interface TimelineEvent {

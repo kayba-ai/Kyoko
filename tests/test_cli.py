@@ -173,7 +173,7 @@ class CliTests(unittest.TestCase):
 
             payload = json.loads(status_out.getvalue())
             self.assertTrue(payload["initialized"])
-            self.assertEqual(payload["schema_version"], 30)
+            self.assertEqual(payload["schema_version"], 31)
             self.assertEqual(payload["counts"]["spans"], 2)
             self.assertEqual(payload["counts"]["issues"], 0)
 
@@ -751,8 +751,13 @@ class CliTests(unittest.TestCase):
                 policy_code = main(["policy", "--db", str(db_path), "--json"])
             self.assertEqual(policy_code, 0)
             policy_payload = json.loads(policy_out.getvalue())
-            self.assertEqual(policy_payload["policy"]["context_mode"], "propose")
+            self.assertEqual(policy_payload["policy"]["mode"], "hitl")
+            self.assertEqual(policy_payload["policy"]["recurrence_threshold"], 3)
+            self.assertEqual(policy_payload["policy"]["regression_threshold"], 2)
+            self.assertTrue(policy_payload["policy"]["auto_rollback_on_regression"])
+            self.assertEqual(policy_payload["policy"]["max_auto_fix_attempts"], 1)
             self.assertFalse(policy_payload["policy"]["allow_repo_patch"])
+            self.assertEqual(policy_payload["policy"]["dirty_worktree_policy"], "block")
 
             set_out = io.StringIO()
             with redirect_stdout(set_out):
@@ -761,10 +766,8 @@ class CliTests(unittest.TestCase):
                         "policy-set",
                         "--db",
                         str(db_path),
-                        "--context-mode",
+                        "--mode",
                         "autonomous",
-                        "--harness-mode",
-                        "propose",
                         "--repo-patch",
                         "on",
                         "--dirty-worktree-policy",
@@ -774,9 +777,9 @@ class CliTests(unittest.TestCase):
                 )
             self.assertEqual(set_code, 0)
             set_payload = json.loads(set_out.getvalue())
-            self.assertEqual(set_payload["policy"]["context_mode"], "autonomous")
-            self.assertEqual(set_payload["policy"]["harness_mode"], "propose")
+            self.assertEqual(set_payload["policy"]["mode"], "autonomous")
             self.assertTrue(set_payload["policy"]["allow_repo_patch"])
+            self.assertEqual(set_payload["policy"]["dirty_worktree_policy"], "block")
 
             ext_out = io.StringIO()
             with redirect_stdout(ext_out):
@@ -785,26 +788,90 @@ class CliTests(unittest.TestCase):
                         "policy-set",
                         "--db",
                         str(db_path),
-                        "--profile-config-write",
-                        "on",
-                        "--replay-server-patch",
-                        "on",
-                        "--required-check-level-context",
-                        "L2_regression",
-                        "--required-check-level-harness",
-                        "L3_human_approved",
-                        "--rollback-on-regression",
+                        "--recurrence-threshold",
+                        "5",
+                        "--regression-threshold",
+                        "4",
+                        "--auto-rollback",
                         "off",
+                        "--max-auto-fix-attempts",
+                        "3",
                         "--json",
                     ]
                 )
             self.assertEqual(ext_code, 0)
             ext_payload = json.loads(ext_out.getvalue())["policy"]
-            self.assertTrue(ext_payload["allow_profile_config_write"])
-            self.assertTrue(ext_payload["allow_replay_server_patch"])
-            self.assertEqual(ext_payload["required_check_level_context"], "L2_regression")
-            self.assertEqual(ext_payload["required_check_level_harness"], "L3_human_approved")
-            self.assertFalse(ext_payload["rollback_on_regression"])
+            self.assertEqual(ext_payload["recurrence_threshold"], 5)
+            self.assertEqual(ext_payload["regression_threshold"], 4)
+            self.assertFalse(ext_payload["auto_rollback_on_regression"])
+            self.assertEqual(ext_payload["max_auto_fix_attempts"], 3)
+            # mode/repo-patch from the prior set-call persist when not overridden
+            self.assertEqual(ext_payload["mode"], "autonomous")
+            self.assertTrue(ext_payload["allow_repo_patch"])
+
+    def test_apply_proposal_cli_flow(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "kyoko.db"
+
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(main(["ingest-fixture", "--db", str(db_path), str(FIXTURE)]), 0)
+                self.assertEqual(
+                    main(
+                        [
+                            "propose",
+                            "--db",
+                            str(db_path),
+                            "--schema",
+                            str(SCHEMA),
+                            str(VALID_PROPOSAL),
+                        ]
+                    ),
+                    0,
+                )
+
+            apply_out = io.StringIO()
+            with redirect_stdout(apply_out):
+                apply_code = main(
+                    [
+                        "apply-proposal",
+                        "--db",
+                        str(db_path),
+                        "proposal_context_timeout_001",
+                        "--json",
+                    ]
+                )
+            self.assertEqual(apply_code, 0)
+            apply_payload = json.loads(apply_out.getvalue())
+            self.assertEqual(apply_payload["proposal_id"], "proposal_context_timeout_001")
+            self.assertEqual(apply_payload["section"], "context")
+            self.assertEqual(apply_payload["state"], "applied")
+            self.assertEqual(
+                apply_payload["applied_skill_ids"],
+                ["skill_proposal_context_timeout_001_1"],
+            )
+
+    def test_monitor_guards_cli_flow(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "kyoko.db"
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(main(["ingest-fixture", "--db", str(db_path), str(FIXTURE)]), 0)
+
+            monitor_out = io.StringIO()
+            with redirect_stdout(monitor_out):
+                monitor_code = main(["monitor-guards", "--db", str(db_path), "--json"])
+            self.assertEqual(monitor_code, 0)
+            monitor_payload = json.loads(monitor_out.getvalue())
+            self.assertEqual(monitor_payload["profile_id"], "profile_news_research_001")
+            self.assertEqual(monitor_payload["mode"], "hitl")
+            self.assertEqual(monitor_payload["regression_threshold"], 2)
+            # Nothing applied yet → no rollback/escalation actions.
+            self.assertEqual(monitor_payload["actions"], [])
+
+            text_out = io.StringIO()
+            with redirect_stdout(text_out):
+                text_code = main(["monitor-guards", "--db", str(db_path)])
+            self.assertEqual(text_code, 0)
+            self.assertIn("guard monitor", text_out.getvalue())
 
     def test_issue_status_cli_flow(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -953,7 +1020,7 @@ class CliTests(unittest.TestCase):
             self.assertEqual(payload["proposal"]["id"], "proposal_context_timeout_001")
             self.assertEqual(payload["proposal"]["section_label"], "Context fix")
             self.assertEqual(payload["target"]["ref"]["entity_id"], "agent_researcher_001")
-            self.assertEqual(payload["autonomy_gate"]["reason"], "context_policy_propose")
+            self.assertEqual(payload["autonomy_gate"]["reason"], "hitl_awaiting_human_approve")
             self.assertEqual(payload["confidence_assessment"]["kyoko_confidence"], 0.66)
             self.assertEqual(len(payload["evidence"]), 2)
             self.assertEqual(payload["check_guidance"]["gateable_check_types"], ["deterministic_assertion", "regression_replay"])
@@ -1108,8 +1175,8 @@ class CliTests(unittest.TestCase):
                             "policy-set",
                             "--db",
                             str(db_path),
-                            "--context-mode",
-                            "autonomous",
+                            "--mode",
+                            "hitl",
                         ]
                     ),
                     0,
@@ -1122,12 +1189,9 @@ class CliTests(unittest.TestCase):
             self.assertEqual(autonomy_code, 0)
             payload = json.loads(autonomy_out.getvalue())
             self.assertEqual(payload["profile_id"], "profile_news_research_001")
-            self.assertEqual(payload["decisions"][0]["action"], "gated")
-            self.assertEqual(payload["decisions"][0]["reason"], "missing_check_run")
-            self.assertEqual(
-                payload["decisions"][0]["check_spec_ids"],
-                ["check_proposal_context_timeout_001_1"],
-            )
+            self.assertEqual(payload["decisions"][0]["action"], "awaiting_human_review")
+            self.assertEqual(payload["decisions"][0]["reason"], "hitl_awaiting_human_approve")
+            self.assertEqual(payload["decisions"][0]["state_after"], "pending")
 
             detail_out = io.StringIO()
             with redirect_stdout(detail_out):
@@ -1143,8 +1207,8 @@ class CliTests(unittest.TestCase):
             self.assertEqual(detail_code, 0)
             detail_payload = json.loads(detail_out.getvalue())
             self.assertEqual(detail_payload["gate_history"][-1]["kind"], "autonomy_decision")
-            self.assertEqual(detail_payload["gate_history"][-1]["action"], "gated")
-            self.assertEqual(detail_payload["gate_history"][-1]["reason"], "missing_check_run")
+            self.assertEqual(detail_payload["gate_history"][-1]["action"], "awaiting_human_review")
+            self.assertEqual(detail_payload["gate_history"][-1]["reason"], "hitl_awaiting_human_approve")
 
             autonomy_events_out = io.StringIO()
             with redirect_stdout(autonomy_events_out):
@@ -1168,7 +1232,7 @@ class CliTests(unittest.TestCase):
             self.assertEqual(autonomy_events_payload["autonomy_events"][0]["kind"], "autonomy_decision")
             self.assertEqual(
                 autonomy_events_payload["autonomy_events"][0]["metadata"]["reason"],
-                "missing_check_run",
+                "hitl_awaiting_human_approve",
             )
 
             autonomy_events_text_out = io.StringIO()
@@ -1179,11 +1243,11 @@ class CliTests(unittest.TestCase):
                         "--db",
                         str(db_path),
                         "--kind",
-                        "autonomy_gated",
+                        "autonomy_decision",
                     ]
                 )
             self.assertEqual(autonomy_events_text_code, 0)
-            self.assertIn("autonomy_gated", autonomy_events_text_out.getvalue())
+            self.assertIn("autonomy_decision", autonomy_events_text_out.getvalue())
             self.assertIn("learning_proposal:proposal_context_timeout_001", autonomy_events_text_out.getvalue())
 
             detail_text_out = io.StringIO()
@@ -1199,7 +1263,7 @@ class CliTests(unittest.TestCase):
             self.assertEqual(detail_text_code, 0)
             detail_text = detail_text_out.getvalue()
             self.assertIn("evidence_chain:", detail_text)
-            self.assertIn("autonomy: gated", detail_text)
+            self.assertIn("autonomy: awaiting_human_review", detail_text)
             self.assertIn("gate_history:", detail_text)
 
     def test_run_autonomy_accepts_harness_workspace_root(self) -> None:
@@ -1233,7 +1297,7 @@ class CliTests(unittest.TestCase):
                             "policy-set",
                             "--db",
                             str(db_path),
-                            "--harness-mode",
+                            "--mode",
                             "autonomous",
                             "--repo-patch",
                             "on",
@@ -1257,17 +1321,15 @@ class CliTests(unittest.TestCase):
 
             self.assertEqual(autonomy_code, 0)
             payload = json.loads(autonomy_out.getvalue())
-            self.assertEqual(payload["decisions"][0]["action"], "gated")
-            self.assertEqual(payload["decisions"][0]["reason"], "missing_check_run")
-            self.assertEqual(
-                payload["decisions"][0]["check_spec_ids"],
-                ["check_proposal_harness_generated_check_001_1"],
-            )
+            # autonomous + repo-patch on: a harness proposal is auto-applied and the
+            # generated file is written into the workspace root.
+            self.assertEqual(payload["decisions"][0]["action"], "applied")
+            self.assertEqual(payload["decisions"][0]["reason"], "autonomous_auto_apply")
             self.assertEqual(
                 payload["decisions"][0]["patch_transaction_ids"],
                 ["patch_proposal_harness_generated_check_001_1"],
             )
-            self.assertFalse((workspace / "checks/generated_timeout_check.py").exists())
+            self.assertTrue((workspace / "checks/generated_timeout_check.py").exists())
 
     def test_harness_target_lock_cli_flow(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -2066,8 +2128,10 @@ class CliTests(unittest.TestCase):
                             "policy-set",
                             "--db",
                             str(db_path),
-                            "--context-mode",
+                            "--mode",
                             "autonomous",
+                            "--repo-patch",
+                            "on",
                             "--json",
                         ]
                     ),
@@ -2090,10 +2154,15 @@ class CliTests(unittest.TestCase):
             self.assertEqual(improve_code, 0)
             payload = json.loads(improve_out.getvalue())
             self.assertEqual(payload["proposal_id"], "proposal_context_timeout_001")
-            self.assertEqual(payload["check_spec_ids"], ["check_proposal_context_timeout_001_1"])
-            self.assertEqual(payload["replay_runs"][0]["adapter_id"], "fixture_replay")
-            self.assertEqual(payload["replay_runs"][0]["check_run"]["status"], "passed")
+            self.assertEqual(payload["proposal_ids"], ["proposal_context_timeout_001"])
             self.assertEqual(payload["autonomy"]["decisions"][0]["action"], "applied")
+            self.assertEqual(
+                payload["autonomy"]["decisions"][0]["reason"], "autonomous_auto_apply"
+            )
+            # ImproveReport no longer carries check/replay fields (the check plane is
+            # demoted and replay is no longer wired into the loop).
+            self.assertNotIn("check_spec_ids", payload)
+            self.assertNotIn("replay_runs", payload)
 
     def test_improve_cli_applies_harness_patch_with_workspace_root(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -2148,7 +2217,7 @@ class CliTests(unittest.TestCase):
                             "policy-set",
                             "--db",
                             str(db_path),
-                            "--harness-mode",
+                            "--mode",
                             "autonomous",
                             "--repo-patch",
                             "on",
@@ -2167,8 +2236,6 @@ class CliTests(unittest.TestCase):
                         str(db_path),
                         "--proposal-id",
                         "proposal_harness_generated_check_001",
-                        "--replay-adapter",
-                        "fixture_replay",
                         "--harness-workspace-root",
                         str(workspace),
                         "--json",
@@ -2179,11 +2246,14 @@ class CliTests(unittest.TestCase):
             payload = json.loads(improve_out.getvalue())
             target = workspace / "checks/generated_timeout_check.py"
             self.assertEqual(
-                payload["generated_check_spec_ids"],
-                ["check_proposal_harness_generated_check_001_1"],
+                payload["proposal_ids"], ["proposal_harness_generated_check_001"]
             )
-            self.assertEqual(payload["replay_runs"][0]["check_run"]["status"], "passed")
             self.assertEqual(payload["autonomy"]["decisions"][0]["action"], "applied")
+            self.assertEqual(
+                payload["autonomy"]["decisions"][0]["reason"], "autonomous_auto_apply"
+            )
+            self.assertNotIn("generated_check_spec_ids", payload)
+            self.assertNotIn("replay_runs", payload)
             self.assertTrue(target.exists())
 
     def test_improve_cli_can_import_discovered_source_before_analysis(self) -> None:
@@ -2214,11 +2284,11 @@ class CliTests(unittest.TestCase):
             self.assertEqual(improve_code, 0)
             self.assertEqual(payload["source_import"]["candidate"]["id"], "openclaw_main")
             self.assertEqual(payload["profile_id"], "profile_openclaw_main")
-            # Default context_mode is `propose`: analysis surfaces+diagnoses an issue but
-            # no proposal is authored this run.
+            # Default mode is `hitl`: analysis surfaces+diagnoses an issue but
+            # nothing is authored this run (the issue awaits a human accept).
             self.assertIsNone(payload["proposal_id"])
             self.assertEqual(payload["proposal_ids"], [])
-            self.assertEqual(payload["generated_check_spec_ids"], [])
+            self.assertNotIn("generated_check_spec_ids", payload)
             self.assertEqual(len(payload["analyze"]["new_issue_ids"]), 1)
 
     def test_check_and_replay_flow(self) -> None:

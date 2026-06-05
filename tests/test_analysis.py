@@ -80,9 +80,15 @@ class ExecuteAnalysisJobTests(unittest.TestCase):
 
         with TemporaryDirectory() as tmpdir:
             db_path = _demo_db(tmpdir)
-            # ST2 decoupling: analysis surfaces issues; a proposal is authored only when the
-            # section's autonomy mode is `autonomous`.
-            update_autonomy_policy(db_path=db_path, context_mode="autonomous")
+            # Two-mode rebuild: analysis surfaces issues; gate #1 only authors a proposal
+            # in `autonomous` mode once the issue's recurrence_count reaches the threshold
+            # (lowered to 1 here so a single mock diagnosis clears the gate).
+            update_autonomy_policy(
+                db_path=db_path,
+                mode="autonomous",
+                recurrence_threshold=1,
+                allow_repo_patch=True,
+            )
             result = execute_analysis_job(
                 db_path, AnalysisJob(analyzer="mock", scope="all", run_autonomy=False)
             )
@@ -304,7 +310,13 @@ class AnalysisApiTests(unittest.TestCase):
         with TemporaryDirectory() as tmpdir:
             db_path = _demo_db(tmpdir)
             # Author a proposal so the run records a proposal id (gate #1 autonomous).
-            update_autonomy_policy(db_path=db_path, context_mode="autonomous")
+            # recurrence_threshold=1 lets a single mock diagnosis clear gate #1.
+            update_autonomy_policy(
+                db_path=db_path,
+                mode="autonomous",
+                recurrence_threshold=1,
+                allow_repo_patch=True,
+            )
             with _Server(db_path) as server:
                 status, body = server.post(
                     "/api/analysis/run", {"analyzer": "mock", "scope": "all", "run_autonomy": False}

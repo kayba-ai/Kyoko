@@ -13,18 +13,21 @@ from .analyze import (
     analyze_with_mock_operator,
     propose_for_issue,
 )
-from .autonomy import AutonomyError, evaluate_issue_to_proposal_gate
+from .autonomy import AutonomyError, evaluate_gate1, get_autonomy_policy
 from .autonomy_runner import AutonomyRunError, AutonomyRunReport, run_autonomy
-from .checks import CheckError, generate_checks_for_proposal, list_check_specs
 from .issue_guard import GuardError, GuardReport, mint_guard_for_issue
-from .issues import IssueError, accept_issue, get_issue, update_issue_status
+from .issues import (
+    IssueError,
+    accept_issue,
+    get_issue,
+    mark_issue_applied,
+    update_issue_status,
+)
 from .operator_adapters import (
     OperatorAdapterError,
     get_operator_adapter_command,
     run_registered_operator_adapter,
 )
-from .replay_adapters import ReplayAdapterError, run_registered_replay_adapter
-from .replay_servers import ReplayServerError
 from .skillbook_manager import (
     ConsolidationReport,
     SkillbookManagerError,
@@ -38,6 +41,11 @@ from .source_discovery import (
 from .storage import StorageError, connect, initialize_database, utc_now
 
 
+# Issue lifecycle states from which a proposal may still be authored (gate #1 hasn't yet
+# produced a fix). Once an issue is `proposed`/`applied`/... it is no longer a candidate.
+_GATE1_CANDIDATE_STATES = ("open", "prioritized", "diagnosed", "accepted")
+
+
 class ImproveError(Exception):
     """Raised when the high-level improvement loop cannot continue."""
 
@@ -47,21 +55,17 @@ class ImproveReport:
     profile_id: str
     # Back-compat: the first authored proposal id (or None when nothing was authored).
     proposal_id: Optional[str]
-    # All proposals authored this run (gate #1 `autonomous` issues), in order.
+    # All proposals authored this run (issues that cleared gate #1), in order.
     proposal_ids: tuple[str, ...]
     operator: Optional[str]
     analyze: Optional[AnalyzeReport]
-    check_spec_ids: tuple[str, ...]
-    generated_check_spec_ids: tuple[str, ...]
-    existing_check_spec_ids: tuple[str, ...]
-    replay_runs: tuple[dict[str, Any], ...]
     autonomy: Optional[AutonomyRunReport]
     source_import: Optional[DiscoveredSourceImportReport]
     notes: tuple[str, ...]
-    # Per-issue gate #1 outcomes surfaced this run (issue_id -> mode), structured for the API.
+    # Per-issue gate #1 outcomes evaluated this run, structured for the API.
     gate1_outcomes: tuple[dict[str, Any], ...] = ()
     guard_reports: tuple[GuardReport, ...] = ()
-    # Phase 3: the post-analysis skillbook-consolidation turn (None when not run / no dups).
+    # The post-analysis skillbook-consolidation turn (None when not run / no dups).
     consolidation: Optional[ConsolidationReport] = None
 
     def to_json(self) -> dict[str, Any]:
@@ -71,10 +75,6 @@ class ImproveReport:
             "proposal_ids": list(self.proposal_ids),
             "operator": self.operator,
             "analyze": _analyze_report_json(self.analyze),
-            "check_spec_ids": list(self.check_spec_ids),
-            "generated_check_spec_ids": list(self.generated_check_spec_ids),
-            "existing_check_spec_ids": list(self.existing_check_spec_ids),
-            "replay_runs": list(self.replay_runs),
             "autonomy": self.autonomy.to_json() if self.autonomy is not None else None,
             "source_import": self.source_import.to_json() if self.source_import is not None else None,
             "guards": [guard.to_json() for guard in self.guard_reports],
@@ -98,9 +98,6 @@ def run_improvement_loop(
     run_id: Optional[str] = None,
     since: Optional[str] = None,
     schema_path: Optional[Path] = None,
-    replay_adapter_id: Optional[str] = None,
-    replay_output_dir: Optional[Path] = None,
-    replay_timeout_seconds: Optional[int] = None,
     run_autonomy_after: bool = True,
     harness_workspace_root: Optional[Path] = None,
     source_candidate_id: Optional[str] = None,
@@ -154,49 +151,51 @@ def run_improvement_loop(
         )
         profile_id = analyze_report.profile_id
 
-        # ---- Gate #1: per newly-surfaced issue, the section's autonomy mode decides
-        # whether to author a proposal now (autonomous), leave it for a human to accept
-        # (propose), or stop at diagnosed (off). ----
-        for issue_id in analyze_report.new_issue_ids:
+        # ---- Gate #1 (issue -> propose): for every issue still eligible for a fix,
+        # the policy mode decides whether to author now. Autonomous authors once the
+        # failure has recurred in production to the threshold; HITL authors only after a
+        # human has accepted the issue. Both modes converge on accept_issue -> propose. ----
+        try:
+            policy = get_autonomy_policy(db_path=db_path, profile_id=profile_id)
+        except AutonomyError as exc:
+            raise ImproveError(str(exc)) from exc
+        for issue_id in _gate1_candidate_issue_ids(db_path, profile_id):
             try:
                 issue = get_issue(db_path=db_path, issue_id=issue_id)
             except IssueError as exc:
                 raise ImproveError(str(exc)) from exc
-            section = issue.get("section")
-            gate = evaluate_issue_to_proposal_gate(
-                db_path=db_path, section=section, profile_id=profile_id
-            )
+            decision = evaluate_gate1(issue=issue, policy=policy)
             gate1_outcomes.append(
-                {"issue_id": issue_id, "section": section, **gate.to_json()}
+                {"issue_id": issue_id, "section": issue.get("section"), **decision.to_json()}
             )
-            if gate.mode == "autonomous":
-                try:
-                    accept_issue(db_path=db_path, issue_id=issue_id)
-                    propose_report = _propose_for_each(
-                        db_path=db_path,
-                        output_dir=selected_output_dir,
-                        issue_id=issue_id,
-                        operator=operator,
-                        operator_command=operator_command,
-                        operator_adapter=operator_adapter,
-                        operator_timeout_seconds=operator_timeout_seconds,
-                        operator_max_retries=operator_max_retries,
-                        schema_path=schema_path,
-                        profile_id=profile_id,
-                    )
-                except (AnalyzeError, IssueError, OperatorAdapterError) as exc:
-                    raise ImproveError(str(exc)) from exc
-                authored_proposal_ids.append(propose_report.proposal_id)
-                notes.append(f"gate1_autonomous_authored:{issue_id}:{propose_report.proposal_id}")
-            elif gate.mode == "propose":
-                notes.append(f"gate1_propose_awaiting_acceptance:{issue_id}")
-            else:
-                notes.append(f"gate1_off_diagnosed:{issue_id}")
+            if not decision.allow:
+                notes.append(f"gate1_hold:{issue_id}:{decision.reason}")
+                continue
+            try:
+                # Idempotent: in autonomous this is auto-acceptance; in HITL the human
+                # already accepted (status == accepted) so this just re-stamps.
+                accept_issue(db_path=db_path, issue_id=issue_id)
+                propose_report = _propose_for_each(
+                    db_path=db_path,
+                    output_dir=selected_output_dir,
+                    issue_id=issue_id,
+                    operator=operator,
+                    operator_command=operator_command,
+                    operator_adapter=operator_adapter,
+                    operator_timeout_seconds=operator_timeout_seconds,
+                    operator_max_retries=operator_max_retries,
+                    schema_path=schema_path,
+                    profile_id=profile_id,
+                )
+            except (AnalyzeError, IssueError, OperatorAdapterError) as exc:
+                raise ImproveError(str(exc)) from exc
+            authored_proposal_ids.append(propose_report.proposal_id)
+            notes.append(f"gate1_authored:{issue_id}:{propose_report.proposal_id}:{decision.reason}")
 
         if not authored_proposal_ids:
-            # Nothing authored: every issue was diagnosed-only (off) or left for a human
-            # to accept (propose). There is nothing to check/replay/apply this run, but the
-            # skillbook may still carry duplicates from prior runs — consolidate it.
+            # Nothing authored: every eligible issue is on hold (HITL awaiting a human, or
+            # autonomous below the recurrence threshold). There is nothing to apply this run,
+            # but the skillbook may still carry duplicates from prior runs — consolidate it.
             if profile_id is None:
                 profile_id = analyze_report.profile_id
             consolidation_report = _maybe_consolidate(
@@ -216,10 +215,6 @@ def run_improvement_loop(
                 proposal_ids=(),
                 operator=selected_operator,
                 analyze=analyze_report,
-                check_spec_ids=(),
-                generated_check_spec_ids=(),
-                existing_check_spec_ids=(),
-                replay_runs=(),
                 autonomy=None,
                 source_import=source_import_report,
                 gate1_outcomes=tuple(gate1_outcomes),
@@ -240,54 +235,9 @@ def run_improvement_loop(
             profile_id,
         )
 
-    # ---- Gate #2: generate checks + replay for every targeted proposal. ----
-    generated_check_spec_ids: list[str] = []
-    existing_check_spec_ids: list[str] = []
-    check_spec_ids: list[str] = []
-    replay_runs: list[dict[str, Any]] = []
-    for target_proposal_id in target_proposal_ids:
-        try:
-            check_generation = generate_checks_for_proposal(
-                db_path=db_path,
-                proposal_id=target_proposal_id,
-            )
-            generated_check_spec_ids.extend(check_generation.check_spec_ids)
-            existing_check_spec_ids.extend(check_generation.existing_check_spec_ids)
-            profile_id = check_generation.profile_id
-        except CheckError as exc:
-            if str(exc).startswith("no_check_spec_changes:"):
-                notes.append(str(exc))
-            else:
-                raise ImproveError(str(exc)) from exc
-        except StorageError as exc:
-            raise ImproveError(str(exc)) from exc
-
-        proposal_check_spec_ids = _check_spec_ids_for_proposal(db_path, target_proposal_id)
-        check_spec_ids.extend(proposal_check_spec_ids)
-        selected_replay_adapter_id = replay_adapter_id or _default_replay_adapter_id(
-            db_path, profile_id
-        )
-        if selected_replay_adapter_id is not None:
-            if not proposal_check_spec_ids:
-                notes.append(
-                    f"replay_adapter_skipped_no_check_specs:{selected_replay_adapter_id}"
-                )
-            for check_spec_id in proposal_check_spec_ids:
-                try:
-                    replay_report = run_registered_replay_adapter(
-                        db_path=db_path,
-                        adapter_id=selected_replay_adapter_id,
-                        check_spec_id=check_spec_id,
-                        output_dir=replay_output_dir,
-                        timeout_seconds=replay_timeout_seconds,
-                        run_check_after=True,
-                    )
-                except (CheckError, ReplayAdapterError, ReplayServerError, StorageError) as exc:
-                    raise ImproveError(str(exc)) from exc
-                replay_runs.append(
-                    _replay_report_json(replay_report, selected_replay_adapter_id)
-                )
-
+    # ---- Gate #2 (propose -> apply): run_autonomy applies in autonomous mode; in HITL it
+    # applies nothing (proposals await a human approve/apply action). There is no check or
+    # replay gate — validation of an applied fix is post-hoc, via the guard monitor. ----
     autonomy_report: Optional[AutonomyRunReport] = None
     guard_reports: list[GuardReport] = []
     if run_autonomy_after:
@@ -300,9 +250,9 @@ def run_improvement_loop(
         except (AutonomyRunError, AutonomyError, StorageError) as exc:
             raise ImproveError(str(exc)) from exc
 
-        # Close the loop (job step 08): for every proposal the gate just applied, resolve
-        # its originating Issue and mint a standing deterministic guard evaluator that
-        # watches future traces for recurrence.
+        # Close the loop: for every proposal the gate just applied, watermark + resolve its
+        # originating Issue and mint a standing deterministic guard evaluator that watches
+        # future traces for recurrence (the gate-#2 post-hoc validator).
         for decision in autonomy_report.decisions:
             if decision.state_after != "applied" or not decision.proposal_id:
                 continue
@@ -310,6 +260,7 @@ def run_improvement_loop(
             if not issue_id:
                 continue
             try:
+                mark_issue_applied(db_path=db_path, issue_id=issue_id)
                 update_issue_status(db_path=db_path, issue_id=issue_id, status="resolved")
                 guard_reports.append(
                     mint_guard_for_issue(
@@ -324,8 +275,8 @@ def run_improvement_loop(
     if profile_id is None:
         raise ImproveError("profile_id_unresolved")
 
-    # ---- Phase 3: consolidate the skillbook (keep it live and tracked). Runs after the
-    # gate + resolve/guard step; its proposals flow through the SAME gate as any proposal. ----
+    # ---- Consolidate the skillbook (keep it live and tracked). Consolidation proposals skip
+    # gate #1 (no originating issue) and flow through gate #2 like any proposal. ----
     consolidation_report = _maybe_consolidate(
         db_path=db_path,
         output_dir=selected_output_dir,
@@ -344,10 +295,6 @@ def run_improvement_loop(
         proposal_ids=tuple(target_proposal_ids),
         operator=selected_operator,
         analyze=analyze_report,
-        check_spec_ids=tuple(check_spec_ids),
-        generated_check_spec_ids=tuple(generated_check_spec_ids),
-        existing_check_spec_ids=tuple(existing_check_spec_ids),
-        replay_runs=tuple(replay_runs),
         autonomy=autonomy_report,
         source_import=source_import_report,
         gate1_outcomes=tuple(gate1_outcomes),
@@ -355,6 +302,23 @@ def run_improvement_loop(
         notes=tuple(notes),
         guard_reports=tuple(guard_reports),
     )
+
+
+def _gate1_candidate_issue_ids(db_path: Path, profile_id: Optional[str]) -> tuple[str, ...]:
+    """Issues still eligible to author a fix from (pre-proposed, non-dismissed states)."""
+    if profile_id is None:
+        return ()
+    placeholders = ", ".join("?" for _ in _GATE1_CANDIDATE_STATES)
+    with connect(db_path) as connection:
+        rows = connection.execute(
+            f"""
+            SELECT id FROM issues
+            WHERE profile_id = ? AND status IN ({placeholders})
+            ORDER BY rank IS NULL, rank, created_at, id
+            """,
+            (profile_id, *_GATE1_CANDIDATE_STATES),
+        ).fetchall()
+    return tuple(str(row["id"]) for row in rows)
 
 
 def _maybe_consolidate(
@@ -371,7 +335,7 @@ def _maybe_consolidate(
 ) -> Optional[ConsolidationReport]:
     """Run the skillbook-consolidation turn, returning ``None`` when disabled or when there
     are no duplicate skills (keeps the report — and the contract golden — empty in the
-    common case). Consolidation proposals flow through the SAME gate as any proposal."""
+    common case)."""
 
     if not consolidate:
         return None
@@ -534,14 +498,6 @@ def _run_analysis(
         raise ImproveError(str(exc)) from exc
 
 
-def _check_spec_ids_for_proposal(db_path: Path, proposal_id: str) -> tuple[str, ...]:
-    return tuple(
-        str(spec["id"])
-        for spec in list_check_specs(db_path)
-        if spec.get("proposal_id") == proposal_id
-    )
-
-
 def _proposal_profile_id(db_path: Path, proposal_id: str) -> str:
     with connect(db_path) as connection:
         row = connection.execute(
@@ -568,22 +524,6 @@ def _profile_workspace_root_if_available(db_path: Path, profile_id: str) -> Opti
     if workspace_root.exists() and workspace_root.is_dir():
         return workspace_root
     return None
-
-
-def _default_replay_adapter_id(db_path: Path, profile_id: str) -> Optional[str]:
-    with connect(db_path) as connection:
-        row = connection.execute(
-            """
-            SELECT id
-            FROM replay_adapters
-            WHERE profile_id = ?
-              AND enabled = 1
-            ORDER BY updated_at DESC, id DESC
-            LIMIT 1
-            """,
-            (profile_id,),
-        ).fetchone()
-    return str(row["id"]) if row is not None else None
 
 
 def _default_output_dir(db_path: Path) -> Path:
@@ -615,33 +555,6 @@ def _analyze_report_json(report: Optional[AnalyzeReport]) -> Optional[dict[str, 
         if report.raw_output_path is not None
         else None,
     }
-
-
-def _replay_report_json(report: object, adapter_id: str) -> dict[str, Any]:
-    completion = getattr(report, "completion", None)
-    check_run = getattr(report, "check_run", None)
-    payload: dict[str, Any] = {
-        "adapter_id": adapter_id,
-        "replay_run_id": getattr(report, "replay_run_id", None),
-        "profile_id": getattr(report, "profile_id", None),
-        "check_spec_id": getattr(report, "check_spec_id", None),
-        "status": getattr(completion, "status", None) if completion is not None else None,
-        "output_run_id": getattr(completion, "output_run_id", None)
-        if completion is not None
-        else None,
-        "check_run": {
-            "check_run_id": check_run.check_run_id,
-            "status": check_run.status,
-            "promoted_trust_level": check_run.promoted_trust_level,
-        }
-        if check_run is not None
-        else None,
-    }
-    for attr in ("request_path", "result_path", "raw_output_path", "server_url"):
-        if hasattr(report, attr):
-            value = getattr(report, attr)
-            payload[attr] = str(value) if isinstance(value, Path) else value
-    return payload
 
 
 def _profile_id_from_outputs(

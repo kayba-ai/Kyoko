@@ -9,7 +9,9 @@ import type {
   AnalyzersBundle,
   Annotation,
   AnnotationKind,
+  ApplyProposalResult,
   AutonomyPolicy,
+  GuardMonitorReport,
   Comparison,
   ConsolidationReport,
   CreateScheduleBody,
@@ -171,6 +173,12 @@ export const api = {
 
   proposals: () => getJson<{ proposals: Proposal[] }>("/api/proposals").then((d) => d.proposals),
   proposalDetail: (id: string) => getJson<Record<string, unknown>>("/api/proposal-detail", { id }),
+  // Apply an authored proposal at HITL gate #2 (the human approve/apply step).
+  applyProposal: (proposalId: string, harnessWorkspaceRoot?: string) =>
+    postJson<ApplyProposalResult>("/api/proposals/apply", {
+      proposal_id: proposalId,
+      harness_workspace_root: harnessWorkspaceRoot,
+    }),
 
   issues: (opts: { status?: IssueStatus; section?: IssueSection } = {}) =>
     getJson<{ issues: Issue[] }>("/api/issues", {
@@ -207,6 +215,10 @@ export const api = {
     getJson<{ autonomy_events?: TimelineEvent[]; events?: TimelineEvent[] }>("/api/autonomy-events", { limit }).then(
       (d) => d.autonomy_events ?? d.events ?? [],
     ),
+  // Run the guard monitor: in autonomous mode it auto-rolls-back regressed fixes
+  // and escalates exhausted issues to HITL (autonomy_blocked). Evidence-producing.
+  guardMonitor: (profileId?: string) =>
+    postJson<GuardMonitorReport>("/api/guard-monitor", { profile_id: profileId }),
 
   checks: () => getJson<ChecksBundle>("/api/checks"),
 

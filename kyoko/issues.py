@@ -161,6 +161,23 @@ def _row_to_dict(row: Any) -> dict[str, Any]:
             row["recurrence_count"] if "recurrence_count" in row.keys() else None
         ),
         "accepted_at": row["accepted_at"] if "accepted_at" in row.keys() else None,
+        "applied_at": row["applied_at"] if "applied_at" in row.keys() else None,
+        "recurrence_count_at_apply": (
+            row["recurrence_count_at_apply"] if "recurrence_count_at_apply" in row.keys() else None
+        ),
+        "auto_fix_attempts": (
+            int(row["auto_fix_attempts"])
+            if "auto_fix_attempts" in row.keys() and row["auto_fix_attempts"] is not None
+            else 0
+        ),
+        "autonomy_blocked": (
+            bool(row["autonomy_blocked"])
+            if "autonomy_blocked" in row.keys() and row["autonomy_blocked"] is not None
+            else False
+        ),
+        "autonomy_blocked_reason": (
+            row["autonomy_blocked_reason"] if "autonomy_blocked_reason" in row.keys() else None
+        ),
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
@@ -728,6 +745,43 @@ def accept_issue(*, db_path: Path, issue_id: str) -> dict:
         issue_id=issue_id,
         assignments={"status": "accepted", "accepted_at": utc_now()},
     )
+
+
+def mark_issue_applied(*, db_path: Path, issue_id: str) -> dict:
+    """Gate #2 watermark (spec 0018): record that this issue's fix was just applied.
+
+    Stamps ``applied_at`` and snapshots ``recurrence_count_at_apply`` so the guard monitor
+    counts only *post-fix* recurrences (and never rolls back on stale pre-fix traces)."""
+
+    current = get_issue(db_path=db_path, issue_id=issue_id)
+    baseline = int(current.get("recurrence_count") or 1)
+    return _apply_issue_update(
+        db_path=db_path,
+        issue_id=issue_id,
+        assignments={"applied_at": utc_now(), "recurrence_count_at_apply": baseline},
+    )
+
+
+def mark_issue_rolled_back(
+    *, db_path: Path, issue_id: str, blocked: bool = False, reason: Optional[str] = None
+) -> dict:
+    """Guard-monitor regression handling (spec 0018): the applied fix regressed and was
+    rolled back. Clear the apply watermark (the fix is gone), re-open the issue for a new
+    fix, and bump ``auto_fix_attempts``. When ``blocked`` (autonomous retries exhausted),
+    set ``autonomy_blocked`` so the issue falls back to HITL even in autonomous mode."""
+
+    current = get_issue(db_path=db_path, issue_id=issue_id)
+    attempts = int(current.get("auto_fix_attempts") or 0) + 1
+    assignments: dict[str, Any] = {
+        "status": "open",
+        "applied_at": None,
+        "recurrence_count_at_apply": None,
+        "auto_fix_attempts": attempts,
+    }
+    if blocked:
+        assignments["autonomy_blocked"] = 1
+        assignments["autonomy_blocked_reason"] = reason or "auto_fix_attempts_exhausted"
+    return _apply_issue_update(db_path=db_path, issue_id=issue_id, assignments=assignments)
 
 
 # --------------------------------------------------------------------------------------

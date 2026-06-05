@@ -19,8 +19,8 @@ class AutonomyTests(unittest.TestCase):
             default_policy = get_autonomy_policy(db_path=db_path)
             updated_policy = update_autonomy_policy(
                 db_path=db_path,
-                context_mode="autonomous",
-                harness_mode="propose",
+                mode="autonomous",
+                recurrence_threshold=5,
                 allow_repo_patch=True,
                 dirty_worktree_policy="block",
             )
@@ -29,12 +29,18 @@ class AutonomyTests(unittest.TestCase):
             # being told which profile to target.
             self.assertEqual(default_policy["profile_id"], "profile_news_research_001")
             self.assertEqual(updated_policy["profile_id"], "profile_news_research_001")
-            self.assertEqual(default_policy["context_mode"], "propose")
-            self.assertEqual(default_policy["harness_mode"], "propose")
+            # Fresh-profile defaults (spec 0018 two-mode contract).
+            self.assertEqual(default_policy["mode"], "hitl")
+            self.assertEqual(default_policy["recurrence_threshold"], 3)
+            self.assertEqual(default_policy["regression_threshold"], 2)
+            self.assertTrue(default_policy["auto_rollback_on_regression"])
+            self.assertEqual(default_policy["max_auto_fix_attempts"], 1)
             self.assertFalse(default_policy["allow_repo_patch"])
             self.assertIn("checks/**", default_policy["allowed_paths"])
-            self.assertEqual(updated_policy["context_mode"], "autonomous")
-            self.assertEqual(updated_policy["harness_mode"], "propose")
+            self.assertEqual(default_policy["dirty_worktree_policy"], "block")
+            # Update applies only the supplied fields.
+            self.assertEqual(updated_policy["mode"], "autonomous")
+            self.assertEqual(updated_policy["recurrence_threshold"], 5)
             self.assertTrue(updated_policy["allow_repo_patch"])
             self.assertEqual(updated_policy["dirty_worktree_policy"], "block")
 
@@ -43,8 +49,8 @@ class AutonomyTests(unittest.TestCase):
             db_path = Path(tmpdir) / "kyoko.db"
             ingest_source_fixture(db_path, FIXTURE)
 
-            with self.assertRaisesRegex(AutonomyError, "invalid_context_mode"):
-                update_autonomy_policy(db_path=db_path, context_mode="always")
+            with self.assertRaisesRegex(AutonomyError, "invalid_mode"):
+                update_autonomy_policy(db_path=db_path, mode="always")
 
 
 if __name__ == "__main__":

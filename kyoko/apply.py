@@ -165,6 +165,201 @@ def apply_context_proposal(
     )
 
 
+@dataclass(frozen=True)
+class IssueRollbackReport:
+    """Result of reverting the applied fix for one issue (spec 0018 guard monitor)."""
+
+    issue_id: str
+    rolled_back_proposal_ids: tuple[str, ...]
+    rolled_back_skill_revision_ids: tuple[str, ...]
+    rolled_back_rule_revision_ids: tuple[str, ...]
+    escalate: bool
+    reason: str
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "issue_id": self.issue_id,
+            "rolled_back_proposal_ids": list(self.rolled_back_proposal_ids),
+            "rolled_back_skill_revision_ids": list(self.rolled_back_skill_revision_ids),
+            "rolled_back_rule_revision_ids": list(self.rolled_back_rule_revision_ids),
+            "escalate": self.escalate,
+            "reason": self.reason,
+        }
+
+
+def apply_proposal(
+    *,
+    db_path: Path,
+    proposal_id: str,
+    harness_workspace_root: Optional[Path] = None,
+) -> dict[str, Any]:
+    """HITL gate #2: a human approves and applies one pending proposal. The act of calling
+    this IS the approval, so it bypasses the autonomous-mode gate (but repo writes are still
+    subject to the ``allow_repo_patch`` fence, enforced inside the harness apply path)."""
+
+    initialize_database(db_path)
+    with connect(db_path) as connection:
+        proposal = _get_proposal(connection, proposal_id)
+        section = str(proposal["section"])
+        profile_id = str(proposal["profile_id"])
+        state = str(proposal["state"])
+
+    if state != "pending":
+        raise ApplyError(f"proposal_state_not_applyable:{state}")
+
+    if section == "context":
+        report = apply_context_proposal(db_path=db_path, proposal_id=proposal_id)
+        return {
+            "proposal_id": proposal_id,
+            "profile_id": profile_id,
+            "section": "context",
+            "state": "applied",
+            "applied_skill_ids": list(report.applied_skill_ids),
+            "applied_context_rule_ids": list(report.applied_context_rule_ids),
+            "patch_transaction_ids": [],
+        }
+
+    if section == "harness":
+        from .harness import (
+            HarnessError,
+            apply_patch_transaction,
+            prepare_harness_proposal,
+        )
+
+        root = harness_workspace_root or _profile_root_path(db_path, profile_id)
+        if root is None:
+            raise ApplyError("harness_workspace_root_required")
+        try:
+            prepared = prepare_harness_proposal(db_path=db_path, proposal_id=proposal_id)
+            applied_patch_ids: list[str] = []
+            for patch_transaction_id in prepared.patch_transaction_ids:
+                apply_patch_transaction(
+                    db_path=db_path,
+                    patch_transaction_id=patch_transaction_id,
+                    workspace_root=Path(root),
+                )
+                applied_patch_ids.append(patch_transaction_id)
+        except HarnessError as exc:
+            raise ApplyError(str(exc)) from exc
+        _set_proposal_state(db_path, proposal_id, "applied")
+        return {
+            "proposal_id": proposal_id,
+            "profile_id": profile_id,
+            "section": "harness",
+            "state": "applied",
+            "applied_skill_ids": [],
+            "applied_context_rule_ids": [],
+            "patch_transaction_ids": applied_patch_ids,
+        }
+
+    raise ApplyError(f"unsupported_apply_section:{section}")
+
+
+def rollback_applied_change_for_issue(*, db_path: Path, issue_id: str) -> IssueRollbackReport:
+    """Revert the applied fix(es) for one issue (spec 0018 guard monitor, on regression).
+
+    Traverses ``issue -> learning_proposals.issue_id -> revisions.proposal_id`` and reuses
+    the existing per-revision rollbacks. Context (skill + delivery-rule) revisions are
+    reverted in place. Harness/repo patches are NOT auto-reverted (a diverged worktree makes
+    that unsafe — spec 0018 Decision #6): they set ``escalate`` so the caller hands the issue
+    to a human instead."""
+
+    initialize_database(db_path)
+    with connect(db_path) as connection:
+        proposal_rows = connection.execute(
+            """
+            SELECT id, section FROM learning_proposals
+            WHERE issue_id = ? AND state = 'applied'
+            ORDER BY updated_at DESC, id DESC
+            """,
+            (issue_id,),
+        ).fetchall()
+        proposals = [(str(row["id"]), str(row["section"])) for row in proposal_rows]
+        skill_revs: dict[str, list[str]] = {}
+        rule_revs: dict[str, list[str]] = {}
+        for proposal_id, section in proposals:
+            if section != "context":
+                continue
+            skill_revs[proposal_id] = [
+                str(row["id"])
+                for row in connection.execute(
+                    "SELECT id FROM skill_revisions WHERE proposal_id = ? AND operation != 'rollback' "
+                    "ORDER BY created_at DESC, id DESC",
+                    (proposal_id,),
+                ).fetchall()
+            ]
+            rule_revs[proposal_id] = [
+                str(row["id"])
+                for row in connection.execute(
+                    "SELECT id FROM context_delivery_rule_revisions WHERE proposal_id = ? "
+                    "AND operation != 'rollback' ORDER BY created_at DESC, id DESC",
+                    (proposal_id,),
+                ).fetchall()
+            ]
+
+    rolled_back_skill_ids: list[str] = []
+    rolled_back_rule_ids: list[str] = []
+    reverted_proposal_ids: list[str] = []
+    reasons: list[str] = []
+    escalate = False
+
+    for proposal_id, section in proposals:
+        if section != "context":
+            escalate = True
+            reasons.append(f"harness_proposal_escalated:{proposal_id}")
+            continue
+        clean = True
+        for revision_id in rule_revs.get(proposal_id, []):
+            try:
+                report = rollback_context_delivery_rule_revision(db_path=db_path, revision_id=revision_id)
+                rolled_back_rule_ids.append(report.rollback_revision_id)
+            except (ApplyError, StorageError) as exc:
+                clean = False
+                reasons.append(f"rule_rollback_skipped:{revision_id}:{exc}")
+        for revision_id in skill_revs.get(proposal_id, []):
+            try:
+                report = rollback_skill_revision(db_path=db_path, revision_id=revision_id)
+                rolled_back_skill_ids.append(report.rollback_revision_id)
+            except (ApplyError, StorageError) as exc:
+                clean = False
+                reasons.append(f"skill_rollback_skipped:{revision_id}:{exc}")
+        if clean:
+            _set_proposal_state(db_path, proposal_id, "rolled_back")
+            reverted_proposal_ids.append(proposal_id)
+        else:
+            escalate = True
+
+    return IssueRollbackReport(
+        issue_id=issue_id,
+        rolled_back_proposal_ids=tuple(reverted_proposal_ids),
+        rolled_back_skill_revision_ids=tuple(rolled_back_skill_ids),
+        rolled_back_rule_revision_ids=tuple(rolled_back_rule_ids),
+        escalate=escalate,
+        reason="; ".join(reasons) if reasons else "rolled_back",
+    )
+
+
+def _set_proposal_state(db_path: Path, proposal_id: str, state: str) -> None:
+    with connect(db_path) as connection:
+        connection.execute(
+            "UPDATE learning_proposals SET state = ?, updated_at = ? WHERE id = ?",
+            (state, utc_now(), proposal_id),
+        )
+
+
+def _profile_root_path(db_path: Path, profile_id: str) -> Optional[Path]:
+    with connect(db_path) as connection:
+        row = connection.execute(
+            "SELECT root_path FROM profiles WHERE id = ?", (profile_id,)
+        ).fetchone()
+    if row is None:
+        return None
+    root_path = row["root_path"]
+    if not isinstance(root_path, str) or not root_path:
+        return None
+    return Path(root_path).expanduser()
+
+
 def list_skills(db_path: Path, *, profile_id: Optional[str] = None) -> list[dict[str, Any]]:
     if not db_path.exists():
         return []
@@ -566,12 +761,9 @@ def _validate_apply_allowed(
     if section != "context":
         raise ApplyError(f"unsupported_apply_section:{section}")
 
-    policy = _get_policy(connection, profile_id)
-    if policy["context_mode"] == "off":
-        raise ApplyError("context_policy_off")
-    if int(policy["allow_skillbook_write"]) != 1:
-        raise ApplyError("skillbook_write_not_allowed")
-
+    # v31 (spec 0018): the gate decision (autonomous auto-apply vs HITL human-approve) is
+    # made by the caller; this low-level apply only validates the change payload. Context
+    # writes have no separate capability fence (only repo patches do, enforced in harness).
     changes = _json_loads(proposal["proposed_changes_json"], [])
     if not isinstance(changes, list):
         raise ApplyError("invalid_proposed_changes")

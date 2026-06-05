@@ -561,13 +561,9 @@ def replay(request):
                 report.improve.proposal_id,
                 "proposal_mock_span_installed_langgraph_fetch_001",
             )
-            self.assertEqual(
-                report.improve.generated_check_spec_ids,
-                ("check_proposal_mock_span_installed_langgraph_fetch_001_1",),
-            )
-            self.assertEqual(report.improve.replay_runs[0]["status"], "passed")
-            self.assertEqual(report.improve.replay_runs[0]["output_run_id"], "run_installed_langgraph_replay_001")
-            self.assertEqual(report.improve.replay_runs[0]["check_run"]["status"], "passed")
+            # v31 (spec 0018): the loop authors -> auto-applies -> mints a guard (no replay/checks).
+            self.assertTrue(report.improve.proposal_ids)
+            self.assertTrue(report.improve.guard_reports)
             self.assertEqual(report.improve.autonomy.decisions[0].action, "applied")
 
     def test_cli_framework_replay_integration_smoke_json(self) -> None:
@@ -640,7 +636,8 @@ def replay(request):
                 payload["improve"]["proposal_id"],
                 "proposal_mock_span_installed_langgraph_fetch_001",
             )
-            self.assertEqual(payload["improve"]["replay_runs"][0]["status"], "passed")
+            self.assertTrue(payload["improve"]["proposal_ids"])
+            self.assertTrue(payload["improve"]["guards"])
 
     def test_cli_replay_server_integration_smoke_json(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -707,12 +704,9 @@ def replay(request):
             self.assertEqual(report.framework, "generic-python")
             self.assertEqual(report.source_smoke.profile_id, "profile_framework_improve_smoke")
             self.assertEqual(report.improve.proposal_id, "proposal_mock_span_framework_fetch_timeout_001")
-            self.assertEqual(
-                report.improve.generated_check_spec_ids,
-                ("check_proposal_mock_span_framework_fetch_timeout_001_1",),
-            )
-            self.assertEqual(report.improve.replay_runs[0]["status"], "passed")
-            self.assertEqual(report.improve.replay_runs[0]["check_run"]["status"], "passed")
+            # v31 (spec 0018): the loop authors -> auto-applies -> mints a guard (no replay/checks).
+            self.assertTrue(report.improve.proposal_ids)
+            self.assertTrue(report.improve.guard_reports)
             self.assertEqual(report.improve.autonomy.decisions[0].action, "applied")
 
     def test_cli_improve_integration_smoke_json(self) -> None:
@@ -739,7 +733,8 @@ def replay(request):
             self.assertTrue(payload["passed"])
             self.assertEqual(payload["kind"], "improve_smoke")
             self.assertEqual(payload["improve"]["proposal_id"], "proposal_mock_span_framework_fetch_timeout_001")
-            self.assertEqual(payload["improve"]["replay_runs"][0]["status"], "passed")
+            self.assertTrue(payload["improve"]["proposal_ids"])
+            self.assertTrue(payload["improve"]["guards"])
 
 
 def _write_fake_langgraph_package(root: Path) -> None:

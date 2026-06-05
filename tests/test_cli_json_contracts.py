@@ -737,10 +737,16 @@ class CliJsonContractTests(unittest.TestCase):
                     "policy-set",
                     "--db",
                     str(db_path),
-                    "--context-mode",
+                    "--mode",
                     "autonomous",
-                    "--harness-mode",
-                    "propose",
+                    "--recurrence-threshold",
+                    "5",
+                    "--regression-threshold",
+                    "4",
+                    "--auto-rollback",
+                    "off",
+                    "--max-auto-fix-attempts",
+                    "3",
                     "--repo-patch",
                     "on",
                     "--dirty-worktree-policy",
@@ -1242,8 +1248,10 @@ class CliJsonContractTests(unittest.TestCase):
                     "policy-set",
                     "--db",
                     str(db_path),
-                    "--context-mode",
+                    "--mode",
                     "autonomous",
+                    "--repo-patch",
+                    "on",
                     "--json",
                 ]
             )
@@ -2311,8 +2319,10 @@ def replay(request):
                     "policy-set",
                     "--db",
                     str(kyoko_db),
-                    "--context-mode",
+                    "--mode",
                     "autonomous",
+                    "--repo-patch",
+                    "on",
                     "--json",
                 ]
             )
@@ -2325,8 +2335,6 @@ def replay(request):
                     str(kyoko_db),
                     "--proposal-id",
                     "proposal_context_timeout_001",
-                    "--replay-adapter",
-                    "fixture_replay",
                     "--json",
                 ]
             )
@@ -2365,8 +2373,10 @@ def replay(request):
                     "policy-set",
                     "--db",
                     str(kyoko_db),
-                    "--context-mode",
+                    "--mode",
                     "autonomous",
+                    "--repo-patch",
+                    "on",
                     "--json",
                 ]
             )
@@ -3745,21 +3755,17 @@ def _policy_payload_contract(payload: dict) -> dict:
 
 def _policy_contract(policy: dict) -> dict:
     return {
-        "allow_check_write": policy["allow_check_write"],
-        "allow_profile_config_write": policy["allow_profile_config_write"],
-        "allow_replay_server_patch": policy["allow_replay_server_patch"],
         "allow_repo_patch": policy["allow_repo_patch"],
-        "allow_skillbook_write": policy["allow_skillbook_write"],
         "allowed_paths": policy["allowed_paths"],
-        "context_mode": policy["context_mode"],
+        "auto_rollback_on_regression": policy["auto_rollback_on_regression"],
         "dirty_worktree_policy": policy["dirty_worktree_policy"],
-        "harness_mode": policy["harness_mode"],
+        "max_auto_fix_attempts": policy["max_auto_fix_attempts"],
+        "mode": policy["mode"],
         "profile_id": policy["profile_id"],
         "protected_paths": policy["protected_paths"],
-        "required_check_level_context": policy["required_check_level_context"],
-        "required_check_level_harness": policy["required_check_level_harness"],
-        "rollback_on_regression": policy["rollback_on_regression"],
-        "timestamps_present": _timestamps_present(policy, ("created_at", "updated_at")),
+        "recurrence_threshold": policy["recurrence_threshold"],
+        "regression_threshold": policy["regression_threshold"],
+        "timestamps_present": _timestamps_present(policy, ("updated_at",)),
     }
 
 
@@ -4000,13 +4006,10 @@ def _run_autonomy_contract(payload: dict) -> dict:
                 "applied_context_rule_ids": decision["applied_context_rule_ids"],
                 "applied_skill_ids": decision["applied_skill_ids"],
                 "detail": decision["detail"],
-                "check_run_ids": decision["check_run_ids"],
-                "check_spec_ids": decision["check_spec_ids"],
                 "patch_transaction_ids": decision["patch_transaction_ids"],
                 "profile_id": decision["profile_id"],
                 "proposal_id": decision["proposal_id"],
                 "reason": decision["reason"],
-                "required_check_level": decision["required_check_level"],
                 "section": decision["section"],
                 "state_after": decision["state_after"],
                 "state_before": decision["state_before"],
@@ -6239,24 +6242,6 @@ def _normalize_issue_ids(text: str) -> str:
 
 def _improve_contract(payload: dict) -> dict:
     autonomy = payload["autonomy"]
-    replay_runs = []
-    for run in payload["replay_runs"]:
-        replay_runs.append(
-            {
-                "adapter_id": run["adapter_id"],
-                "check_run": run["check_run"],
-                "check_spec_id": run["check_spec_id"],
-                "output_run_id": run["output_run_id"],
-                "path_fields_present": {
-                    "raw_output_path": bool(run.get("raw_output_path")),
-                    "request_path": bool(run.get("request_path")),
-                    "result_path": bool(run.get("result_path")),
-                },
-                "profile_id": run["profile_id"],
-                "replay_run_id": run["replay_run_id"],
-                "status": run["status"],
-            }
-        )
     return {
         "analyze_present": payload["analyze"] is not None,
         "autonomy": {
@@ -6265,12 +6250,9 @@ def _improve_contract(payload: dict) -> dict:
                     "action": decision["action"],
                     "applied_context_rule_ids": decision["applied_context_rule_ids"],
                     "applied_skill_ids": decision["applied_skill_ids"],
-                    "check_run_ids": decision["check_run_ids"],
-                    "check_spec_ids": decision["check_spec_ids"],
                     "patch_transaction_ids": decision["patch_transaction_ids"],
                     "proposal_id": decision["proposal_id"],
                     "reason": decision["reason"],
-                    "required_check_level": decision["required_check_level"],
                     "section": decision["section"],
                     "state_after": decision["state_after"],
                     "state_before": decision["state_before"],
@@ -6279,26 +6261,20 @@ def _improve_contract(payload: dict) -> dict:
             ],
             "policy": {
                 "allow_repo_patch": autonomy["policy"]["allow_repo_patch"],
-                "allow_skillbook_write": autonomy["policy"]["allow_skillbook_write"],
-                "context_mode": autonomy["policy"]["context_mode"],
-                "harness_mode": autonomy["policy"]["harness_mode"],
-                "required_check_level_context": autonomy["policy"]["required_check_level_context"],
-                "required_check_level_harness": autonomy["policy"]["required_check_level_harness"],
-                "rollback_on_regression": autonomy["policy"]["rollback_on_regression"],
+                "mode": autonomy["policy"]["mode"],
+                "recurrence_threshold": autonomy["policy"]["recurrence_threshold"],
+                "regression_threshold": autonomy["policy"]["regression_threshold"],
             },
             "profile_id": autonomy["profile_id"],
         },
-        "check_spec_ids": payload["check_spec_ids"],
         "consolidation_present": payload["consolidation"] is not None,
-        "existing_check_spec_ids": payload["existing_check_spec_ids"],
-        "generated_check_spec_ids": payload["generated_check_spec_ids"],
         "gate1_outcome_count": len(payload["gate1_outcomes"]),
+        "guard_count": len(payload["guards"]),
         "notes": [_normalize_issue_ids(note) for note in payload["notes"]],
         "operator": payload["operator"],
         "profile_id": payload["profile_id"],
         "proposal_id": payload["proposal_id"],
         "proposal_id_count": len(payload["proposal_ids"]),
-        "replay_runs": replay_runs,
         "source_import_present": payload["source_import"] is not None,
     }
 
@@ -6327,12 +6303,9 @@ def _autonomy_events_contract(payload: dict) -> dict:
                     "applied_context_rule_ids": metadata.get("applied_context_rule_ids"),
                     "applied_skill_ids": metadata.get("applied_skill_ids"),
                     "decision_kind": metadata.get("decision_kind"),
-                    "check_run_ids": metadata.get("check_run_ids"),
-                    "check_spec_ids": metadata.get("check_spec_ids"),
                     "patch_transaction_ids": metadata.get("patch_transaction_ids"),
                     "profile_id": metadata.get("profile_id"),
                     "reason": metadata.get("reason"),
-                    "required_check_level": metadata.get("required_check_level"),
                     "section": metadata.get("section"),
                     "state_after": metadata.get("state_after"),
                     "state_before": metadata.get("state_before"),

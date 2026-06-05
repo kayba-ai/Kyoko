@@ -1,16 +1,13 @@
 import json
-import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
 from kyoko.apply import list_skills
 from kyoko.autonomy import update_autonomy_policy
-from kyoko.checks import list_check_runs, list_check_specs, list_replay_runs
 from kyoko.harness import list_patch_transactions
 from kyoko.improve import run_improvement_loop
 from kyoko.proposals import submit_learning_proposal, submit_learning_proposal_payload
-from kyoko.replay_adapters import register_replay_adapter
 from kyoko.storage import ingest_source_fixture, ingest_source_payload
 
 
@@ -21,11 +18,12 @@ VALID_GENERATED_FILE_PROPOSAL = (
     ROOT / "docs/fixtures/learning-proposals/valid-harness-generated-file-proposal.json"
 )
 SCHEMA = ROOT / "docs/schemas/learning-proposal.schema.json"
-REPLAY_COMMAND = ROOT / "tests/fixtures/replay_command.py"
 
 
 class ImproveTests(unittest.TestCase):
-    def test_improvement_loop_runs_check_replay_and_autonomy_for_existing_proposal(self) -> None:
+    def test_improvement_loop_auto_applies_existing_proposal_in_autonomous_mode(self) -> None:
+        # Spec 0018: the loop no longer wires check/replay. A direct proposal skips gate #1
+        # and, in autonomous mode, gate #2 auto-applies it (validation is post-hoc).
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
             ingest_source_fixture(db_path, SOURCE_FIXTURE)
@@ -34,39 +32,26 @@ class ImproveTests(unittest.TestCase):
                 proposal_path=VALID_PROPOSAL,
                 schema_path=SCHEMA,
             )
-            register_replay_adapter(
-                db_path=db_path,
-                adapter_id="fixture_replay",
-                name="Fixture replay",
-                command=[sys.executable, str(REPLAY_COMMAND)],
-                output_dir=Path(tmpdir) / "replay",
-                default_side_effect_mode="network_mocked",
-            )
-            update_autonomy_policy(db_path=db_path, context_mode="autonomous")
+            update_autonomy_policy(db_path=db_path, mode="autonomous")
 
             report = run_improvement_loop(
                 db_path=db_path,
                 proposal_id="proposal_context_timeout_001",
-                replay_adapter_id="fixture_replay",
                 output_dir=Path(tmpdir) / "improve",
                 schema_path=SCHEMA,
             )
 
             self.assertEqual(report.proposal_id, "proposal_context_timeout_001")
-            self.assertEqual(report.check_spec_ids, ("check_proposal_context_timeout_001_1",))
-            self.assertEqual(report.generated_check_spec_ids, ("check_proposal_context_timeout_001_1",))
-            self.assertEqual(report.replay_runs[0]["check_run"]["status"], "passed")
             self.assertEqual(report.autonomy.decisions[0].action, "applied")
+            self.assertEqual(report.autonomy.decisions[0].reason, "autonomous_auto_apply")
             self.assertEqual(
                 report.autonomy.decisions[0].applied_skill_ids,
                 ("skill_proposal_context_timeout_001_1",),
             )
-            self.assertEqual(len(list_check_specs(db_path)), 1)
-            self.assertEqual(len(list_replay_runs(db_path)), 1)
-            self.assertEqual(len(list_check_runs(db_path)), 1)
             self.assertEqual(len(list_skills(db_path)), 1)
 
-    def test_improvement_loop_defaults_to_latest_enabled_replay_adapter(self) -> None:
+    def test_improvement_loop_holds_existing_proposal_in_hitl_mode(self) -> None:
+        # In HITL (default) gate #2 applies nothing: the proposal awaits a human approve.
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
             ingest_source_fixture(db_path, SOURCE_FIXTURE)
@@ -75,23 +60,6 @@ class ImproveTests(unittest.TestCase):
                 proposal_path=VALID_PROPOSAL,
                 schema_path=SCHEMA,
             )
-            register_replay_adapter(
-                db_path=db_path,
-                adapter_id="aaa_replay",
-                name="AAA replay",
-                command=[sys.executable, str(REPLAY_COMMAND)],
-                output_dir=Path(tmpdir) / "aaa-replay",
-                default_side_effect_mode="network_mocked",
-            )
-            register_replay_adapter(
-                db_path=db_path,
-                adapter_id="zzz_replay",
-                name="ZZZ replay",
-                command=[sys.executable, str(REPLAY_COMMAND)],
-                output_dir=Path(tmpdir) / "zzz-replay",
-                default_side_effect_mode="network_mocked",
-            )
-            update_autonomy_policy(db_path=db_path, context_mode="autonomous")
 
             report = run_improvement_loop(
                 db_path=db_path,
@@ -100,9 +68,13 @@ class ImproveTests(unittest.TestCase):
                 schema_path=SCHEMA,
             )
 
-            self.assertEqual(report.replay_runs[0]["adapter_id"], "zzz_replay")
-            self.assertEqual(report.replay_runs[0]["check_run"]["status"], "passed")
-            self.assertEqual(report.autonomy.decisions[0].action, "applied")
+            self.assertEqual(report.proposal_id, "proposal_context_timeout_001")
+            self.assertEqual(report.autonomy.decisions[0].action, "awaiting_human_review")
+            self.assertEqual(
+                report.autonomy.decisions[0].reason, "hitl_awaiting_human_approve"
+            )
+            # Nothing applied: skillbook stays empty.
+            self.assertEqual(len(list_skills(db_path)), 0)
 
     def test_improvement_loop_applies_harness_patch_with_workspace_root(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -118,35 +90,21 @@ class ImproveTests(unittest.TestCase):
                 proposal=proposal,
                 schema_path=SCHEMA,
             )
-            register_replay_adapter(
-                db_path=db_path,
-                adapter_id="fixture_replay",
-                name="Fixture replay",
-                command=[sys.executable, str(REPLAY_COMMAND)],
-                output_dir=Path(tmpdir) / "replay",
-                default_side_effect_mode="network_mocked",
-            )
             update_autonomy_policy(
                 db_path=db_path,
-                harness_mode="autonomous",
+                mode="autonomous",
                 allow_repo_patch=True,
             )
 
             report = run_improvement_loop(
                 db_path=db_path,
                 proposal_id="proposal_harness_generated_check_001",
-                replay_adapter_id="fixture_replay",
                 output_dir=Path(tmpdir) / "improve",
                 schema_path=SCHEMA,
                 harness_workspace_root=workspace,
             )
             patches = list_patch_transactions(db_path)
 
-            self.assertEqual(
-                report.generated_check_spec_ids,
-                ("check_proposal_harness_generated_check_001_1",),
-            )
-            self.assertEqual(report.replay_runs[0]["check_run"]["status"], "passed")
             self.assertEqual(report.autonomy.decisions[0].action, "applied")
             self.assertEqual(
                 report.autonomy.decisions[0].patch_transaction_ids,
@@ -156,7 +114,7 @@ class ImproveTests(unittest.TestCase):
             self.assertTrue(target.exists())
             self.assertIn("TIMEOUT_SPAN_ID", target.read_text())
 
-    def test_improvement_loop_preserves_profile_root_for_harness_patch_after_replay(self) -> None:
+    def test_improvement_loop_preserves_profile_root_for_harness_patch(self) -> None:
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
             workspace = Path(tmpdir) / "workspace"
@@ -174,29 +132,19 @@ class ImproveTests(unittest.TestCase):
                 proposal=proposal,
                 schema_path=SCHEMA,
             )
-            register_replay_adapter(
-                db_path=db_path,
-                adapter_id="fixture_replay",
-                name="Fixture replay",
-                command=[sys.executable, str(REPLAY_COMMAND)],
-                output_dir=Path(tmpdir) / "replay",
-                default_side_effect_mode="network_mocked",
-            )
             update_autonomy_policy(
                 db_path=db_path,
-                harness_mode="autonomous",
+                mode="autonomous",
                 allow_repo_patch=True,
             )
 
             report = run_improvement_loop(
                 db_path=db_path,
                 proposal_id="proposal_harness_generated_check_001",
-                replay_adapter_id="fixture_replay",
                 output_dir=Path(tmpdir) / "improve",
                 schema_path=SCHEMA,
             )
 
-            self.assertEqual(report.replay_runs[0]["check_run"]["status"], "passed")
             self.assertEqual(report.autonomy.decisions[0].action, "applied")
             self.assertTrue(target.exists())
             self.assertIn("TIMEOUT_SPAN_ID", target.read_text())
@@ -221,33 +169,40 @@ class ImproveTests(unittest.TestCase):
             self.assertIsNotNone(report.source_import)
             self.assertEqual(report.source_import.candidate["id"], "openclaw_main")
             self.assertEqual(report.profile_id, "profile_openclaw_main")
-            # Default context_mode is `propose`: analysis surfaces+diagnoses the issue but
-            # leaves it for a human to accept — no proposal is authored this run.
+            # Default mode is `hitl`: analysis surfaces+diagnoses the issue but gate #1 holds
+            # it for a human to accept — no proposal is authored this run.
             self.assertIsNone(report.proposal_id)
             self.assertEqual(report.proposal_ids, ())
             self.assertIsNotNone(report.analyze)
             self.assertEqual(len(report.analyze.new_issue_ids), 1)
-            self.assertEqual(report.generated_check_spec_ids, ())
-            self.assertEqual(report.replay_runs, ())
             self.assertIsNone(report.autonomy)
             self.assertEqual(len(report.gate1_outcomes), 1)
-            self.assertEqual(report.gate1_outcomes[0]["mode"], "propose")
+            self.assertEqual(report.gate1_outcomes[0]["mode"], "hitl")
+            self.assertFalse(report.gate1_outcomes[0]["allow"])
+            self.assertEqual(
+                report.gate1_outcomes[0]["reason"], "hitl_awaiting_human_accept"
+            )
             self.assertTrue(
                 any(
-                    note.startswith("gate1_propose_awaiting_acceptance:")
+                    note.startswith("gate1_hold:")
+                    and note.endswith(":hitl_awaiting_human_accept")
                     for note in report.notes
                 )
             )
             self.assertTrue(Path(report.source_import.to_json()["import"]["normalized_path"]).exists())
 
-    def test_improvement_loop_autonomous_authors_proposal_from_analysis(self) -> None:
-        # When the section's autonomy mode is `autonomous`, analysis surfaces the issue and
-        # the loop accepts it + authors a proposal that flows through the check/replay gate.
+    def test_improvement_loop_autonomous_authors_proposal_at_recurrence_threshold(self) -> None:
+        # Spec 0018 gate #1: in autonomous mode analysis surfaces the issue and the loop
+        # authors a proposal only once recurrence_count >= recurrence_threshold. We set the
+        # threshold to 1 so a freshly surfaced issue (recurrence_count == 1) clears the gate;
+        # the proposal then auto-applies through gate #2.
         with TemporaryDirectory() as tmpdir:
             tmp_path = Path(tmpdir)
             db_path = tmp_path / "kyoko.db"
             ingest_source_fixture(db_path, SOURCE_FIXTURE)
-            update_autonomy_policy(db_path=db_path, context_mode="autonomous")
+            update_autonomy_policy(
+                db_path=db_path, mode="autonomous", recurrence_threshold=1
+            )
 
             report = run_improvement_loop(
                 db_path=db_path,
@@ -260,9 +215,39 @@ class ImproveTests(unittest.TestCase):
             self.assertEqual(len(report.analyze.new_issue_ids), 1)
             self.assertEqual(len(report.proposal_ids), 1)
             self.assertEqual(report.proposal_id, report.proposal_ids[0])
-            self.assertTrue(report.generated_check_spec_ids)
             self.assertIsNotNone(report.autonomy)
             self.assertEqual(report.gate1_outcomes[0]["mode"], "autonomous")
+            self.assertTrue(report.gate1_outcomes[0]["allow"])
+
+    def test_improvement_loop_autonomous_holds_below_recurrence_threshold(self) -> None:
+        # Below threshold the autonomous gate #1 holds: the issue is surfaced but no proposal
+        # is authored until the failure recurs enough times in production.
+        with TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            db_path = tmp_path / "kyoko.db"
+            ingest_source_fixture(db_path, SOURCE_FIXTURE)
+            update_autonomy_policy(
+                db_path=db_path, mode="autonomous", recurrence_threshold=3
+            )
+
+            report = run_improvement_loop(
+                db_path=db_path,
+                output_dir=tmp_path / "improve",
+                schema_path=SCHEMA,
+                run_autonomy_after=True,
+            )
+
+            self.assertEqual(len(report.analyze.new_issue_ids), 1)
+            # recurrence_count starts at 1 < threshold 3 -> nothing authored.
+            self.assertEqual(report.proposal_ids, ())
+            self.assertIsNone(report.proposal_id)
+            self.assertEqual(report.gate1_outcomes[0]["mode"], "autonomous")
+            self.assertFalse(report.gate1_outcomes[0]["allow"])
+            self.assertTrue(
+                report.gate1_outcomes[0]["reason"].startswith(
+                    "recurrence_below_threshold:"
+                )
+            )
 
 
 def _source_fixture_with_root(root_path: Path) -> dict:

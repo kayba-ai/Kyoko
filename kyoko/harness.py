@@ -292,8 +292,8 @@ def apply_patch_transaction(
         proposal = _get_proposal(connection, str(patch_transaction["proposal_id"]))
         profile_id = str(patch_transaction["profile_id"])
         policy = _get_policy(connection, profile_id)
-        if policy["harness_mode"] == "off":
-            raise HarnessError("harness_policy_off")
+        # v31 (spec 0018): repo writes are gated solely by the `allow_repo_patch`
+        # capability fence (the per-section harness_mode is gone).
         if int(policy["allow_repo_patch"]) != 1:
             raise HarnessError("repo_patch_not_allowed")
         _ensure_kyoko_source(connection, profile_id)
@@ -441,8 +441,6 @@ def _validate_prepare_allowed(
         raise HarnessError(f"unsupported_harness_section:{section}")
 
     policy = _get_policy(connection, profile_id)
-    if policy["harness_mode"] == "off":
-        raise HarnessError("harness_policy_off")
 
     changes = _json_loads(proposal["proposed_changes_json"], [])
     if not isinstance(changes, list):

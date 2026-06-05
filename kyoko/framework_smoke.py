@@ -545,7 +545,9 @@ def run_installed_framework_improve_smoke(
         update_autonomy_policy(
             db_path=db_path,
             profile_id=source_smoke.profile_id,
-            context_mode="autonomous",
+            mode="autonomous",
+            recurrence_threshold=1,
+            allow_repo_patch=True,
         )
         with _temporary_env("KYOKO_REPLAY_HOOK", f"{replay_hook_path}:replay"):
             improve = run_improvement_loop(
@@ -554,9 +556,6 @@ def run_installed_framework_improve_smoke(
                 operator="mock",
                 profile_id=source_smoke.profile_id,
                 schema_path=schema_path,
-                replay_adapter_id=replay_adapter.adapter_id,
-                replay_output_dir=replay_output_dir,
-                replay_timeout_seconds=timeout_seconds,
                 run_autonomy_after=True,
             )
     except (
@@ -793,18 +792,14 @@ def _replay_adapter_json(report: ReplayAdapterRegisterReport) -> dict[str, Any]:
 
 
 def _improve_report_passed(report: ImproveReport) -> bool:
-    if not report.replay_runs:
-        return False
+    # v31 (spec 0018): the loop no longer runs replay/checks. A passing smoke now means the
+    # autonomous loop authored a fix, applied it, and minted a standing guard.
     if not report.autonomy or not report.autonomy.decisions:
         return False
-    replay_passed = all(
-        replay.get("status") == "passed"
-        and isinstance(replay.get("check_run"), dict)
-        and replay["check_run"].get("status") == "passed"
-        for replay in report.replay_runs
-    )
     applied = any(decision.action == "applied" for decision in report.autonomy.decisions)
-    return replay_passed and applied
+    authored = bool(report.proposal_ids)
+    guarded = bool(report.guard_reports)
+    return applied and authored and guarded
 
 
 def _improve_replay_output_marks_installed_framework(
@@ -813,18 +808,23 @@ def _improve_replay_output_marks_installed_framework(
     improve: ImproveReport,
     package_name: str,
 ) -> bool:
-    output_run_ids = [
-        replay.get("output_run_id")
-        for replay in improve.replay_runs
-        if isinstance(replay.get("output_run_id"), str)
-    ]
+    # v31 (spec 0018): replay left the improve loop, so the installed framework now proves
+    # participation through the imported SOURCE traces that drove analysis. Scan recent runs
+    # for the framework marker rather than the (now absent) replay output runs.
+    with connect(db_path) as connection:
+        run_ids = [
+            str(row["id"])
+            for row in connection.execute(
+                "SELECT id FROM runs ORDER BY rowid DESC LIMIT 25"
+            ).fetchall()
+        ]
     return any(
         _stored_run_marks_installed_framework(
             db_path=db_path,
-            run_id=str(output_run_id),
+            run_id=run_id,
             package_name=package_name,
         )
-        for output_run_id in output_run_ids
+        for run_id in run_ids
     )
 
 

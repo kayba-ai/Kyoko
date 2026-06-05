@@ -436,7 +436,7 @@ class McpTests(unittest.TestCase):
             )
 
             self.assertFalse(status["isError"])
-            self.assertEqual(status["structuredContent"]["schema_version"], 30)
+            self.assertEqual(status["structuredContent"]["schema_version"], 31)
             self.assertEqual(
                 profiles["structuredContent"]["profiles"][0]["id"],
                 "profile_news_research_001",
@@ -465,7 +465,7 @@ class McpTests(unittest.TestCase):
             self.assertEqual(blobs["structuredContent"]["payload_blobs"][0]["id"], blob.blob_id)
             self.assertTrue(payload_prune["structuredContent"]["dry_run"])
             self.assertEqual(payload_prune["structuredContent"]["pruned_blobs"][0]["blob_id"], blob.blob_id)
-            self.assertEqual(policy["structuredContent"]["policy"]["context_mode"], "propose")
+            self.assertEqual(policy["structuredContent"]["policy"]["mode"], "hitl")
             self.assertTrue(retention_prune["structuredContent"]["dry_run"])
             self.assertEqual(retention_prune["structuredContent"]["summary"]["pruned_rows"], 0)
             self.assertEqual(evidence["structuredContent"]["summary"]["failed_spans"], 1)
@@ -570,13 +570,11 @@ class McpTests(unittest.TestCase):
             self.assertTrue(payload["mcp_autonomy_disabled"])
             self.assertEqual(payload["source_import"]["candidate"]["id"], "openclaw_main")
             self.assertEqual(payload["profile_id"], "profile_openclaw_main")
-            # Default context_mode is `propose`: analysis surfaces+diagnoses the issue but
-            # no proposal is authored (left for a human to accept). Diagnosis-only outcome.
+            # Default mode is `hitl`: analysis surfaces+diagnoses the issue but no proposal
+            # is authored (left for a human to accept). Diagnosis-only outcome.
             self.assertIsNone(payload["proposal_id"])
             self.assertEqual(payload["proposal_ids"], [])
-            self.assertEqual(payload["generated_check_spec_ids"], [])
             self.assertEqual(len(payload["analyze"]["new_issue_ids"]), 1)
-            self.assertEqual(payload["replay_runs"], [])
             self.assertIsNone(payload["autonomy"])
 
     def test_run_judge_command_tool_captures_external_verdict(self) -> None:

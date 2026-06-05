@@ -19,6 +19,7 @@ from .analyze import (
 from .apply import (
     ApplyError,
     apply_context_proposal,
+    apply_proposal,
     list_context_delivery_rules,
     list_context_delivery_rule_revisions,
     list_skill_revisions,
@@ -30,6 +31,7 @@ from .apply import (
 )
 from .autonomy import AutonomyError, get_autonomy_policy, update_autonomy_policy
 from .autonomy_runner import AutonomyRunError, run_autonomy
+from .guard_monitor import GuardMonitorError, monitor_guarded_issues
 from .blobs import list_payload_blobs, prune_payload_blobs, storage_report
 from .dashboard_metrics import DashboardMetricsError, get_dashboard_metrics
 from .demo import DemoError, run_demo_setup
@@ -1505,41 +1507,65 @@ def make_handler(
                         profile_id=payload.get("profile_id")
                         if isinstance(payload.get("profile_id"), str)
                         else None,
-                        context_mode=payload.get("context_mode")
-                        if isinstance(payload.get("context_mode"), str)
+                        mode=payload.get("mode")
+                        if isinstance(payload.get("mode"), str)
                         else None,
-                        harness_mode=payload.get("harness_mode")
-                        if isinstance(payload.get("harness_mode"), str)
+                        recurrence_threshold=payload.get("recurrence_threshold")
+                        if isinstance(payload.get("recurrence_threshold"), int)
+                        and not isinstance(payload.get("recurrence_threshold"), bool)
+                        else None,
+                        regression_threshold=payload.get("regression_threshold")
+                        if isinstance(payload.get("regression_threshold"), int)
+                        and not isinstance(payload.get("regression_threshold"), bool)
+                        else None,
+                        auto_rollback_on_regression=payload.get("auto_rollback_on_regression")
+                        if isinstance(payload.get("auto_rollback_on_regression"), bool)
+                        else None,
+                        max_auto_fix_attempts=payload.get("max_auto_fix_attempts")
+                        if isinstance(payload.get("max_auto_fix_attempts"), int)
+                        and not isinstance(payload.get("max_auto_fix_attempts"), bool)
                         else None,
                         allow_repo_patch=payload.get("allow_repo_patch")
                         if isinstance(payload.get("allow_repo_patch"), bool)
                         else None,
-                        allow_check_write=payload.get("allow_check_write")
-                        if isinstance(payload.get("allow_check_write"), bool)
-                        else None,
-                        allow_skillbook_write=payload.get("allow_skillbook_write")
-                        if isinstance(payload.get("allow_skillbook_write"), bool)
-                        else None,
-                        allow_profile_config_write=payload.get("allow_profile_config_write")
-                        if isinstance(payload.get("allow_profile_config_write"), bool)
-                        else None,
-                        allow_replay_server_patch=payload.get("allow_replay_server_patch")
-                        if isinstance(payload.get("allow_replay_server_patch"), bool)
-                        else None,
                         dirty_worktree_policy=payload.get("dirty_worktree_policy")
                         if isinstance(payload.get("dirty_worktree_policy"), str)
                         else None,
-                        required_check_level_context=payload.get("required_check_level_context")
-                        if isinstance(payload.get("required_check_level_context"), str)
-                        else None,
-                        required_check_level_harness=payload.get("required_check_level_harness")
-                        if isinstance(payload.get("required_check_level_harness"), str)
-                        else None,
-                        rollback_on_regression=payload.get("rollback_on_regression")
-                        if isinstance(payload.get("rollback_on_regression"), bool)
-                        else None,
                     )
                     self._send_json({"policy": policy})
+                    return
+                if path == "/api/proposals/apply":
+                    payload = self._read_json()
+                    proposal_id = payload.get("proposal_id")
+                    if not isinstance(proposal_id, str) or not proposal_id:
+                        self._send_json({"error": "proposal_id_required"}, status=HTTPStatus.BAD_REQUEST)
+                        return
+                    harness_workspace_root = payload.get("harness_workspace_root")
+                    try:
+                        result = apply_proposal(
+                            db_path=resolved_db_path,
+                            proposal_id=proposal_id,
+                            harness_workspace_root=Path(harness_workspace_root).expanduser()
+                            if isinstance(harness_workspace_root, str) and harness_workspace_root
+                            else None,
+                        )
+                    except ApplyError as exc:
+                        self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                        return
+                    self._send_json(result)
+                    return
+                if path == "/api/guard-monitor":
+                    payload = self._read_json()
+                    profile_id = payload.get("profile_id")
+                    try:
+                        report = monitor_guarded_issues(
+                            db_path=resolved_db_path,
+                            profile_id=profile_id if isinstance(profile_id, str) and profile_id else None,
+                        )
+                    except (GuardMonitorError, AutonomyError) as exc:
+                        self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                        return
+                    self._send_json(report.to_json())
                     return
                 if path == "/api/prune":
                     payload = self._read_json()
@@ -1632,11 +1658,6 @@ def make_handler(
                         operator_max_retries=operator_max_retries if isinstance(operator_max_retries, int) else 0,
                         profile_id=profile_id if isinstance(profile_id, str) and profile_id else None,
                         run_id=run_id if isinstance(run_id, str) and run_id else None,
-                        replay_adapter_id=replay_adapter_id if isinstance(replay_adapter_id, str) and replay_adapter_id else None,
-                        replay_output_dir=Path(replay_output_dir)
-                        if isinstance(replay_output_dir, str) and replay_output_dir
-                        else None,
-                        replay_timeout_seconds=replay_timeout if isinstance(replay_timeout, int) else None,
                         run_autonomy_after=bool(payload.get("run_autonomy", True)),
                         harness_workspace_root=Path(harness_workspace_root).expanduser()
                         if isinstance(harness_workspace_root, str) and harness_workspace_root

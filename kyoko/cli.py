@@ -30,6 +30,7 @@ from .analyze import (
 from .apply import (
     ApplyError,
     apply_context_proposal,
+    apply_proposal,
     list_context_delivery_rules,
     list_context_delivery_rule_revisions,
     list_skill_revisions,
@@ -41,6 +42,7 @@ from .apply import (
 )
 from .autonomy import AutonomyError, get_autonomy_policy, update_autonomy_policy
 from .autonomy_runner import AutonomyRunError, run_autonomy
+from .guard_monitor import GuardMonitorError, monitor_guarded_issues
 from .blobs import (
     list_payload_blobs,
     prune_payload_blobs,
@@ -1589,64 +1591,44 @@ def build_parser() -> argparse.ArgumentParser:
 
     policy_set = subcommands.add_parser(
         "policy-set",
-        help="Update context/harness autonomy policy settings.",
+        help="Update the two-mode autonomy policy.",
     )
     _add_db_argument(policy_set)
     policy_set.add_argument("--profile-id", help="Profile id. Defaults to the first profile.")
     policy_set.add_argument(
-        "--context-mode",
-        choices=["off", "propose", "autonomous"],
-        help="Context autonomy mode.",
+        "--mode",
+        choices=["hitl", "autonomous"],
+        help="Autonomy mode: hitl (a human approves both gates) or autonomous.",
     )
     policy_set.add_argument(
-        "--harness-mode",
-        choices=["off", "propose", "autonomous"],
-        help="Harness autonomy mode.",
+        "--recurrence-threshold",
+        type=int,
+        help="Autonomous gate #1: recurrences in production before a fix is authored.",
+    )
+    policy_set.add_argument(
+        "--regression-threshold",
+        type=int,
+        help="Post-apply recurrences that confirm a regression and trigger rollback.",
+    )
+    policy_set.add_argument(
+        "--auto-rollback",
+        choices=["on", "off"],
+        help="Auto-roll-back an autonomously applied fix when the guard confirms a regression.",
+    )
+    policy_set.add_argument(
+        "--max-auto-fix-attempts",
+        type=int,
+        help="Apply->rollback cycles before an issue is escalated to HITL.",
     )
     policy_set.add_argument(
         "--repo-patch",
         choices=["on", "off"],
-        help="Allow generated harness file writes through apply-harness.",
-    )
-    policy_set.add_argument(
-        "--check-write",
-        choices=["on", "off"],
-        help="Allow Kyoko check spec writes.",
-    )
-    policy_set.add_argument(
-        "--skillbook-write",
-        choices=["on", "off"],
-        help="Allow Kyoko skillbook/context writes.",
-    )
-    policy_set.add_argument(
-        "--profile-config-write",
-        choices=["on", "off"],
-        help="Allow Kyoko profile config writes.",
-    )
-    policy_set.add_argument(
-        "--replay-server-patch",
-        choices=["on", "off"],
-        help="Allow replay server patch writes.",
+        help="Allow generated harness/repo file writes (the one hard capability fence).",
     )
     policy_set.add_argument(
         "--dirty-worktree-policy",
         choices=["block", "allow_touched_only", "allow"],
         help="Dirty worktree behavior for harness apply.",
-    )
-    policy_set.add_argument(
-        "--required-check-level-context",
-        choices=["L0_generated", "L1_repeated", "L2_regression", "L3_human_approved"],
-        help="Minimum check trust level required for context autonomy.",
-    )
-    policy_set.add_argument(
-        "--required-check-level-harness",
-        choices=["L0_generated", "L1_repeated", "L2_regression", "L3_human_approved"],
-        help="Minimum check trust level required for harness autonomy.",
-    )
-    policy_set.add_argument(
-        "--rollback-on-regression",
-        choices=["on", "off"],
-        help="Roll back autonomous harness writes when replay regresses.",
     )
     policy_set.add_argument(
         "--json",
@@ -1666,6 +1648,35 @@ def build_parser() -> argparse.ArgumentParser:
         help="Workspace root for eligible autonomous harness patch application.",
     )
     run_autonomy_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print machine-readable JSON.",
+    )
+
+    apply_proposal_parser = subcommands.add_parser(
+        "apply-proposal",
+        help="HITL gate #2: approve and apply one pending proposal (context or harness).",
+    )
+    _add_db_argument(apply_proposal_parser)
+    apply_proposal_parser.add_argument("proposal_id", help="The pending proposal to apply.")
+    apply_proposal_parser.add_argument(
+        "--harness-workspace-root",
+        type=Path,
+        help="Workspace root for a harness proposal apply.",
+    )
+    apply_proposal_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print machine-readable JSON.",
+    )
+
+    monitor_guards_parser = subcommands.add_parser(
+        "monitor-guards",
+        help="Run the guard monitor: roll back autonomously applied fixes that regressed.",
+    )
+    _add_db_argument(monitor_guards_parser)
+    monitor_guards_parser.add_argument("--profile-id", help="Profile id. Defaults to the first profile.")
+    monitor_guards_parser.add_argument(
         "--json",
         action="store_true",
         help="Print machine-readable JSON.",
@@ -5433,8 +5444,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(json.dumps({"policy": policy}, sort_keys=True))
         else:
             print(f"profile: {policy['profile_id']}")
-            print(f"context_mode: {policy['context_mode']}")
-            print(f"harness_mode: {policy['harness_mode']}")
+            print(f"mode: {policy['mode']}")
+            print(f"recurrence_threshold: {policy['recurrence_threshold']}")
+            print(f"regression_threshold: {policy['regression_threshold']}")
+            print(f"auto_rollback_on_regression: {policy['auto_rollback_on_regression']}")
+            print(f"max_auto_fix_attempts: {policy['max_auto_fix_attempts']}")
             print(f"allow_repo_patch: {policy['allow_repo_patch']}")
             print(f"dirty_worktree_policy: {policy['dirty_worktree_policy']}")
         return 0
@@ -5444,17 +5458,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             policy = update_autonomy_policy(
                 db_path=args.db,
                 profile_id=args.profile_id,
-                context_mode=args.context_mode,
-                harness_mode=args.harness_mode,
+                mode=args.mode,
+                recurrence_threshold=args.recurrence_threshold,
+                regression_threshold=args.regression_threshold,
+                auto_rollback_on_regression=_on_off(args.auto_rollback),
+                max_auto_fix_attempts=args.max_auto_fix_attempts,
                 allow_repo_patch=_on_off(args.repo_patch),
-                allow_check_write=_on_off(args.check_write),
-                allow_skillbook_write=_on_off(args.skillbook_write),
-                allow_profile_config_write=_on_off(args.profile_config_write),
-                allow_replay_server_patch=_on_off(args.replay_server_patch),
                 dirty_worktree_policy=args.dirty_worktree_policy,
-                required_check_level_context=args.required_check_level_context,
-                required_check_level_harness=args.required_check_level_harness,
-                rollback_on_regression=_on_off(args.rollback_on_regression),
             )
         except (AutonomyError, StorageError) as exc:
             print(f"policy update failed: {exc}", file=sys.stderr)
@@ -5463,10 +5473,49 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(json.dumps({"policy": policy}, sort_keys=True))
         else:
             print(f"policy updated: {policy['profile_id']}")
-            print(f"context_mode: {policy['context_mode']}")
-            print(f"harness_mode: {policy['harness_mode']}")
+            print(f"mode: {policy['mode']}")
+            print(f"recurrence_threshold: {policy['recurrence_threshold']}")
+            print(f"regression_threshold: {policy['regression_threshold']}")
+            print(f"auto_rollback_on_regression: {policy['auto_rollback_on_regression']}")
+            print(f"max_auto_fix_attempts: {policy['max_auto_fix_attempts']}")
             print(f"allow_repo_patch: {policy['allow_repo_patch']}")
             print(f"dirty_worktree_policy: {policy['dirty_worktree_policy']}")
+        return 0
+
+    if args.command == "apply-proposal":
+        try:
+            result = apply_proposal(
+                db_path=args.db,
+                proposal_id=args.proposal_id,
+                harness_workspace_root=args.harness_workspace_root,
+            )
+        except (ApplyError, StorageError) as exc:
+            print(f"apply failed: {exc}", file=sys.stderr)
+            return 1
+        if args.json:
+            print(json.dumps(result, sort_keys=True))
+        else:
+            print(f"applied: {result['proposal_id']} ({result['section']})")
+            for skill_id in result.get("applied_skill_ids", []):
+                print(f"  skill: {skill_id}")
+            for rule_id in result.get("applied_context_rule_ids", []):
+                print(f"  context_rule: {rule_id}")
+            for patch_id in result.get("patch_transaction_ids", []):
+                print(f"  patch: {patch_id}")
+        return 0
+
+    if args.command == "monitor-guards":
+        try:
+            report = monitor_guarded_issues(db_path=args.db, profile_id=args.profile_id)
+        except (GuardMonitorError, AutonomyError, StorageError) as exc:
+            print(f"guard monitor failed: {exc}", file=sys.stderr)
+            return 1
+        if args.json:
+            print(json.dumps(report.to_json(), sort_keys=True))
+        else:
+            print(f"guard monitor: {report.profile_id} (mode={report.mode})")
+            for action in report.actions:
+                print(f"  {action.get('issue_id')}: {action.get('action')}")
         return 0
 
     if args.command == "run-autonomy":
@@ -6369,9 +6418,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 profile_id=args.profile_id,
                 run_id=args.run_id,
                 schema_path=args.schema,
-                replay_adapter_id=args.replay_adapter,
-                replay_output_dir=args.replay_output_dir,
-                replay_timeout_seconds=args.replay_timeout,
                 run_autonomy_after=not args.no_autonomy,
                 harness_workspace_root=args.harness_workspace_root,
                 source_candidate_id=args.source_candidate_id,

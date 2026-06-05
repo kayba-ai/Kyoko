@@ -142,7 +142,7 @@ class ProposalDetailTests(unittest.TestCase):
             self.assertEqual(len(detail["evidence"]), 2)
             self.assertTrue(all(item["found"] for item in detail["evidence"]))
             self.assertEqual(detail["autonomy_gate"]["action"], "awaiting_human_review")
-            self.assertEqual(detail["autonomy_gate"]["reason"], "context_policy_propose")
+            self.assertEqual(detail["autonomy_gate"]["reason"], "hitl_awaiting_human_approve")
             self.assertEqual(detail["confidence_assessment"]["operator_confidence"], 0.82)
             self.assertEqual(detail["confidence_assessment"]["kyoko_confidence"], 0.66)
             self.assertEqual(detail["confidence_assessment"]["level"], "medium")
@@ -184,7 +184,7 @@ class ProposalDetailTests(unittest.TestCase):
                 proposal_path=VALID_PROPOSAL,
                 schema_path=SCHEMA,
             )
-            update_autonomy_policy(db_path=db_path, context_mode="autonomous")
+            update_autonomy_policy(db_path=db_path, mode="autonomous")
             generate_checks_for_proposal(db_path=db_path, proposal_id="proposal_context_timeout_001")
             replay = create_replay_run(
                 db_path=db_path,
@@ -207,8 +207,8 @@ class ProposalDetailTests(unittest.TestCase):
             )
 
             self.assertEqual(detail["autonomy_gate"]["action"], "would_apply")
-            self.assertEqual(detail["autonomy_gate"]["reason"], "check_gate_passed")
-            self.assertEqual(detail["autonomy_gate"]["check_gate"]["passed"], True)
+            self.assertEqual(detail["autonomy_gate"]["reason"], "autonomous_auto_apply")
+            self.assertEqual(detail["autonomy_gate"]["policy"]["mode"], "autonomous")
             self.assertEqual(detail["check_specs"][0]["trust_level"], "L2_regression")
             self.assertEqual(detail["check_runs"][0]["status"], "passed")
             self.assertEqual(detail["replay_runs"][0]["status"], "passed")
@@ -339,21 +339,22 @@ class ProposalDetailTests(unittest.TestCase):
                 proposal_path=VALID_PROPOSAL,
                 schema_path=SCHEMA,
             )
-            update_autonomy_policy(db_path=db_path, context_mode="autonomous")
+            update_autonomy_policy(db_path=db_path, mode="autonomous")
             report = run_autonomy(db_path=db_path)
 
             detail = get_proposal_detail(db_path=db_path, proposal_id="proposal_context_timeout_001")
 
-            self.assertEqual(report.decisions[0].action, "gated")
+            self.assertEqual(report.decisions[0].action, "applied")
+            self.assertEqual(report.decisions[0].reason, "autonomous_auto_apply")
             self.assertGreaterEqual(len(detail["gate_history"]), 1)
             decision_events = [
                 event for event in detail["gate_history"] if event["kind"] == "autonomy_decision"
             ]
-            self.assertEqual(decision_events[-1]["action"], "gated")
-            self.assertEqual(decision_events[-1]["reason"], "missing_check_run")
+            self.assertEqual(decision_events[-1]["action"], "applied")
+            self.assertEqual(decision_events[-1]["reason"], "autonomous_auto_apply")
             self.assertEqual(
-                decision_events[-1]["check_spec_ids"],
-                ["check_proposal_context_timeout_001_1"],
+                decision_events[-1]["applied_skill_ids"],
+                ["skill_proposal_context_timeout_001_1"],
             )
 
     def test_proposal_detail_rejects_missing_proposal(self) -> None:

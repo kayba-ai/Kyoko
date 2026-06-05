@@ -52,7 +52,7 @@ class DashboardMetricsTests(unittest.TestCase):
                 proposal_path=VALID_PROPOSAL,
                 schema_path=SCHEMA,
             )
-            update_autonomy_policy(db_path=db_path, context_mode="autonomous")
+            update_autonomy_policy(db_path=db_path, mode="autonomous")
             generate_checks_for_proposal(db_path=db_path, proposal_id="proposal_context_timeout_001")
             replay = create_replay_run(
                 db_path=db_path,

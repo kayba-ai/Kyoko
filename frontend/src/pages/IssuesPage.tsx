@@ -3,10 +3,12 @@ import { Link } from "react-router-dom";
 import {
   ArrowRight,
   Check,
+  CheckCheck,
   CircleDot,
   FileSearch,
   Lightbulb,
   Loader2,
+  Lock,
   MessageSquare,
   Repeat,
   RotateCcw,
@@ -14,6 +16,7 @@ import {
   Shield,
   ShieldCheck,
   Stethoscope,
+  Undo2,
   X,
 } from "lucide-react";
 import { api } from "@/lib/api";
@@ -106,12 +109,20 @@ function matchesQuery(issue: Issue, q: string): boolean {
   return haystack.includes(q);
 }
 
-// ---- Review actions (accept at gate #1 / reject / reopen) -------------------
+// ---- Review actions (accept at gate #1 / approve+apply at gate #2 / reject) --
 //
-// "Accept" is the gate-#1 approval: it calls POST /api/issues/accept, which (per
-// the section's autonomy mode) authors a proposal. In `off` the issue stays
-// diagnosed; in `propose`/`autonomous` a proposal is authored and the result
-// carries `propose.proposal_id`. Reject/Reopen are plain status bookkeeping.
+// In HITL there are two human gates: "Accept" (POST /api/issues/accept) authors a
+// proposal for the issue; once a proposal exists, "Approve & apply" (POST
+// /api/proposals/apply) is the gate-#2 step that actually writes the change.
+// Reject/Reopen are plain status bookkeeping.
+
+// The issue is awaiting a human apply once a proposal exists and it hasn't been
+// applied/resolved/guarded yet.
+const APPLYABLE_STATUSES = new Set<string>(["accepted", "proposed"]);
+
+function firstProposalId(issue: Issue, accepted: AcceptIssueResult | null): string | null {
+  return accepted?.propose?.proposal_id ?? issue.proposal_ids?.[0] ?? null;
+}
 
 function ReviewActions({
   issue,
@@ -122,11 +133,14 @@ function ReviewActions({
   onReviewed: () => void;
   size?: "sm" | "default";
 }) {
-  const [pending, setPending] = useState<"accept" | IssueStatus | null>(null);
+  const [pending, setPending] = useState<"accept" | "apply" | IssueStatus | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [accepted, setAccepted] = useState<AcceptIssueResult | null>(null);
+  const [applied, setApplied] = useState(false);
 
   const canAccept = ACCEPTABLE_STATUSES.has(issue.status);
+  const proposalId = firstProposalId(issue, accepted);
+  const canApply = !applied && APPLYABLE_STATUSES.has(issue.status) && !!proposalId;
   const busy = pending !== null;
 
   async function accept() {
@@ -135,6 +149,21 @@ function ReviewActions({
     try {
       const res = await api.acceptIssue(issue.id);
       setAccepted(res);
+      onReviewed();
+    } catch (e) {
+      setError(e instanceof Error ? e : new Error(String(e)));
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function apply() {
+    if (!proposalId) return;
+    setPending("apply");
+    setError(null);
+    try {
+      await api.applyProposal(proposalId);
+      setApplied(true);
       onReviewed();
     } catch (e) {
       setError(e instanceof Error ? e : new Error(String(e)));
@@ -156,8 +185,6 @@ function ReviewActions({
     }
   }
 
-  const proposalId = accepted?.propose?.proposal_id ?? null;
-
   return (
     <div className="flex flex-col items-end gap-1.5">
       <div className="flex items-center gap-2">
@@ -166,38 +193,53 @@ function ReviewActions({
             {pending === "open" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
             Reopen
           </Button>
-        ) : canAccept ? (
+        ) : (
           <>
-            <Button variant="default" size={size} disabled={busy} onClick={accept}>
-              {pending === "accept" ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Check className="h-3.5 w-3.5" />
-              )}
-              Accept
-            </Button>
-            <Button variant="outline" size={size} disabled={busy} onClick={() => review("dismissed")}>
-              {pending === "dismissed" ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <X className="h-3.5 w-3.5" />
-              )}
-              Reject
-            </Button>
+            {canAccept && (
+              <>
+                <Button variant="default" size={size} disabled={busy} onClick={accept}>
+                  {pending === "accept" ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Check className="h-3.5 w-3.5" />
+                  )}
+                  Accept
+                </Button>
+                <Button variant="outline" size={size} disabled={busy} onClick={() => review("dismissed")}>
+                  {pending === "dismissed" ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <X className="h-3.5 w-3.5" />
+                  )}
+                  Reject
+                </Button>
+              </>
+            )}
+            {canApply && (
+              <Button variant="default" size={size} disabled={busy} onClick={apply}>
+                {pending === "apply" ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <CheckCheck className="h-3.5 w-3.5" />
+                )}
+                Approve &amp; apply
+              </Button>
+            )}
           </>
-        ) : null}
+        )}
       </div>
       {accepted && (
         <span className="text-right text-xs text-muted-foreground">
           {proposalId ? (
             <Link to="/proposals" className="text-primary hover:underline" title={proposalId}>
-              Proposal authored →
+              Proposal authored — approve to apply →
             </Link>
           ) : (
-            "Accepted — no proposal authored (section mode off)."
+            "Accepted — no proposal authored yet."
           )}
         </span>
       )}
+      {applied && <span className="text-right text-xs text-ok">Applied.</span>}
       {error && (
         <span className="text-xs text-danger" role="alert">
           {error.message}
@@ -209,32 +251,113 @@ function ReviewActions({
 
 // ---- Autonomy summary (read-only, deep-links to the control) ----------------
 //
-// The gate-#1 mode lives on the Autonomy page; surface it here near the accept
-// controls so what "Accept" will do is discoverable from where you triage.
+// The two-mode policy (spec 0018) lives on the Autonomy page; surface it here
+// near the accept controls so what "Accept" will do is discoverable from triage.
 
-function AutonomySummary({ section }: { section: Issue["section"] }) {
+function AutonomySummary({ issue }: { issue: Issue }) {
   const { data: policy } = useApi<AutonomyPolicy>(() => api.policy(), []);
   if (!policy) return null;
-  const mode = section === "harness" ? policy.harness_mode : policy.context_mode;
-  const sectionLabel = section ? humanize(section) : "Context";
-  const tone: NonNullable<BadgeProps["tone"]> =
-    mode === "autonomous" ? "ok" : mode === "propose" ? "primary" : "neutral";
+  const mode = policy.mode === "autonomous" ? "autonomous" : "hitl";
+  const tone: NonNullable<BadgeProps["tone"]> = mode === "autonomous" ? "ok" : "neutral";
+  const threshold = policy.recurrence_threshold ?? 0;
+  const seen = issue.recurrence_count ?? 1;
   const hint =
     mode === "autonomous"
-      ? "accepting auto-authors, gates, and applies."
-      : mode === "propose"
-        ? "accepting authors a proposal for review."
-        : "accepting records the diagnosis; no proposal authored.";
+      ? threshold > 0 && seen < threshold
+        ? `Kyoko auto-fixes once this recurs ${threshold}× (seen ${seen}×).`
+        : "Kyoko authors and applies a fix automatically."
+      : "You accept the issue, then approve the authored proposal.";
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
       <ShieldCheck className="h-3.5 w-3.5 text-muted-foreground" />
       <span>
-        {sectionLabel} autonomy: <Badge tone={tone}>{humanize(mode)}</Badge>
+        Autonomy: <Badge tone={tone}>{mode === "autonomous" ? "Autonomous" : "HITL"}</Badge>
       </span>
       <span className="text-muted-foreground/80">{hint}</span>
       <Link to="/autonomy" className="ml-auto inline-flex items-center gap-1 text-primary hover:underline">
         Change <ArrowRight className="h-3 w-3" />
       </Link>
+    </div>
+  );
+}
+
+// ---- Recurrence progress toward the autonomous-fix threshold ----------------
+
+function RecurrenceProgress({ issue }: { issue: Issue }) {
+  const { data: policy } = useApi<AutonomyPolicy>(() => api.policy(), []);
+  const threshold = policy?.recurrence_threshold ?? 0;
+  const seen = issue.recurrence_count ?? 1;
+  if (threshold <= 0) return null;
+  const pct = Math.min(100, Math.round((seen / threshold) * 100));
+  const ready = seen >= threshold;
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between text-xs">
+        <span className="font-medium text-muted-foreground">Recurrence toward auto-fix</span>
+        <span className="tabular-nums text-foreground">
+          {seen} / {threshold}
+        </span>
+      </div>
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+        <div
+          className={cn("h-full rounded-full transition-all", ready ? "bg-ok" : "bg-primary")}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ---- Guard + rollback status (applied fixes) --------------------------------
+//
+// Once a fix is applied, surface its guard/rollback posture: when it was applied,
+// how many recurrences have happened since (the regression-guard signal), and
+// whether autonomy has been blocked (escalated). Evidence-only.
+
+function GuardStatus({ issue }: { issue: Issue }) {
+  const applied = issue.status === "applied" || issue.status === "resolved" || issue.status === "guarded";
+  const hasGuard = !!issue.evaluator_id || applied || issue.applied_at != null;
+  if (!hasGuard) return null;
+
+  const seen = issue.recurrence_count ?? 0;
+  const atApply = issue.recurrence_count_at_apply ?? null;
+  const postApply = atApply != null ? Math.max(0, seen - atApply) : null;
+
+  return (
+    <div className="rounded-lg border border-border bg-muted/40 px-3 py-2.5">
+      <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+        <Shield className="h-3.5 w-3.5" />
+        Guard &amp; rollback
+      </div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
+        {issue.applied_at && (
+          <span>
+            Applied <span title={fmtTime(issue.applied_at)} className="text-foreground">{ago(issue.applied_at)}</span>
+          </span>
+        )}
+        {issue.evaluator_id && (
+          <span className="inline-flex items-center gap-1">
+            <Badge tone="primary" title={`Guarded by ${issue.evaluator_id}`}>
+              <Shield className="h-3 w-3" />
+              Guarded
+            </Badge>
+          </span>
+        )}
+        {postApply != null && (
+          <span className="tabular-nums">
+            Post-apply recurrences:{" "}
+            <span className={cn(postApply > 0 ? "text-warn" : "text-foreground")}>{postApply}</span>
+          </span>
+        )}
+        {issue.autonomy_blocked ? (
+          <Badge tone="danger">
+            <Lock className="h-3 w-3" />
+            Auto-fix exhausted
+          </Badge>
+        ) : (
+          <Badge tone="ok">No regression detected</Badge>
+        )}
+      </div>
     </div>
   );
 }
@@ -416,14 +539,47 @@ function IssueDetail({
               {`Guard: ${issue.evaluator_id}`}
             </Badge>
           )}
+          {issue.autonomy_blocked && (
+            <Badge
+              tone="danger"
+              title={issue.autonomy_blocked_reason ?? "Autonomy blocked — escalated to human review"}
+            >
+              <Lock className="h-3 w-3" />
+              Escalated
+            </Badge>
+          )}
+          {typeof issue.auto_fix_attempts === "number" && issue.auto_fix_attempts > 0 && (
+            <Badge tone="warn" title="Auto-fix cycles spent by the guard monitor" className="tabular-nums">
+              <Undo2 className="h-3 w-3" />
+              {`${issue.auto_fix_attempts} auto-fix`}
+            </Badge>
+          )}
         </div>
         <div className="shrink-0">
           <ReviewActions issue={issue} onReviewed={onReviewed} />
         </div>
       </div>
 
-      {/* Autonomy summary — what "Accept" (gate #1) will do for this section. */}
-      {ACCEPTABLE_STATUSES.has(issue.status) && <AutonomySummary section={issue.section} />}
+      {/* Escalation reason (autonomy blocked → back to human). */}
+      {issue.autonomy_blocked && issue.autonomy_blocked_reason && (
+        <div className="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
+          <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
+            Autonomy blocked — escalated to human review: {issue.autonomy_blocked_reason}
+          </span>
+        </div>
+      )}
+
+      {/* Recurrence progress toward the autonomous auto-fix threshold. */}
+      {ACCEPTABLE_STATUSES.has(issue.status) && <RecurrenceProgress issue={issue} />}
+
+      {/* Guard + rollback status for an applied fix. */}
+      <GuardStatus issue={issue} />
+
+      {/* Autonomy summary — what "Accept" (gate #1) will do. */}
+      {(ACCEPTABLE_STATUSES.has(issue.status) || APPLYABLE_STATUSES.has(issue.status)) && (
+        <AutonomySummary issue={issue} />
+      )}
 
       {/* Statement */}
       <div className="space-y-1.5">
@@ -586,9 +742,23 @@ function ReviewCard({
             Guard
           </Badge>
         )}
+        {issue.autonomy_blocked && (
+          <Badge tone="danger" title={issue.autonomy_blocked_reason ?? "Escalated to human review"}>
+            <Lock className="h-3 w-3" />
+            Escalated
+          </Badge>
+        )}
         <span className="ml-auto text-label text-muted-foreground">{ago(issue.created_at)}</span>
       </div>
-      {ACCEPTABLE_STATUSES.has(issue.status) && (
+      {typeof issue.recurrence_count === "number" &&
+        issue.recurrence_count > 1 &&
+        ACCEPTABLE_STATUSES.has(issue.status) && (
+          <div className="mt-2.5" onClick={(e) => e.stopPropagation()} role="presentation">
+            <RecurrenceProgress issue={issue} />
+          </div>
+        )}
+      {(ACCEPTABLE_STATUSES.has(issue.status) ||
+        (APPLYABLE_STATUSES.has(issue.status) && (issue.proposal_ids?.length ?? 0) > 0)) && (
         <div className="mt-2.5" onClick={(e) => e.stopPropagation()} role="presentation">
           <ReviewActions issue={issue} onReviewed={onReviewed} size="sm" />
         </div>

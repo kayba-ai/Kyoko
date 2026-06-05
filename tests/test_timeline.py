@@ -25,7 +25,7 @@ class TimelineTests(unittest.TestCase):
                 proposal_path=VALID_PROPOSAL,
                 schema_path=SCHEMA,
             )
-            update_autonomy_policy(db_path=db_path, context_mode="autonomous")
+            update_autonomy_policy(db_path=db_path, mode="autonomous")
             run_autonomy(db_path=db_path)
 
             events = list_timeline_events(
@@ -45,12 +45,14 @@ class TimelineTests(unittest.TestCase):
 
             self.assertEqual(
                 {event["kind"] for event in events},
-                {"autonomy_gated", "autonomy_decision"},
+                {"autonomy_decision", "autonomy_applied"},
             )
             self.assertEqual(len(decision_events), 1)
             self.assertEqual(decision_events[0]["kind"], "autonomy_decision")
-            self.assertEqual(decision_events[0]["metadata"]["action"], "gated")
-            self.assertEqual(decision_events[0]["metadata"]["reason"], "missing_check_run")
+            self.assertEqual(decision_events[0]["metadata"]["action"], "applied")
+            self.assertEqual(
+                decision_events[0]["metadata"]["reason"], "autonomous_auto_apply"
+            )
 
 
 if __name__ == "__main__":

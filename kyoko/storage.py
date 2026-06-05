@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 
-SCHEMA_VERSION = 30
+SCHEMA_VERSION = 31
 
 
 class StorageError(Exception):
@@ -354,21 +354,23 @@ CREATE TABLE IF NOT EXISTS context_delivery_rule_revisions (
   FOREIGN KEY (proposal_id) REFERENCES learning_proposals(id)
 );
 
+-- v31 (spec 0018): two-mode autonomy. The L0-L3 trust ladder, the three-way
+-- off/propose/autonomous per-section modes, and the check-as-gate fields are gone.
+-- One global `mode` (hitl | autonomous) decides *who approves* each gate; autonomous
+-- gate #1 fires on production `recurrence_count >= recurrence_threshold`; gate #2 is
+-- post-hoc (auto-apply, then the guard monitor rolls back on a confirmed regression).
+-- `allow_repo_patch` + the path fence remain the one hard capability guard.
 CREATE TABLE IF NOT EXISTS autonomy_policies (
   profile_id TEXT PRIMARY KEY,
-  context_mode TEXT NOT NULL,
-  harness_mode TEXT NOT NULL,
-  allow_skillbook_write INTEGER NOT NULL,
-  allow_check_write INTEGER NOT NULL,
-  allow_profile_config_write INTEGER NOT NULL,
-  allow_repo_patch INTEGER NOT NULL,
-  allow_replay_server_patch INTEGER NOT NULL,
-  allowed_paths_json TEXT NOT NULL,
+  mode TEXT NOT NULL,                         -- hitl | autonomous
+  recurrence_threshold INTEGER NOT NULL,      -- gate-#1 N for autonomous
+  regression_threshold INTEGER NOT NULL,      -- post-apply recurrences that confirm a regression
+  auto_rollback_on_regression INTEGER NOT NULL,
+  max_auto_fix_attempts INTEGER NOT NULL,     -- K rollbacks before escalating an issue to HITL
+  allow_repo_patch INTEGER NOT NULL,          -- the one hard capability guard (off by default)
+  allowed_paths_json TEXT NOT NULL,           -- repo-patch fence (inert unless allow_repo_patch)
   protected_paths_json TEXT NOT NULL,
   dirty_worktree_policy TEXT NOT NULL,
-  required_check_level_context TEXT NOT NULL,
-  required_check_level_harness TEXT NOT NULL,
-  rollback_on_regression INTEGER NOT NULL,
   updated_at TEXT NOT NULL,
   FOREIGN KEY (profile_id) REFERENCES profiles(id)
 );
@@ -665,6 +667,17 @@ CREATE TABLE IF NOT EXISTS issues (
   signature TEXT,                        -- deterministic dedup fingerprint
   recurrence_count INTEGER,              -- times this failure has been surfaced (>=1)
   accepted_at TEXT,                      -- when gate #1 accepted the issue for a fix
+  -- v31 (spec 0018): gate #2's post-hoc validator. When a fix is applied,
+  -- `applied_at` watermarks the moment and `recurrence_count_at_apply` snapshots the
+  -- counter so the guard monitor counts only *post-fix* recurrences (never rolls back on
+  -- stale pre-fix traces). A confirmed regression rolls back, re-opens, and bumps
+  -- `auto_fix_attempts`; once it reaches the policy's max, `autonomy_blocked` flips so the
+  -- issue falls back to HITL even in autonomous mode.
+  applied_at TEXT,
+  recurrence_count_at_apply INTEGER,
+  auto_fix_attempts INTEGER,
+  autonomy_blocked INTEGER,
+  autonomy_blocked_reason TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT,
   FOREIGN KEY (profile_id) REFERENCES profiles(id)
@@ -1050,13 +1063,14 @@ def initialize_database(db_path: Path) -> None:
         _rename_column_if_needed(connection, "check_locks", "eval_spec_id", "check_spec_id")
         _rename_column_if_needed(connection, "check_runs", "eval_spec_id", "check_spec_id")
         _rename_column_if_needed(connection, "replay_runs", "eval_spec_id", "check_spec_id")
-        _rename_column_if_needed(connection, "autonomy_policies", "allow_eval_write", "allow_check_write")
-        _rename_column_if_needed(
-            connection, "autonomy_policies", "required_eval_level_context", "required_check_level_context"
-        )
-        _rename_column_if_needed(
-            connection, "autonomy_policies", "required_eval_level_harness", "required_check_level_harness"
-        )
+        # v31 (spec 0018): two-mode autonomy. `autonomy_policies` is reshaped (mode +
+        # recurrence/regression thresholds replace the per-section modes + trust-level
+        # fields). Pre-prod: DROP and let executescript recreate the new shape, then
+        # re-seed defaults for existing profiles below. Version-guarded so this destructive
+        # step runs once on upgrade, NOT on every initialize_database (which would wipe the
+        # operator's mode/threshold settings on every connect).
+        if existing_version < 31:
+            connection.execute("DROP TABLE IF EXISTS autonomy_policies")
         for _old_index in (
             "idx_eval_specs_profile_id",
             "idx_eval_spec_locks_profile_id",
@@ -1098,6 +1112,21 @@ def initialize_database(db_path: Path) -> None:
         _ensure_column(connection, "issues", "signature", "signature TEXT")
         _ensure_column(connection, "issues", "recurrence_count", "recurrence_count INTEGER")
         _ensure_column(connection, "issues", "accepted_at", "accepted_at TEXT")
+        # v31 (spec 0018): gate #2's post-hoc validator state on the issue. `applied_at`
+        # watermarks the fix so the guard monitor counts only post-fix recurrences;
+        # `recurrence_count_at_apply` is the regression baseline; `auto_fix_attempts` bounds
+        # autonomous retries; `autonomy_blocked` (+reason) escalates an issue to HITL after
+        # too many apply->rollback cycles. All additive/nullable.
+        _ensure_column(connection, "issues", "applied_at", "applied_at TEXT")
+        _ensure_column(connection, "issues", "recurrence_count_at_apply", "recurrence_count_at_apply INTEGER")
+        _ensure_column(connection, "issues", "auto_fix_attempts", "auto_fix_attempts INTEGER")
+        _ensure_column(connection, "issues", "autonomy_blocked", "autonomy_blocked INTEGER")
+        _ensure_column(connection, "issues", "autonomy_blocked_reason", "autonomy_blocked_reason TEXT")
+        # v31: re-seed the reshaped autonomy_policies for any pre-existing profiles
+        # (the DROP above removed their old-shape rows).
+        if existing_version < 31:
+            for _profile_row in connection.execute("SELECT id FROM profiles").fetchall():
+                _ensure_default_autonomy_policy(connection, str(_profile_row["id"]))
         # v21 (SCOPE simplification): redaction collapses to a single global
         # "redact on export" default; the per-profile policy table and the audit
         # ledger are removed. Drop them for DBs created before v21.
@@ -1658,31 +1687,26 @@ def _ensure_default_autonomy_policy(connection: sqlite3.Connection, profile_id: 
         """
         INSERT OR IGNORE INTO autonomy_policies (
           profile_id,
-          context_mode,
-          harness_mode,
-          allow_skillbook_write,
-          allow_check_write,
-          allow_profile_config_write,
+          mode,
+          recurrence_threshold,
+          regression_threshold,
+          auto_rollback_on_regression,
+          max_auto_fix_attempts,
           allow_repo_patch,
-          allow_replay_server_patch,
           allowed_paths_json,
           protected_paths_json,
           dirty_worktree_policy,
-          required_check_level_context,
-          required_check_level_harness,
-          rollback_on_regression,
           updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             profile_id,
-            "propose",
-            "propose",
+            "hitl",
+            3,
+            2,
             1,
             1,
-            0,
-            0,
             0,
             json.dumps(["agents/**", "prompts/**", "checks/**", "tests/**", ".kyoko/**"]),
             json.dumps(
@@ -1699,9 +1723,6 @@ def _ensure_default_autonomy_policy(connection: sqlite3.Connection, profile_id: 
                 ]
             ),
             "block",
-            "L1_repeated",
-            "L2_regression",
-            1,
             now,
         ),
     )

@@ -140,7 +140,7 @@ class ProfileTests(unittest.TestCase):
             self.assertEqual(ready["replay_run_status"], "passed")
             self.assertEqual(ready["suggested_commands"][0]["intent"], "proposal_detail")
 
-            update_autonomy_policy(db_path=db_path, context_mode="autonomous")
+            update_autonomy_policy(db_path=db_path, mode="autonomous")
             autonomous = list_profiles(db_path)[0]["routing"]
             self.assertEqual(autonomous["state"], "ready_for_autonomy")
             self.assertEqual(autonomous["next_action"], "run_autonomy")
@@ -428,7 +428,7 @@ def _prepare_ready_harness_proposal(*, db_path: Path, workspace: Path) -> None:
     )
     update_autonomy_policy(
         db_path=db_path,
-        harness_mode="autonomous",
+        mode="autonomous",
         allow_repo_patch=True,
     )
     generate_checks_for_proposal(db_path=db_path, proposal_id=proposal_id)

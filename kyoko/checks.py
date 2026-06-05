@@ -1646,14 +1646,15 @@ def _get_replay_run(connection: sqlite3.Connection, replay_run_id: str) -> sqlit
 
 
 def _ensure_check_write_allowed(connection: sqlite3.Connection, profile_id: str) -> None:
+    # v31 (spec 0018): the apply-check plane is demoted out of the autonomy gate and is no
+    # longer part of the safety boundary, so check writes are no longer policy-gated. The
+    # profile existence check is retained.
     row = connection.execute(
-        "SELECT allow_check_write FROM autonomy_policies WHERE profile_id = ?",
+        "SELECT profile_id FROM autonomy_policies WHERE profile_id = ?",
         (profile_id,),
     ).fetchone()
     if row is None:
         raise CheckError(f"autonomy_policy_not_found:{profile_id}")
-    if int(row["allow_check_write"]) != 1:
-        raise CheckError("check_write_not_allowed")
 
 
 def _ensure_kyoko_source(

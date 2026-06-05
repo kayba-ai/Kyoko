@@ -5,7 +5,6 @@ import unittest
 
 from kyoko.apply import apply_context_proposal, list_skills
 from kyoko.autonomy import update_autonomy_policy
-from kyoko.checks import generate_checks_for_proposal, run_check
 from kyoko.autonomy_runner import run_autonomy
 from kyoko.proposals import (
     list_learning_proposals,
@@ -217,37 +216,23 @@ class RunConsolidationTests(unittest.TestCase):
             self.assertEqual(report.applied_proposal_ids, ())
             self.assertIn("no_duplicate_skill_groups", report.notes)
 
-    def test_autonomous_gate_applies_merge_after_check_passes(self) -> None:
+    def test_autonomous_gate_applies_merge(self) -> None:
+        # Spec 0018: in autonomous mode gate #2 auto-applies a pending proposal directly.
+        # Consolidation proposals carry no originating issue, so they skip gate #1 and the
+        # gate auto-applies the merge on the same pass (no check-level promotion gate).
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
             _seed_two_duplicate_skills(db_path)
-            update_autonomy_policy(db_path=db_path, context_mode="autonomous")
+            update_autonomy_policy(db_path=db_path, mode="autonomous")
 
-            # First pass: submit pending + generate the gate check (still L0 -> blocked).
-            first = run_skillbook_consolidation(
+            report = run_skillbook_consolidation(
                 db_path=db_path,
                 output_dir=Path(tmpdir) / "o1",
                 profile_id=PROFILE_ID,
                 run_autonomy_after=True,
             )
-            self.assertEqual(first.applied_proposal_ids, ())
-            consolidation_id = first.proposal_ids[0]
-
-            # Promote the deterministic check to L1 by running it twice (same passing status).
-            check_spec_id = f"check_{consolidation_id}_1"
-            self.assertEqual(
-                run_check(db_path=db_path, check_spec_id=check_spec_id).status, "passed"
-            )
-            promoted = run_check(db_path=db_path, check_spec_id=check_spec_id)
-            self.assertEqual(promoted.status, "passed")
-            self.assertEqual(promoted.promoted_trust_level, "L1_repeated")
-
-            # Second pass: the gate now applies the merge.
-            applied = run_autonomy(db_path=db_path, profile_id=PROFILE_ID)
-            decision = next(
-                d for d in applied.decisions if d.proposal_id == consolidation_id
-            )
-            self.assertEqual(decision.action, "applied")
+            consolidation_id = report.proposal_ids[0]
+            self.assertEqual(report.applied_proposal_ids, (consolidation_id,))
 
             skills = {skill["id"]: skill for skill in list_skills(db_path)}
             winner = skills["skill_proposal_dup_a_001_1"]
@@ -257,31 +242,54 @@ class RunConsolidationTests(unittest.TestCase):
             # Winner carries the unioned (normalized) keywords.
             self.assertEqual(set(winner["keywords"]), {"fetch", "timeout", "retry"})
 
-    def test_run_autonomy_after_reports_applied_when_check_ready(self) -> None:
+    def test_run_autonomy_applies_consolidation_in_autonomous_mode(self) -> None:
+        # The pending consolidation proposal is applied by a standalone run_autonomy pass.
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
             _seed_two_duplicate_skills(db_path)
-            update_autonomy_policy(db_path=db_path, context_mode="autonomous")
+            update_autonomy_policy(db_path=db_path, mode="autonomous")
 
+            # Submit pending only (gate not run yet).
             first = run_skillbook_consolidation(
+                db_path=db_path,
+                output_dir=Path(tmpdir) / "o1",
+                profile_id=PROFILE_ID,
+                run_autonomy_after=False,
+            )
+            consolidation_id = first.proposal_ids[0]
+            self.assertEqual(first.applied_proposal_ids, ())
+
+            applied = run_autonomy(db_path=db_path, profile_id=PROFILE_ID)
+            decision = next(
+                d for d in applied.decisions if d.proposal_id == consolidation_id
+            )
+            self.assertEqual(decision.action, "applied")
+
+    def test_hitl_gate_holds_consolidation_proposal(self) -> None:
+        # In HITL (the default) mode gate #2 applies nothing: the proposal awaits a human.
+        with TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "kyoko.db"
+            _seed_two_duplicate_skills(db_path)
+            # Default mode is hitl; no policy change.
+
+            report = run_skillbook_consolidation(
                 db_path=db_path,
                 output_dir=Path(tmpdir) / "o1",
                 profile_id=PROFILE_ID,
                 run_autonomy_after=True,
             )
-            consolidation_id = first.proposal_ids[0]
-            check_spec_id = f"check_{consolidation_id}_1"
-            run_check(db_path=db_path, check_spec_id=check_spec_id)
-            run_check(db_path=db_path, check_spec_id=check_spec_id)
+            consolidation_id = report.proposal_ids[0]
+            self.assertEqual(report.applied_proposal_ids, ())
 
-            # Re-run consolidation: idempotent submit, gate now applies, report reflects it.
-            second = run_skillbook_consolidation(
-                db_path=db_path,
-                output_dir=Path(tmpdir) / "o2",
-                profile_id=PROFILE_ID,
-                run_autonomy_after=True,
+            applied = run_autonomy(db_path=db_path, profile_id=PROFILE_ID)
+            decision = next(
+                d for d in applied.decisions if d.proposal_id == consolidation_id
             )
-            self.assertEqual(second.applied_proposal_ids, (consolidation_id,))
+            self.assertEqual(decision.action, "awaiting_human_review")
+            self.assertEqual(decision.reason, "hitl_awaiting_human_approve")
+
+            # Skillbook untouched while the proposal is held.
+            self.assertTrue(all(skill["active"] for skill in list_skills(db_path)))
 
 
 if __name__ == "__main__":

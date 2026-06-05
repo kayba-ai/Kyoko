@@ -149,7 +149,9 @@ def run_generated_improve_smoke(
         update_autonomy_policy(
             db_path=db_path,
             profile_id=source_smoke.profile_id,
-            context_mode="autonomous",
+            mode="autonomous",
+            recurrence_threshold=1,
+            allow_repo_patch=True,
         )
         with _temporary_env("KYOKO_REPLAY_HOOK", f"{replay_hook_path}:replay"):
             improve = run_improvement_loop(
@@ -158,9 +160,6 @@ def run_generated_improve_smoke(
                 operator="mock",
                 profile_id=source_smoke.profile_id,
                 schema_path=schema_path,
-                replay_adapter_id=replay_adapter.adapter_id,
-                replay_output_dir=replay_output_dir,
-                replay_timeout_seconds=timeout_seconds,
                 run_autonomy_after=True,
             )
     except (
@@ -209,18 +208,14 @@ def _write_replay_hook(path: Path, *, framework: str) -> None:
 
 
 def _improve_smoke_passed(report: ImproveReport) -> bool:
-    if not report.replay_runs:
-        return False
+    # v31 (spec 0018): the loop no longer runs replay/checks. A passing smoke now means the
+    # autonomous loop authored a fix, applied it, and minted a standing guard.
     if not report.autonomy or not report.autonomy.decisions:
         return False
-    replay_passed = all(
-        replay.get("status") == "passed"
-        and isinstance(replay.get("check_run"), dict)
-        and replay["check_run"].get("status") == "passed"
-        for replay in report.replay_runs
-    )
     applied = any(decision.action == "applied" for decision in report.autonomy.decisions)
-    return replay_passed and applied
+    authored = bool(report.proposal_ids)
+    guarded = bool(report.guard_reports)
+    return applied and authored and guarded
 
 
 def _replay_adapter_json(report: ReplayAdapterRegisterReport) -> dict[str, object]:
