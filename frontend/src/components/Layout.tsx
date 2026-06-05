@@ -44,8 +44,8 @@ const SECTIONS: NavSection[] = [
     // Analysis is the engine that surfaces+diagnoses them from traces.
     heading: "Diagnose",
     items: [
-      { to: "/issues", label: "Issues", icon: CircleDot },
       { to: "/analysis", label: "Analysis", icon: Sparkles },
+      { to: "/issues", label: "Issues", icon: CircleDot },
     ],
   },
   {
