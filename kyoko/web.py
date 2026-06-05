@@ -91,6 +91,7 @@ from .harness import (
 )
 from .hermes_import import HermesImportError, ingest_hermes_kanban_db
 from .improve import ImproveError, run_improvement_loop
+from .skillbook_manager import SkillbookManagerError, run_skillbook_consolidation
 from .integration_smoke import (
     IntegrationSmokeError,
     run_replay_server_smoke,
@@ -1647,6 +1648,32 @@ def make_handler(
                         if isinstance(source_import_output_dir, str) and source_import_output_dir
                         else None,
                     )
+                    self._send_json(report.to_json())
+                    return
+                if path == "/api/skillbook/consolidate":
+                    payload = self._read_json()
+                    profile_id = payload.get("profile_id")
+                    operator = payload.get("operator")
+                    operator_command = payload.get("operator_command")
+                    output_dir = payload.get("output_dir")
+                    harness_workspace_root = payload.get("harness_workspace_root")
+                    try:
+                        report = run_skillbook_consolidation(
+                            db_path=resolved_db_path,
+                            output_dir=Path(output_dir) if isinstance(output_dir, str) and output_dir else None,
+                            profile_id=profile_id if isinstance(profile_id, str) and profile_id else None,
+                            operator=operator if operator in {"mock", "command"} else "mock",
+                            command=list(operator_command)
+                            if isinstance(operator_command, list) and operator_command
+                            else None,
+                            run_autonomy_after=bool(payload.get("run_autonomy", False)),
+                            harness_workspace_root=Path(harness_workspace_root).expanduser()
+                            if isinstance(harness_workspace_root, str) and harness_workspace_root
+                            else None,
+                        )
+                    except SkillbookManagerError as exc:
+                        self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                        return
                     self._send_json(report.to_json())
                     return
                 if path == "/api/profile-next":

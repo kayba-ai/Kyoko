@@ -25,6 +25,11 @@ from .operator_adapters import (
 )
 from .replay_adapters import ReplayAdapterError, run_registered_replay_adapter
 from .replay_servers import ReplayServerError
+from .skillbook_manager import (
+    ConsolidationReport,
+    SkillbookManagerError,
+    run_skillbook_consolidation,
+)
 from .source_discovery import (
     DiscoveredSourceImportReport,
     SourceDiscoveryError,
@@ -56,6 +61,8 @@ class ImproveReport:
     # Per-issue gate #1 outcomes surfaced this run (issue_id -> mode), structured for the API.
     gate1_outcomes: tuple[dict[str, Any], ...] = ()
     guard_reports: tuple[GuardReport, ...] = ()
+    # Phase 3: the post-analysis skillbook-consolidation turn (None when not run / no dups).
+    consolidation: Optional[ConsolidationReport] = None
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -72,6 +79,7 @@ class ImproveReport:
             "source_import": self.source_import.to_json() if self.source_import is not None else None,
             "guards": [guard.to_json() for guard in self.guard_reports],
             "gate1_outcomes": [dict(outcome) for outcome in self.gate1_outcomes],
+            "consolidation": self.consolidation.to_json() if self.consolidation is not None else None,
             "notes": list(self.notes),
         }
 
@@ -99,6 +107,7 @@ def run_improvement_loop(
     source_home: Optional[Path] = None,
     source_import_output_dir: Optional[Path] = None,
     schedule_id: Optional[str] = None,
+    consolidate: bool = True,
 ) -> ImproveReport:
     initialize_database(db_path)
     selected_output_dir = output_dir or _default_output_dir(db_path)
@@ -186,9 +195,21 @@ def run_improvement_loop(
 
         if not authored_proposal_ids:
             # Nothing authored: every issue was diagnosed-only (off) or left for a human
-            # to accept (propose). There is nothing to check/replay/apply this run.
+            # to accept (propose). There is nothing to check/replay/apply this run, but the
+            # skillbook may still carry duplicates from prior runs — consolidate it.
             if profile_id is None:
                 profile_id = analyze_report.profile_id
+            consolidation_report = _maybe_consolidate(
+                db_path=db_path,
+                output_dir=selected_output_dir,
+                profile_id=profile_id,
+                operator=operator,
+                operator_command=operator_command,
+                run_autonomy_after=run_autonomy_after,
+                harness_workspace_root=harness_workspace_root,
+                consolidate=consolidate,
+                notes=notes,
+            )
             return ImproveReport(
                 profile_id=profile_id,
                 proposal_id=None,
@@ -202,6 +223,7 @@ def run_improvement_loop(
                 autonomy=None,
                 source_import=source_import_report,
                 gate1_outcomes=tuple(gate1_outcomes),
+                consolidation=consolidation_report,
                 notes=tuple(notes),
             )
         target_proposal_ids = authored_proposal_ids
@@ -302,6 +324,20 @@ def run_improvement_loop(
     if profile_id is None:
         raise ImproveError("profile_id_unresolved")
 
+    # ---- Phase 3: consolidate the skillbook (keep it live and tracked). Runs after the
+    # gate + resolve/guard step; its proposals flow through the SAME gate as any proposal. ----
+    consolidation_report = _maybe_consolidate(
+        db_path=db_path,
+        output_dir=selected_output_dir,
+        profile_id=profile_id,
+        operator=operator if proposal_id is None else "mock",
+        operator_command=operator_command,
+        run_autonomy_after=run_autonomy_after,
+        harness_workspace_root=harness_workspace_root or profile_harness_workspace_root,
+        consolidate=consolidate,
+        notes=notes,
+    )
+
     return ImproveReport(
         profile_id=profile_id,
         proposal_id=target_proposal_ids[0] if target_proposal_ids else None,
@@ -315,9 +351,46 @@ def run_improvement_loop(
         autonomy=autonomy_report,
         source_import=source_import_report,
         gate1_outcomes=tuple(gate1_outcomes),
+        consolidation=consolidation_report,
         notes=tuple(notes),
         guard_reports=tuple(guard_reports),
     )
+
+
+def _maybe_consolidate(
+    *,
+    db_path: Path,
+    output_dir: Path,
+    profile_id: Optional[str],
+    operator: str,
+    operator_command: Optional[Sequence[str]],
+    run_autonomy_after: bool,
+    harness_workspace_root: Optional[Path],
+    consolidate: bool,
+    notes: list[str],
+) -> Optional[ConsolidationReport]:
+    """Run the skillbook-consolidation turn, returning ``None`` when disabled or when there
+    are no duplicate skills (keeps the report — and the contract golden — empty in the
+    common case). Consolidation proposals flow through the SAME gate as any proposal."""
+
+    if not consolidate:
+        return None
+    try:
+        report = run_skillbook_consolidation(
+            db_path=db_path,
+            output_dir=output_dir,
+            profile_id=profile_id,
+            operator=operator if operator in {"mock", "command"} else "mock",
+            command=operator_command if operator == "command" else None,
+            run_autonomy_after=run_autonomy_after,
+            harness_workspace_root=harness_workspace_root,
+        )
+    except SkillbookManagerError as exc:
+        notes.append(f"consolidation_failed:{exc}")
+        return None
+    if report.duplicate_group_count == 0:
+        return None
+    return report
 
 
 def _propose_for_each(
