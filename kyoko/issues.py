@@ -26,14 +26,24 @@ Enums (validated here, not in the DB):
 - ``severity`` ∈ {``low``, ``medium``, ``high``} (nullable)
 - ``source`` ∈ {``analysis``, ``eval``, ``llm_eval``, ``manual``} (nullable) — provenance.
 - ``status`` is the lifecycle state machine:
-  ``open → prioritized → diagnosed → proposed → applied → resolved → guarded`` with
-  ``dismissed`` as a terminal off-ramp from any state. ``open``/``resolved``/``dismissed``
-  are retained for backward compatibility.
+  ``open → prioritized → diagnosed → accepted → proposed → applied → resolved → guarded``
+  with ``dismissed`` as a terminal off-ramp from any state. ``open``/``resolved``/
+  ``dismissed`` are retained for backward compatibility. ``accepted`` (v30, gate #1) marks
+  an issue approved for a fix — analysis stops at ``diagnosed`` and a proposal is only
+  authored once the issue is accepted (auto in ``autonomous`` mode, human in ``propose``).
+
+Deterministic dedup (v30): analysis surfaces issues through :func:`surface_issue`, which
+fingerprints each failure (:func:`compute_issue_signature` — run-independent: section +
+affected span *names* + stable target ids) and folds a recurrence into the existing issue
+(bumping ``recurrence_count`` and re-opening a resolved/guarded one) instead of spawning a
+duplicate. Fuzzy/semantic bundling is layered on top later by the warm analysis agent.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
+import re
 import uuid
 from pathlib import Path
 from typing import Any, Optional
@@ -47,6 +57,7 @@ ISSUE_STATUSES = (
     "open",
     "prioritized",
     "diagnosed",
+    "accepted",
     "proposed",
     "applied",
     "resolved",
@@ -56,10 +67,15 @@ ISSUE_STATUSES = (
 # Forward progression of the lifecycle (dismissed is reachable from any state and is
 # omitted here). Used to validate monotonic advancement; plain `update_issue_status`
 # stays permissive for manual triage/correction.
+#
+# `accepted` (v30) is gate #1: analysis only surfaces/diagnoses an issue — a proposal is
+# authored once the issue is *accepted for a fix* (auto in `autonomous` mode, by a human
+# in `propose` mode). It sits between `diagnosed` and `proposed`.
 ISSUE_LIFECYCLE_ORDER = (
     "open",
     "prioritized",
     "diagnosed",
+    "accepted",
     "proposed",
     "applied",
     "resolved",
@@ -124,6 +140,11 @@ def _row_to_dict(row: Any) -> dict[str, Any]:
         "root_cause": row["root_cause"] if "root_cause" in row.keys() else None,
         "source": row["source"] if "source" in row.keys() else None,
         "evaluator_id": row["evaluator_id"] if "evaluator_id" in row.keys() else None,
+        "signature": row["signature"] if "signature" in row.keys() else None,
+        "recurrence_count": (
+            row["recurrence_count"] if "recurrence_count" in row.keys() else None
+        ),
+        "accepted_at": row["accepted_at"] if "accepted_at" in row.keys() else None,
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
@@ -159,9 +180,14 @@ def create_issue(
     source: Optional[str] = None,
     root_cause: Optional[str] = None,
     rank: Optional[int] = None,
+    signature: Optional[str] = None,
+    recurrence_count: int = 1,
     profile_id: Optional[str] = None,
 ) -> dict:
-    """Persist one issue (evidence only) and return its stored record."""
+    """Persist one issue (evidence only) and return its stored record.
+
+    ``signature`` is the deterministic dedup fingerprint (normally supplied by
+    :func:`surface_issue`); ``recurrence_count`` starts at 1. Neither changes behavior."""
 
     initialize_database(db_path)
     resolved_title = str(title or "").strip()
@@ -199,8 +225,9 @@ def create_issue(
               evidence_refs_json, affected_agent_identity_ids_json,
               affected_workflow_node_ids_json, affected_task_ids_json,
               affected_span_ids_json, proposal_ids_json,
-              source, root_cause, rank, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              source, root_cause, rank, signature, recurrence_count,
+              created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 issue_id,
@@ -220,6 +247,8 @@ def create_issue(
                 source,
                 root_cause,
                 rank,
+                signature,
+                int(recurrence_count),
                 created_at,
                 None,
             ),
@@ -245,6 +274,9 @@ def create_issue(
         "root_cause": root_cause,
         "source": source,
         "evaluator_id": None,
+        "signature": signature,
+        "recurrence_count": int(recurrence_count),
+        "accepted_at": None,
         "created_at": created_at,
         "updated_at": None,
     }
@@ -450,4 +482,233 @@ def set_issue_evaluator(*, db_path: Path, issue_id: str, evaluator_id: str) -> d
         db_path=db_path,
         issue_id=issue_id,
         assignments={"evaluator_id": resolved_evaluator_id, "status": "guarded"},
+    )
+
+
+# --------------------------------------------------------------------------------------
+# v30: deterministic dedup net + gate-#1 acceptance.
+# --------------------------------------------------------------------------------------
+
+# Statuses past which an issue is no longer "active" for bundling. A recurrence that
+# matches a resolved/guarded issue is a regression and re-opens it (the guard didn't hold).
+_REOPEN_FROM = ("resolved", "guarded")
+_STOPWORDS = frozenset(
+    {"the", "a", "an", "and", "or", "of", "to", "in", "on", "for", "with", "is", "was"}
+)
+
+
+def _title_slug(title: Optional[str]) -> str:
+    tokens = [
+        tok
+        for tok in re.findall(r"[a-z0-9]+", str(title or "").lower())
+        if len(tok) >= 3 and tok not in _STOPWORDS
+    ]
+    return " ".join(sorted(set(tokens)))
+
+
+def _resolve_span_names(connection: Any, span_ids: list[str]) -> list[str]:
+    """Run-independent anchor: map per-run span ids to their span *names* (which recur
+    across runs, unlike ids). Mirrors :func:`kyoko.issue_guard._affected_span_names`."""
+
+    if not span_ids:
+        return []
+    placeholders = ",".join("?" for _ in span_ids)
+    rows = connection.execute(
+        f"SELECT DISTINCT name FROM spans WHERE id IN ({placeholders})",
+        tuple(span_ids),
+    ).fetchall()
+    return sorted({str(row[0]) for row in rows if row[0]})
+
+
+def compute_issue_signature(
+    connection: Any,
+    *,
+    profile_id: str,
+    section: Optional[str],
+    affected_span_ids: Optional[list] = None,
+    affected_agent_identity_ids: Optional[list] = None,
+    affected_workflow_node_ids: Optional[list] = None,
+    title: Optional[str] = None,
+) -> str:
+    """Deterministic fingerprint of a failure, stable across runs. Anchors on the section,
+    the affected span *names* (not per-run ids), and stable target ids (agent identity /
+    workflow node). When no structural anchors exist it falls back to a normalized title
+    slug so distinct title-only issues do not collapse together."""
+
+    span_names = _resolve_span_names(connection, list(affected_span_ids or []))
+    agent_ids = sorted({str(x) for x in (affected_agent_identity_ids or [])})
+    node_ids = sorted({str(x) for x in (affected_workflow_node_ids or [])})
+    components: dict[str, Any] = {
+        "profile_id": profile_id,
+        "section": section or "",
+        "span_names": span_names,
+        "targets": agent_ids + node_ids,
+    }
+    if not span_names and not agent_ids and not node_ids:
+        components["title_slug"] = _title_slug(title)
+    payload = json.dumps(components, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def find_issue_by_signature(
+    connection: Any,
+    *,
+    profile_id: str,
+    signature: Optional[str],
+    exclude_id: Optional[str] = None,
+) -> Optional[dict]:
+    """Return the most-recent non-dismissed issue in this profile carrying ``signature``
+    (the bundling target), or ``None``."""
+
+    if not signature:
+        return None
+    params: list[Any] = [profile_id, signature]
+    clause = "profile_id = ? AND signature = ? AND status != 'dismissed'"
+    if exclude_id:
+        clause += " AND id != ?"
+        params.append(exclude_id)
+    row = connection.execute(
+        f"SELECT * FROM issues WHERE {clause} ORDER BY created_at DESC, id ASC LIMIT 1",
+        tuple(params),
+    ).fetchone()
+    return _row_to_dict(row) if row is not None else None
+
+
+def bundle_into_issue(
+    *,
+    db_path: Path,
+    issue_id: str,
+    evidence_refs: Optional[list] = None,
+    affected_span_ids: Optional[list] = None,
+    reopen: bool = True,
+) -> dict:
+    """Fold a fresh recurrence into an existing issue: union its evidence and affected
+    spans, bump ``recurrence_count``, and (when ``reopen``) re-open a resolved/guarded
+    issue as a regression. Evidence only — never touches the gate."""
+
+    current = get_issue(db_path=db_path, issue_id=issue_id)
+
+    merged_evidence = list(current.get("evidence_refs") or [])
+    seen = {json.dumps(ref, sort_keys=True) for ref in merged_evidence}
+    for ref in evidence_refs or []:
+        key = json.dumps(ref, sort_keys=True)
+        if key not in seen:
+            merged_evidence.append(ref)
+            seen.add(key)
+
+    merged_spans = list(current.get("affected_span_ids") or [])
+    span_seen = set(merged_spans)
+    for span_id in affected_span_ids or []:
+        if span_id not in span_seen:
+            merged_spans.append(span_id)
+            span_seen.add(span_id)
+
+    next_count = int(current.get("recurrence_count") or 1) + 1
+    assignments: dict[str, Any] = {
+        "evidence_refs_json": _json_dump(merged_evidence),
+        "affected_span_ids_json": _json_dump(merged_spans),
+        "recurrence_count": next_count,
+    }
+    if reopen and current.get("status") in _REOPEN_FROM:
+        assignments["status"] = "open"
+
+    record = _apply_issue_update(
+        db_path=db_path, issue_id=issue_id, assignments=assignments
+    )
+    record["evidence_refs"] = merged_evidence
+    record["affected_span_ids"] = merged_spans
+    record["recurrence_count"] = next_count
+    record.pop("evidence_refs_json", None)
+    record.pop("affected_span_ids_json", None)
+    return record
+
+
+def surface_issue(
+    *,
+    db_path: Path,
+    title: str,
+    body: Optional[str] = None,
+    section: Optional[str] = None,
+    category: Optional[str] = None,
+    severity: Optional[str] = None,
+    status: str = "open",
+    evidence_refs: Optional[list] = None,
+    affected_agent_identity_ids: Optional[list] = None,
+    affected_workflow_node_ids: Optional[list] = None,
+    affected_task_ids: Optional[list] = None,
+    affected_span_ids: Optional[list] = None,
+    proposal_ids: Optional[list] = None,
+    source: Optional[str] = None,
+    root_cause: Optional[str] = None,
+    rank: Optional[int] = None,
+    profile_id: Optional[str] = None,
+) -> tuple[dict, bool]:
+    """Surface an issue through the deterministic dedup net (the v30 analysis entry point).
+
+    Computes the failure signature; if a non-dismissed issue with the same signature
+    already exists in this profile, the recurrence is folded into it (returns
+    ``(issue, True)``). Otherwise a new issue is created with the signature stamped
+    (returns ``(issue, False)``). Evidence only — surfacing never changes behavior."""
+
+    initialize_database(db_path)
+    with connect(db_path) as connection:
+        resolved_profile_id = _resolve_profile_id(connection, profile_id)
+        signature = compute_issue_signature(
+            connection,
+            profile_id=resolved_profile_id,
+            section=section,
+            affected_span_ids=affected_span_ids,
+            affected_agent_identity_ids=affected_agent_identity_ids,
+            affected_workflow_node_ids=affected_workflow_node_ids,
+            title=title,
+        )
+        existing = find_issue_by_signature(
+            connection, profile_id=resolved_profile_id, signature=signature
+        )
+
+    if existing is not None:
+        bundled = bundle_into_issue(
+            db_path=db_path,
+            issue_id=existing["id"],
+            evidence_refs=evidence_refs,
+            affected_span_ids=affected_span_ids,
+        )
+        return bundled, True
+
+    created = create_issue(
+        db_path=db_path,
+        title=title,
+        body=body,
+        section=section,
+        category=category,
+        severity=severity,
+        status=status,
+        evidence_refs=evidence_refs,
+        affected_agent_identity_ids=affected_agent_identity_ids,
+        affected_workflow_node_ids=affected_workflow_node_ids,
+        affected_task_ids=affected_task_ids,
+        affected_span_ids=affected_span_ids,
+        proposal_ids=proposal_ids,
+        source=source,
+        root_cause=root_cause,
+        rank=rank,
+        signature=signature,
+        profile_id=resolved_profile_id,
+    )
+    return created, False
+
+
+def accept_issue(*, db_path: Path, issue_id: str) -> dict:
+    """Gate #1: mark an issue accepted for a fix (job step "approve"), stamping
+    ``accepted_at`` and advancing it to ``accepted``. This is the point a proposal is
+    authorized to be authored (auto in ``autonomous`` mode, by a human in ``propose``).
+    Permissive/idempotent; refuses only a ``dismissed`` issue."""
+
+    current = get_issue(db_path=db_path, issue_id=issue_id)
+    if current["status"] == "dismissed":
+        raise IssueError(f"issue_dismissed:{issue_id}")
+    return _apply_issue_update(
+        db_path=db_path,
+        issue_id=issue_id,
+        assignments={"status": "accepted", "accepted_at": utc_now()},
     )

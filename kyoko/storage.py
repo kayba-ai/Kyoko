@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 
-SCHEMA_VERSION = 29
+SCHEMA_VERSION = 30
 
 
 class StorageError(Exception):
@@ -655,6 +655,16 @@ CREATE TABLE IF NOT EXISTS issues (
   root_cause TEXT,                       -- diagnosis narrative (job step 04)
   source TEXT,                           -- analysis | eval | llm_eval | manual
   evaluator_id TEXT,                     -- the guard eval_definitions.id once resolved
+  -- v30: analysis is decoupled from proposal. Analysis surfaces issues; a deterministic
+  -- `signature` fingerprints the failure (run-independent: section + affected span
+  -- *names* + stable target ids) so recurrences of the same problem fold into one issue
+  -- across time instead of spawning duplicates. `recurrence_count` tracks how many times
+  -- it has been surfaced. `accepted_at` stamps gate-#1 acceptance (the lifecycle gained
+  -- an `accepted` state between `diagnosed` and `proposed`); a proposal is only authored
+  -- once an issue is accepted (auto in autonomous mode, human in propose mode).
+  signature TEXT,                        -- deterministic dedup fingerprint
+  recurrence_count INTEGER,              -- times this failure has been surfaced (>=1)
+  accepted_at TEXT,                      -- when gate #1 accepted the issue for a fix
   created_at TEXT NOT NULL,
   updated_at TEXT,
   FOREIGN KEY (profile_id) REFERENCES profiles(id)
@@ -664,6 +674,7 @@ CREATE INDEX IF NOT EXISTS idx_issues_profile_id ON issues(profile_id);
 CREATE INDEX IF NOT EXISTS idx_issues_status ON issues(status);
 CREATE INDEX IF NOT EXISTS idx_issues_section ON issues(section);
 CREATE INDEX IF NOT EXISTS idx_issues_evaluator_id ON issues(evaluator_id);
+CREATE INDEX IF NOT EXISTS idx_issues_signature ON issues(signature);
 
 -- v26: measurement plane (evidence only). `eval` = deterministic Python
 -- detector over a trace corpus; `llm_eval` = LLM-as-judge template. Neither
@@ -1080,6 +1091,13 @@ def initialize_database(db_path: Path) -> None:
         _ensure_column(connection, "issues", "evaluator_id", "evaluator_id TEXT")
         _ensure_column(connection, "eval_definitions", "issue_id", "issue_id TEXT")
         _ensure_column(connection, "learning_proposals", "issue_id", "issue_id TEXT")
+        # v30: analysis decoupled from proposal. A deterministic `signature` lets
+        # recurrences of the same failure bundle into one issue across time;
+        # `recurrence_count` tracks how often it resurfaced; `accepted_at` records gate-#1
+        # acceptance (the lifecycle gained an `accepted` state). All additive/nullable.
+        _ensure_column(connection, "issues", "signature", "signature TEXT")
+        _ensure_column(connection, "issues", "recurrence_count", "recurrence_count INTEGER")
+        _ensure_column(connection, "issues", "accepted_at", "accepted_at TEXT")
         # v21 (SCOPE simplification): redaction collapses to a single global
         # "redact on export" default; the per-profile policy table and the audit
         # ledger are removed. Drop them for DBs created before v21.

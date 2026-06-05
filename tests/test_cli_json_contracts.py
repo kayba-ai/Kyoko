@@ -623,7 +623,7 @@ class CliJsonContractTests(unittest.TestCase):
                         "seeded_demo": True,
                         "api_status": {
                             "initialized": True,
-                            "schema_version": 29,
+                            "schema_version": 30,
                             "counts": {
                                 "profiles": 1,
                                 "runs": 2,

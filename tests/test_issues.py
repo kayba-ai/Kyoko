@@ -6,15 +6,21 @@ import unittest
 from kyoko.details import get_issue_detail
 from kyoko.issues import (
     IssueError,
+    accept_issue,
+    bundle_into_issue,
+    compute_issue_signature,
     create_issue,
+    find_issue_by_signature,
     get_issue,
     link_proposal_to_issue,
     list_issues,
     set_issue_diagnosis,
     set_issue_evaluator,
     set_issue_rank,
+    surface_issue,
     update_issue_status,
 )
+from kyoko.storage import connect
 from kyoko.mcp import (
     MCP_DIRECT_APPLY_TOOL_NAMES,
     MCP_DIRECT_HARNESS_WRITE_TOOL_NAMES,
@@ -286,6 +292,143 @@ class IssueLifecycleTests(unittest.TestCase):
             _seed(db_path)
             with self.assertRaises(IssueError):
                 set_issue_evaluator(db_path=db_path, issue_id="issue_missing", evaluator_id="g")
+
+
+class IssueDedupAndAcceptTests(unittest.TestCase):
+    """v30: the deterministic dedup net (surface_issue) + gate-#1 acceptance."""
+
+    PROFILE = "profile_news_research_001"
+
+    def _sig(self, db_path: Path, **kwargs):
+        with connect(db_path) as connection:
+            return compute_issue_signature(connection, profile_id=self.PROFILE, **kwargs)
+
+    def test_signature_anchors_on_span_names_not_title(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "kyoko.db"
+            _seed(db_path)
+            sig_a = self._sig(
+                db_path, section="context",
+                affected_span_ids=["span_fetch_timeout_001"], title="Fetch flaky",
+            )
+            sig_b = self._sig(
+                db_path, section="context",
+                affected_span_ids=["span_fetch_timeout_001"], title="Totally different wording",
+            )
+            sig_other = self._sig(
+                db_path, section="context",
+                affected_span_ids=["span_research_root_001"], title="Fetch flaky",
+            )
+            # Same span name => same signature regardless of title wording.
+            self.assertEqual(sig_a, sig_b)
+            # Different span (name) => different signature even with identical title.
+            self.assertNotEqual(sig_a, sig_other)
+
+    def test_signature_falls_back_to_title_when_no_anchors(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "kyoko.db"
+            _seed(db_path)
+            same1 = self._sig(db_path, section=None, title="Planner ignores the retry budget")
+            same2 = self._sig(db_path, section=None, title="the Planner IGNORES retry  budget!!")
+            diff = self._sig(db_path, section=None, title="Summarizer hallucinates citations")
+            self.assertEqual(same1, same2)  # normalized title slug
+            self.assertNotEqual(same1, diff)
+
+    def test_surface_creates_then_bundles_recurrence(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "kyoko.db"
+            _seed(db_path)
+            first, bundled1 = surface_issue(
+                db_path=db_path, title="Fetch times out", section="harness",
+                source="analysis", affected_span_ids=["span_fetch_timeout_001"],
+                evidence_refs=[{"entity_type": "span", "entity_id": "span_fetch_timeout_001"}],
+            )
+            self.assertFalse(bundled1)
+            self.assertEqual(first["recurrence_count"], 1)
+            self.assertIsNotNone(first["signature"])
+
+            second, bundled2 = surface_issue(
+                db_path=db_path, title="Fetch keeps timing out (seen again)", section="harness",
+                source="analysis", affected_span_ids=["span_fetch_timeout_001"],
+                evidence_refs=[{"entity_type": "run", "entity_id": "run_research_topic_001"}],
+            )
+            self.assertTrue(bundled2)
+            self.assertEqual(second["id"], first["id"])  # folded into the same issue
+            self.assertEqual(second["recurrence_count"], 2)
+            # Evidence unioned across the two surfacings.
+            self.assertEqual(len(second["evidence_refs"]), 2)
+            # Only one issue exists.
+            self.assertEqual(len(list_issues(db_path=db_path)), 1)
+
+    def test_surface_distinct_failures_do_not_bundle(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "kyoko.db"
+            _seed(db_path)
+            surface_issue(db_path=db_path, title="Fetch fails",
+                          affected_span_ids=["span_fetch_timeout_001"])
+            surface_issue(db_path=db_path, title="Research planning fails",
+                          affected_span_ids=["span_research_root_001"])
+            self.assertEqual(len(list_issues(db_path=db_path)), 2)
+
+    def test_recurrence_reopens_resolved_issue(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "kyoko.db"
+            _seed(db_path)
+            first, _ = surface_issue(
+                db_path=db_path, title="Fetch times out", section="harness",
+                affected_span_ids=["span_fetch_timeout_001"],
+            )
+            update_issue_status(db_path=db_path, issue_id=first["id"], status="resolved")
+            again, bundled = surface_issue(
+                db_path=db_path, title="Fetch times out again", section="harness",
+                affected_span_ids=["span_fetch_timeout_001"],
+            )
+            self.assertTrue(bundled)
+            self.assertEqual(again["id"], first["id"])
+            self.assertEqual(again["status"], "open")  # regression re-opens
+            self.assertEqual(again["recurrence_count"], 2)
+
+    def test_find_by_signature_ignores_dismissed(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "kyoko.db"
+            _seed(db_path)
+            issue, _ = surface_issue(
+                db_path=db_path, title="Fetch times out", section="harness",
+                affected_span_ids=["span_fetch_timeout_001"],
+            )
+            update_issue_status(db_path=db_path, issue_id=issue["id"], status="dismissed")
+            with connect(db_path) as connection:
+                hit = find_issue_by_signature(
+                    connection, profile_id=self.PROFILE, signature=issue["signature"]
+                )
+            self.assertIsNone(hit)
+            # A fresh surfacing therefore creates a NEW issue rather than reviving the dismissed one.
+            again, bundled = surface_issue(
+                db_path=db_path, title="Fetch times out", section="harness",
+                affected_span_ids=["span_fetch_timeout_001"],
+            )
+            self.assertFalse(bundled)
+            self.assertNotEqual(again["id"], issue["id"])
+
+    def test_accept_issue_advances_and_stamps(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "kyoko.db"
+            _seed(db_path)
+            issue = create_issue(db_path=db_path, title="Accept me", section="context")
+            set_issue_diagnosis(
+                db_path=db_path, issue_id=issue["id"], root_cause="x", section="context"
+            )
+            accepted = accept_issue(db_path=db_path, issue_id=issue["id"])
+            self.assertEqual(accepted["status"], "accepted")
+            self.assertIsNotNone(accepted["accepted_at"])
+
+    def test_accept_refuses_dismissed(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "kyoko.db"
+            _seed(db_path)
+            issue = create_issue(db_path=db_path, title="Dismissed", status="dismissed")
+            with self.assertRaises(IssueError):
+                accept_issue(db_path=db_path, issue_id=issue["id"])
 
 
 class IssueMcpSafetyTests(unittest.TestCase):

@@ -80,7 +80,7 @@ class MigrationTests(unittest.TestCase):
             for t in ("eval_definitions", "eval_measure_runs", "eval_measure_results"):
                 self.assertIn(t, names)
             status = storage.get_database_status(db_path)
-            self.assertEqual(status.schema_version, 29)
+            self.assertEqual(status.schema_version, 30)
 
 
 class CorpusTests(unittest.TestCase):
