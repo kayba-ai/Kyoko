@@ -121,6 +121,7 @@ from .operator_presets import (
 )
 from .analysis_runner import (
     DASHBOARD_ANALYZERS,
+    DEFAULT_ANALYSIS_TIMEOUT_SECONDS,
     SCHEDULABLE_ANALYZERS,
     AnalysisJob,
     AnalysisRunError,
@@ -2970,7 +2971,7 @@ def _analysis_job_from_payload(payload: dict[str, Any]) -> AnalysisJob:
         raise AnalysisRunError("analyzer_required")
     ace_command = payload.get("ace_command")
     operator_command = payload.get("operator_command")
-    timeout = payload.get("timeout_seconds", 120)
+    timeout = payload.get("timeout_seconds", DEFAULT_ANALYSIS_TIMEOUT_SECONDS)
     max_retries = payload.get("max_retries", 0)
     return AnalysisJob(
         analyzer=analyzer,
@@ -2986,7 +2987,7 @@ def _analysis_job_from_payload(payload: dict[str, Any]) -> AnalysisJob:
         operator_command=(
             operator_command if isinstance(operator_command, list) and operator_command else None
         ),
-        timeout_seconds=timeout if isinstance(timeout, int) else 120,
+        timeout_seconds=timeout if isinstance(timeout, int) else DEFAULT_ANALYSIS_TIMEOUT_SECONDS,
         max_retries=max_retries if isinstance(max_retries, int) else 0,
         profile_id=_optional_str(payload.get("profile_id")),
     )

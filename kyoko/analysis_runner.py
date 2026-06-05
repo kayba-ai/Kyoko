@@ -47,6 +47,11 @@ DASHBOARD_ANALYZERS = ("ace", "codex", "claude", "openclaw", "hermes")
 SCHEDULABLE_ANALYZERS = ("openclaw", "hermes")
 _OPERATOR_ADAPTER_ANALYZERS = {"codex", "claude", "openclaw", "hermes", "generic", "adapter"}
 
+# A diagnosis turn now reads the actual (hydrated) trace payloads and reasons over
+# them, so it needs minutes, not the ~2 min that sufficed when the bundle was an
+# empty skeleton. Callers can still override per-run.
+DEFAULT_ANALYSIS_TIMEOUT_SECONDS = 600
+
 
 class AnalysisRunError(Exception):
     """Raised for invalid analysis-job configuration."""
@@ -65,7 +70,7 @@ class AnalysisJob:
     run_autonomy: bool = True
     ace_command: Optional[Sequence[str]] = None
     operator_command: Optional[Sequence[str]] = None
-    timeout_seconds: int = 120
+    timeout_seconds: int = DEFAULT_ANALYSIS_TIMEOUT_SECONDS
     max_retries: int = 0
     schedule_id: Optional[str] = None
     profile_id: Optional[str] = None

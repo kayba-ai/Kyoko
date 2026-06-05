@@ -2568,7 +2568,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--ace-command", help="External ACE command (required when --analyzer ace), e.g. 'ace run'."
     )
     analysis_run.add_argument("--command", dest="operator_command", help="Command for --analyzer command.")
-    analysis_run.add_argument("--timeout", type=int, default=120, help="External operator timeout (seconds).")
+    analysis_run.add_argument("--timeout", type=int, default=600, help="External operator timeout (seconds).")
     analysis_run.add_argument("--max-retries", type=int, default=0, help="Retry invalid operator output N times.")
     analysis_run.add_argument("--profile-id", help="Profile id. Defaults to the first profile.")
     analysis_run.add_argument("--output-dir", type=Path, help="Artifact output directory.")

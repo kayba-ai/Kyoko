@@ -61,6 +61,12 @@ def write_operator_prompt_artifacts(
         run_id=run_id,
         since=since,
         consumer=f"operator_prompt:{target}",
+        # The operator's job is to read and judge the traces, so it needs the
+        # actual payload content, not just the span skeleton + (masked) refs.
+        # Hydration inlines blob text into non-ref fields; redaction still scrubs
+        # sensitive values. (ACE feeds its Reflector the raw trace for the same
+        # reason — "no extraction, no conversion".)
+        hydrate_payloads=True,
     )
     evidence_path = output_dir / "evidence-bundle.json"
     prompt_path = output_dir / "operator-instructions.md"

@@ -17,6 +17,24 @@ from .storage import StorageError, connect, initialize_database
 
 EVIDENCE_BUNDLE_VERSION = "kyoko.evidence_bundle.v1"
 
+# When a consumer is asked to *read and judge* traces (the diagnosis/analysis
+# operator), the span/run skeleton is not enough — it needs the actual payload
+# content. Payloads live in the content-addressed blob store and the bundle
+# normally carries only blob refs (which the default redaction policy then
+# masks). ``hydrate_payloads=True`` resolves those refs to text and inlines them
+# into the *_payload sibling fields, which are NOT ref keys and so survive
+# redaction (sensitive *values* are still scrubbed). Per-payload size is bounded
+# to keep the bundle/prompt manageable.
+PAYLOAD_HYDRATION_MAX_CHARS = 8000
+_HYDRATION_TARGETS = {
+    "runs": (("input_ref", "input_payload"), ("output_ref", "output_payload")),
+    "spans": (
+        ("input_ref", "input_payload"),
+        ("output_ref", "output_payload"),
+        ("raw_ref", "raw_payload"),
+    ),
+}
+
 
 def build_evidence_bundle(
     *,
@@ -25,6 +43,7 @@ def build_evidence_bundle(
     run_id: Optional[str] = None,
     since: Optional[str] = None,
     consumer: str = "evidence_bundle",
+    hydrate_payloads: bool = False,
 ) -> dict[str, Any]:
     if not db_path.exists():
         raise StorageError(f"{db_path}: database does not exist")
@@ -103,7 +122,12 @@ def build_evidence_bundle(
             "check_capabilities": list_check_capabilities(),
         }
 
+        if hydrate_payloads:
+            _hydrate_bundle_payloads(connection, bundle, max_chars=PAYLOAD_HYDRATION_MAX_CHARS)
+
     bundle["summary"] = _bundle_summary(bundle)
+    if hydrate_payloads:
+        bundle["payloads_hydrated"] = True
     try:
         policy = get_redaction_policy(db_path=db_path, profile_id=str(bundle["profile_id"]))
         result = redact_evidence_bundle(bundle, policy)
@@ -113,6 +137,58 @@ def build_evidence_bundle(
     except RedactionError as exc:
         raise StorageError(str(exc)) from exc
     return result.payload
+
+
+def _hydrate_bundle_payloads(
+    connection: sqlite3.Connection,
+    bundle: dict[str, Any],
+    *,
+    max_chars: int,
+) -> None:
+    """Resolve blob refs on runs/spans into inline ``*_payload`` text in place.
+
+    Mirrors ``inspection.get_span_payload``'s blob read (path on disk, preview
+    fallback), bounded per payload. Refs are left untouched so the redaction pass
+    still masks them; the inlined bodies ride in non-ref fields and so reach the
+    operator. A small cache avoids re-reading shared content-addressed blobs.
+    """
+
+    cache: dict[str, Optional[str]] = {}
+
+    def read_blob_text(ref: Any) -> Optional[str]:
+        if not isinstance(ref, str) or not ref:
+            return None
+        if ref in cache:
+            return cache[ref]
+        text: Optional[str] = None
+        row = connection.execute(
+            "SELECT path, preview FROM payload_blobs WHERE id = ?", (ref,)
+        ).fetchone()
+        if row is not None:
+            blob_path = row["path"]
+            if isinstance(blob_path, str) and blob_path:
+                try:
+                    text = Path(blob_path).read_text(errors="replace")
+                except OSError:
+                    text = None
+            if text is None:
+                preview = row["preview"]
+                text = str(preview) if preview is not None else None
+        if text is not None and len(text) > max_chars:
+            text = text[:max_chars] + f"\n…[truncated {len(text) - max_chars} chars]"
+        cache[ref] = text
+        return text
+
+    for collection, targets in _HYDRATION_TARGETS.items():
+        for row in bundle.get(collection, []):
+            if not isinstance(row, dict):
+                continue
+            for ref_field, payload_field in targets:
+                if row.get(payload_field) is not None:
+                    continue
+                text = read_blob_text(row.get(ref_field))
+                if text is not None:
+                    row[payload_field] = text
 
 
 def write_evidence_bundle(
