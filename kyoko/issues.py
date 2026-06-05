@@ -45,6 +45,7 @@ import hashlib
 import json
 import re
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
@@ -94,6 +95,21 @@ _LIST_FIELDS = (
 
 class IssueError(Exception):
     """Raised for invalid issue input or missing targets."""
+
+
+DEFAULT_ISSUE_SCHEMA_PATH = Path("docs/schemas/issue.schema.json")
+
+
+@dataclass(frozen=True)
+class IssueValidationResult:
+    """Result of :func:`validate_issue`. Mirrors
+    :class:`kyoko.proposals.ProposalValidationResult`."""
+
+    errors: tuple[str, ...]
+
+    @property
+    def ok(self) -> bool:
+        return not self.errors
 
 
 def _resolve_profile_id(connection: Any, profile_id: Optional[str]) -> str:
@@ -712,3 +728,171 @@ def accept_issue(*, db_path: Path, issue_id: str) -> dict:
         issue_id=issue_id,
         assignments={"status": "accepted", "accepted_at": utc_now()},
     )
+
+
+# --------------------------------------------------------------------------------------
+# Issue-authoring validation (schema kyoko.issue.v1) — the diagnosis turn's contract.
+# --------------------------------------------------------------------------------------
+
+# Issue authoring evidence/affected refs may point at entity types that live outside the
+# current runtime slice (blob, check_run, replay_run, patch_transaction). Those are valid
+# targets but not referentially checked here; mirrors proposals._missing_evidence_ref.
+_AFFECTED_ID_FIELDS = {
+    "affected_span_ids": "span",
+    "affected_agent_identity_ids": "agent_identity",
+    "affected_workflow_node_ids": "workflow_node",
+    "affected_task_ids": "task",
+}
+
+
+def _load_issue_schema(schema_path: Optional[Path]) -> Optional[dict[str, Any]]:
+    """Load the kyoko.issue.v1 schema. Mirrors proposals._load_schema: an explicit path
+    wins; otherwise fall back to the local docs copy then the bundled runtime copy."""
+
+    from .bundled_assets import AssetError, load_bundled_json
+
+    if schema_path is not None and schema_path.exists():
+        payload = json.loads(schema_path.read_text())
+        if not isinstance(payload, dict):
+            raise IssueError(f"issue_schema_not_object:{schema_path}")
+        return payload
+
+    default_schema = Path.cwd() / DEFAULT_ISSUE_SCHEMA_PATH
+    if default_schema.exists():
+        payload = json.loads(default_schema.read_text())
+        if not isinstance(payload, dict):
+            raise IssueError(f"issue_schema_not_object:{default_schema}")
+        return payload
+    try:
+        return load_bundled_json("schemas/issue.schema.json")
+    except AssetError:
+        return None
+
+
+def _issue_schema_errors(
+    issue: dict[str, Any],
+    schema_path: Optional[Path],
+    *,
+    require_jsonschema: bool,
+) -> list[str]:
+    if schema_path is None and not require_jsonschema:
+        return []
+    try:
+        schema = _load_issue_schema(schema_path)
+    except Exception as exc:  # pragma: no cover - defensive
+        return [f"issue_schema_load_failed:{exc}"]
+    if schema is None:
+        return ["issue_schema_not_found"] if require_jsonschema else []
+    try:
+        import jsonschema
+    except ImportError:
+        return ["jsonschema_not_installed"] if require_jsonschema else []
+
+    validator = jsonschema.Draft202012Validator(schema)
+    return [
+        f"issue_schema_error:{list(error.path)}:{error.message}"
+        for error in sorted(validator.iter_errors(issue), key=lambda err: list(err.path))
+    ]
+
+
+def validate_issue(
+    *,
+    connection: Any,
+    issue: dict[str, Any],
+    schema_path: Optional[Path] = None,
+    require_jsonschema: bool = False,
+) -> IssueValidationResult:
+    """Validate one authored ``kyoko.issue.v1`` issue (the diagnosis turn's contract).
+
+    Mirrors :func:`kyoko.proposals.validate_learning_proposal`: optional JSON-Schema
+    validation, enum checks, and referential integrity — every ``evidence_refs[].entity_id``
+    and every ``affected_*_id`` must resolve in its table (reusing
+    :data:`kyoko.proposals.ENTITY_TABLES`). Returns an :class:`IssueValidationResult`;
+    raises only on programming errors, never on validation failure."""
+
+    from .proposals import ENTITY_TABLES  # lazy import to avoid a cycle
+
+    errors: list[str] = []
+
+    # Schema validation runs first; if the shape is wrong, skip referential checks.
+    schema_errors = _issue_schema_errors(
+        issue, schema_path, require_jsonschema=require_jsonschema
+    )
+    if schema_errors:
+        return IssueValidationResult(errors=tuple(schema_errors))
+
+    if issue.get("schema_version") != "kyoko.issue.v1":
+        errors.append("schema_version_invalid")
+
+    title = issue.get("title")
+    if not isinstance(title, str) or not title.strip():
+        errors.append("title_required")
+
+    section = issue.get("section")
+    if section not in ISSUE_SECTIONS:
+        errors.append(f"unsupported_section:{section}")
+
+    root_cause = issue.get("root_cause")
+    if not isinstance(root_cause, str) or not root_cause.strip():
+        errors.append("root_cause_required")
+
+    severity = issue.get("severity")
+    if severity is not None and severity not in ISSUE_SEVERITIES:
+        errors.append(f"unsupported_severity:{severity}")
+
+    source = issue.get("source")
+    if source is not None and source not in ISSUE_SOURCES:
+        errors.append(f"unsupported_source:{source}")
+
+    profile_id = issue.get("profile_id")
+    if isinstance(profile_id, str) and profile_id:
+        if not _issue_row_exists(connection, "profiles", profile_id):
+            errors.append(f"profile_not_found:{profile_id}")
+
+    evidence_refs = issue.get("evidence_refs")
+    if not isinstance(evidence_refs, list) or not evidence_refs:
+        errors.append("evidence_refs_required")
+    else:
+        for ref in evidence_refs:
+            if not isinstance(ref, dict):
+                errors.append("invalid_evidence_ref")
+                continue
+            entity_type = ref.get("entity_type")
+            entity_id = ref.get("entity_id")
+            if not isinstance(entity_type, str) or not isinstance(entity_id, str):
+                errors.append(f"invalid_evidence_ref:{entity_type}:{entity_id}")
+                continue
+            table = ENTITY_TABLES.get(entity_type)
+            if table is None:
+                continue
+            if not _issue_row_exists(connection, table, entity_id):
+                errors.append(f"evidence_ref_not_found:{entity_type}:{entity_id}")
+
+    for field, entity_type in _AFFECTED_ID_FIELDS.items():
+        values = issue.get(field)
+        if values is None:
+            continue
+        if not isinstance(values, list):
+            errors.append(f"{field}_must_be_list")
+            continue
+        table = ENTITY_TABLES.get(entity_type)
+        for value in values:
+            if not isinstance(value, str):
+                errors.append(f"invalid_affected_ref:{field}:{value}")
+                continue
+            if table is None:
+                continue
+            if not _issue_row_exists(connection, table, value):
+                errors.append(f"affected_ref_not_found:{entity_type}:{value}")
+
+    return IssueValidationResult(errors=tuple(errors))
+
+
+def _issue_row_exists(connection: Any, table: str, row_id: str) -> bool:
+    try:
+        row = connection.execute(
+            f"SELECT 1 FROM {table} WHERE id = ? LIMIT 1", (row_id,)
+        ).fetchone()
+    except Exception as exc:  # pragma: no cover - missing table is a programming error
+        raise IssueError(f"missing_table:{table}") from exc
+    return row is not None

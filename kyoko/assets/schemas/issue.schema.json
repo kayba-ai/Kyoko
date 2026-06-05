@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kayba-ai.com/kyoko/schemas/issue.schema.json",
+  "title": "Kyoko Issue",
+  "description": "One agent behavioral failure surfaced by the analysis (diagnosis) turn. The operator returns a JSON array of these; a LearningProposal is authored in a separate step once the issue is accepted.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "title",
+    "section",
+    "root_cause",
+    "evidence_refs"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "kyoko.issue.v1"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "section": {
+      "type": "string",
+      "enum": ["context", "harness"]
+    },
+    "root_cause": {
+      "type": "string",
+      "minLength": 1
+    },
+    "evidence_refs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/evidence_ref"
+      }
+    },
+    "body": {
+      "type": "string"
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["low", "medium", "high"]
+    },
+    "category": {
+      "type": "string"
+    },
+    "keywords": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "affected_span_ids": {
+      "$ref": "#/$defs/id_array"
+    },
+    "affected_agent_identity_ids": {
+      "$ref": "#/$defs/id_array"
+    },
+    "affected_workflow_node_ids": {
+      "$ref": "#/$defs/id_array"
+    },
+    "affected_task_ids": {
+      "$ref": "#/$defs/id_array"
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*_[A-Za-z0-9][A-Za-z0-9_-]*$"
+    },
+    "id_array": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "evidence_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entity_type", "entity_id"],
+      "properties": {
+        "entity_type": {
+          "type": "string",
+          "enum": [
+            "run",
+            "span",
+            "task",
+            "task_attempt",
+            "handoff",
+            "timeline_event",
+            "issue",
+            "check_run",
+            "replay_run",
+            "patch_transaction",
+            "blob"
+          ]
+        },
+        "entity_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "role": {
+          "type": "string",
+          "enum": ["failure", "context", "counterexample", "verification", "regression", "source"]
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

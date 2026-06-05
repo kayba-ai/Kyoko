@@ -12,6 +12,8 @@ from .proposals import DEFAULT_SCHEMA_PATH
 
 BEGIN_PROPOSAL_BLOCK = "BEGIN_KYOKO_LEARNING_PROPOSAL_JSON"
 END_PROPOSAL_BLOCK = "END_KYOKO_LEARNING_PROPOSAL_JSON"
+BEGIN_ISSUES_BLOCK = "BEGIN_KYOKO_ISSUES_JSON"
+END_ISSUES_BLOCK = "END_KYOKO_ISSUES_JSON"
 INLINE_EVIDENCE_MAX_CHARS = 60000
 
 
@@ -34,7 +36,24 @@ def write_operator_prompt_artifacts(
     run_id: Optional[str] = None,
     since: Optional[str] = None,
     schema_path: Optional[Path] = None,
+    kind: str = "propose",
+    issue: Optional[dict[str, Any]] = None,
 ) -> OperatorPromptReport:
+    """Build the evidence bundle + operator-instructions.md for an operator turn.
+
+    ``kind`` selects which contract the operator is asked to satisfy:
+
+    - ``"propose"`` (default — the legacy behavior): return exactly one
+      ``LearningProposal`` (``BEGIN_KYOKO_LEARNING_PROPOSAL_JSON`` block). When ``issue``
+      is supplied it becomes a *proposal-authoring* turn whose proposal must fix that one
+      accepted issue.
+    - ``"diagnose"``: return a JSON array of ``kyoko.issue.v1`` issues
+      (``BEGIN_KYOKO_ISSUES_JSON`` block) — diagnosis only, no fixes/proposals.
+
+    The returned ``schema_path`` is the issue schema for ``"diagnose"`` and the
+    LearningProposal schema otherwise; ``evidence_path``/``prompt_path``/``profile_id``/
+    ``bundle`` are always populated."""
+
     output_dir.mkdir(parents=True, exist_ok=True)
     bundle = build_evidence_bundle(
         db_path=db_path,
@@ -45,17 +64,36 @@ def write_operator_prompt_artifacts(
     )
     evidence_path = output_dir / "evidence-bundle.json"
     prompt_path = output_dir / "operator-instructions.md"
-    resolved_schema_path = resolve_operator_schema_path(schema_path)
 
     evidence_path.write_text(json.dumps(bundle, indent=2, sort_keys=True) + "\n")
-    prompt_path.write_text(
-        build_operator_prompt(
-            bundle=bundle,
-            evidence_path=evidence_path,
-            target=target,
-            schema_path=resolved_schema_path,
+    if kind == "diagnose":
+        resolved_schema_path = resolve_operator_issue_schema_path(schema_path)
+        prompt_path.write_text(
+            build_diagnosis_prompt(
+                bundle=bundle,
+                evidence_path=evidence_path,
+                target=target,
+                schema_path=resolved_schema_path,
+            )
         )
-    )
+    else:
+        resolved_schema_path = resolve_operator_schema_path(schema_path)
+        if issue is not None:
+            prompt_text = build_proposal_authoring_prompt(
+                bundle=bundle,
+                evidence_path=evidence_path,
+                issue=issue,
+                target=target,
+                schema_path=resolved_schema_path,
+            )
+        else:
+            prompt_text = build_operator_prompt(
+                bundle=bundle,
+                evidence_path=evidence_path,
+                target=target,
+                schema_path=resolved_schema_path,
+            )
+        prompt_path.write_text(prompt_text)
 
     return OperatorPromptReport(
         target=target,
@@ -64,6 +102,59 @@ def write_operator_prompt_artifacts(
         prompt_path=prompt_path,
         schema_path=resolved_schema_path,
         bundle=bundle,
+    )
+
+
+def write_diagnosis_prompt_artifacts(
+    *,
+    db_path: Path,
+    output_dir: Path,
+    target: str = "generic",
+    profile_id: Optional[str] = None,
+    run_id: Optional[str] = None,
+    since: Optional[str] = None,
+    schema_path: Optional[Path] = None,
+) -> OperatorPromptReport:
+    """Sibling of :func:`write_operator_prompt_artifacts` for the diagnosis turn — the
+    operator returns a JSON array of ``kyoko.issue.v1`` issues (no fixes)."""
+
+    return write_operator_prompt_artifacts(
+        db_path=db_path,
+        output_dir=output_dir,
+        target=target,
+        profile_id=profile_id,
+        run_id=run_id,
+        since=since,
+        schema_path=schema_path,
+        kind="diagnose",
+    )
+
+
+def write_proposal_prompt_artifacts(
+    *,
+    db_path: Path,
+    output_dir: Path,
+    issue: dict[str, Any],
+    target: str = "generic",
+    profile_id: Optional[str] = None,
+    run_id: Optional[str] = None,
+    since: Optional[str] = None,
+    schema_path: Optional[Path] = None,
+) -> OperatorPromptReport:
+    """Sibling of :func:`write_operator_prompt_artifacts` for the proposal-authoring turn —
+    given one accepted ``issue``, the operator returns exactly one ``LearningProposal``
+    that fixes it."""
+
+    return write_operator_prompt_artifacts(
+        db_path=db_path,
+        output_dir=output_dir,
+        target=target,
+        profile_id=profile_id,
+        run_id=run_id,
+        since=since,
+        schema_path=schema_path,
+        kind="propose",
+        issue=issue,
     )
 
 
@@ -174,6 +265,207 @@ def resolve_operator_schema_path(schema_path: Optional[Path]) -> Optional[Path]:
         return bundled if bundled.exists() else schema_path
 
     return schema_path
+
+
+def resolve_operator_issue_schema_path(schema_path: Optional[Path]) -> Optional[Path]:
+    """Resolve the kyoko.issue.v1 schema path for the diagnosis turn. Mirrors
+    :func:`resolve_operator_schema_path` but never substitutes the LearningProposal
+    schema: a caller-supplied LearningProposal default path is ignored in favor of the
+    issue schema."""
+
+    default_docs = Path("docs/schemas/issue.schema.json")
+    if schema_path is not None and schema_path.exists() and schema_path != DEFAULT_SCHEMA_PATH:
+        return schema_path.resolve()
+    local = Path.cwd() / default_docs
+    if local.exists():
+        return local.resolve()
+    bundled = bundled_asset_path("schemas/issue.schema.json")
+    return bundled if bundled.exists() else None
+
+
+def build_diagnosis_prompt(
+    *,
+    bundle: dict[str, Any],
+    evidence_path: Path,
+    target: str = "generic",
+    schema_path: Optional[Path] = None,
+) -> str:
+    """Diagnosis turn: instruct the operator to read the evidence and return a JSON array
+    of ``kyoko.issue.v1`` issues — diagnosis only, no fixes/proposals/skillbook edits."""
+
+    summary = bundle.get("summary", {})
+    redaction = bundle.get("redaction") if isinstance(bundle.get("redaction"), dict) else {}
+    redaction_policy = redaction.get("policy") if isinstance(redaction.get("policy"), dict) else {}
+    payload_access = redaction_policy.get("payload_access", "unknown")
+    redact_sensitive_values = redaction_policy.get("redact_sensitive_values", "unknown")
+    profile_id = str(bundle.get("profile_id") or "")
+    schema_display = str(schema_path) if schema_path is not None else "docs/schemas/issue.schema.json"
+    target_note = _target_note(target)
+    skeleton = [_issue_skeleton()]
+    inline_evidence = _inline_evidence_json(bundle=bundle, evidence_path=evidence_path)
+
+    return "\n".join(
+        [
+            "# Kyoko Diagnosis Task",
+            "",
+            f"Target operator: `{target}`",
+            f"Evidence bundle: `{evidence_path}`",
+            f"Issue schema: `{schema_display}`",
+            "",
+            "You are acting as Kyoko's analysis operator. Read the evidence bundle, identify one or more concrete agent failures, and return a JSON array of strict `kyoko.issue.v1` issues.",
+            "",
+            "This is a **diagnosis-only** turn. Do NOT propose fixes, do NOT author a LearningProposal, and do NOT edit the skillbook. A proposal is authored in a separate step after a human (or autonomous policy) accepts an issue.",
+            "",
+            target_note,
+            "",
+            "## Hard Constraints",
+            "",
+            "- Return exactly one issues block on stdout containing a JSON array (one or more issues).",
+            "- Cite only evidence IDs that exist in the evidence bundle.",
+            "- Each issue's `root_cause` is the diagnosis; do not include any fix, patch, or skill text.",
+            "- Set `section` to `context` when a prompt/skillbook fix would address it, or `harness` when it needs a check, test, replay adapter, tool wrapper, or repository patch.",
+            "- If evidence is insufficient for a concrete failure, return an empty array `[]`.",
+            "",
+            "## Evidence Privacy And Audit",
+            "",
+            f"- Payload access mode: `{payload_access}`",
+            f"- Sensitive-value redaction: `{redact_sensitive_values}`",
+            f"- Redacted field count: {redaction.get('redacted_count', 0)}",
+            "- Treat redacted refs and secret placeholders as intentional privacy controls, not missing evidence.",
+            "",
+            "## Evidence Summary",
+            "",
+            f"- Profile: `{profile_id}`",
+            f"- Runs: {summary.get('runs', 0)}",
+            f"- Spans: {summary.get('spans', 0)}",
+            f"- Failed spans: {summary.get('failed_spans', 0)}",
+            f"- Tasks: {summary.get('tasks', 0)}",
+            f"- Handoffs: {summary.get('handoffs', 0)}",
+            "",
+            "## Evidence Bundle JSON",
+            "",
+            "The inline JSON below is the evidence to cite from. If it is marked as truncated, read the full evidence bundle path above.",
+            "",
+            "```json",
+            inline_evidence,
+            "```",
+            "",
+            "## Required Stdout",
+            "",
+            "```text",
+            BEGIN_ISSUES_BLOCK,
+            json.dumps(skeleton, indent=2, sort_keys=True),
+            END_ISSUES_BLOCK,
+            "```",
+            "",
+            "The JSON above is a shape guide, not the answer. Replace every placeholder with evidence-backed content, and emit one array element per distinct failure.",
+            "",
+        ]
+    )
+
+
+def build_proposal_authoring_prompt(
+    *,
+    bundle: dict[str, Any],
+    evidence_path: Path,
+    issue: dict[str, Any],
+    target: str = "generic",
+    schema_path: Optional[Path] = None,
+) -> str:
+    """Proposal-authoring turn: given ONE accepted issue, instruct the operator to return
+    exactly one ``LearningProposal`` whose ``proposed_changes`` fix THIS issue."""
+
+    profile_id = str(bundle.get("profile_id") or "")
+    capabilities = bundle.get("check_capabilities") if isinstance(bundle.get("check_capabilities"), dict) else {}
+    schema_display = str(schema_path) if schema_path is not None else "docs/schemas/learning-proposal.schema.json"
+    target_note = _target_note(target)
+    skeleton = _proposal_skeleton(profile_id)
+    inline_evidence = _inline_evidence_json(bundle=bundle, evidence_path=evidence_path)
+
+    issue_id = str(issue.get("id") or "")
+    issue_title = str(issue.get("title") or "")
+    issue_section = str(issue.get("section") or "context")
+    issue_root_cause = str(issue.get("root_cause") or "")
+    issue_body = str(issue.get("body") or "")
+    issue_evidence = issue.get("evidence_refs") if isinstance(issue.get("evidence_refs"), list) else []
+
+    return "\n".join(
+        [
+            "# Kyoko Proposal Authoring Task",
+            "",
+            f"Target operator: `{target}`",
+            f"Evidence bundle: `{evidence_path}`",
+            f"LearningProposal schema: `{schema_display}`",
+            "",
+            "You are acting as Kyoko's analysis operator. An Issue has already been diagnosed and accepted for a fix. Author exactly one strict LearningProposal whose `proposed_changes` fix THIS issue.",
+            "",
+            target_note,
+            "",
+            "## Accepted Issue",
+            "",
+            f"- Issue id: `{issue_id}` (Kyoko injects `issue_id` for you — do not invent or change it)",
+            f"- Title: {issue_title}",
+            f"- Section: `{issue_section}` (your proposal's `section` must match this)",
+            f"- Root cause: {issue_root_cause}",
+            *([f"- Body: {issue_body}"] if issue_body else []),
+            "- Issue evidence refs:",
+            *[f"  - `{ref.get('entity_type')}:{ref.get('entity_id')}`" for ref in issue_evidence if isinstance(ref, dict)],
+            "",
+            "## Hard Constraints",
+            "",
+            "- Return exactly one proposal block on stdout.",
+            "- The proposal must fix the accepted issue above and nothing else.",
+            f"- Set `section` to `{issue_section}` to match the accepted issue.",
+            "- Cite only evidence IDs that exist in the evidence bundle (reuse the issue's evidence where it applies).",
+            "- Do not set `issue_id` yourself; Kyoko injects it from the accepted issue.",
+            "- Do not apply proposals, patch files, mutate the skillbook, or change autonomy policy.",
+            "- Keep generated checks at `L0_generated`; Kyoko promotes trust only after replay/check evidence.",
+            "",
+            "## Check Capabilities",
+            "",
+            *_check_capability_lines(capabilities),
+            "",
+            "## Evidence Bundle JSON",
+            "",
+            "The inline JSON below is the evidence to cite from. If it is marked as truncated, read the full evidence bundle path above.",
+            "",
+            "```json",
+            inline_evidence,
+            "```",
+            "",
+            "## Required Stdout",
+            "",
+            "```text",
+            BEGIN_PROPOSAL_BLOCK,
+            json.dumps(skeleton, indent=2, sort_keys=True),
+            END_PROPOSAL_BLOCK,
+            "```",
+            "",
+            "The JSON above is a shape guide, not the answer. Replace every placeholder with evidence-backed content that fixes the accepted issue.",
+            "",
+        ]
+    )
+
+
+def _issue_skeleton() -> dict[str, Any]:
+    return {
+        "schema_version": "kyoko.issue.v1",
+        "title": "Short evidence-backed failure title",
+        "section": "context",
+        "root_cause": "Evidence-backed diagnosis of why the agent failed.",
+        "severity": "medium",
+        "evidence_refs": [
+            {
+                "entity_type": "span",
+                "entity_id": "replace_with_existing_span_id",
+                "role": "failure",
+                "note": "Why this evidence supports the diagnosis.",
+            }
+        ],
+        "keywords": ["replace", "with", "specific", "terms"],
+        "affected_span_ids": ["replace_with_existing_span_id"],
+        "affected_agent_identity_ids": ["replace_with_existing_agent_identity_id"],
+    }
 
 
 def _check_capability_lines(capabilities: dict[str, Any]) -> list[str]:
