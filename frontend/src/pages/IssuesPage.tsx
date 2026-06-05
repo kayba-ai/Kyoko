@@ -562,8 +562,8 @@ export function IssuesPage() {
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        title="Review"
-        description="Accept, reject, and comment on tracked issues — and see the skillbook they deliver into."
+        title="Issues"
+        description="The spine of the loop — triage, diagnose, and resolve tracked failures; every fix originates here."
         icon={<CircleDot className="h-5 w-5" />}
         actions={
           data ? <span className="text-sm text-muted-foreground tabular-nums">{counts.all} total</span> : undefined

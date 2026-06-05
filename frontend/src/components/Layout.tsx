@@ -29,10 +29,14 @@ interface NavSection {
   items: NavItem[];
 }
 
-// Grouped to mirror the optimization loop: observe → evaluate → improve.
+// Grouped to read as the issue-centric loop / 8-step job map (spec 0016):
+// Observe (capture) → Diagnose (the Issue spine) → Fix (proposal + both gates) →
+// Guard (standing evaluators that watch future traces and re-raise issues). The
+// loop closes: a Guard hit re-enters Diagnose.
 const SECTIONS: NavSection[] = [
   {
-    heading: "Monitor",
+    // Steps 01/03 — capture & locate the failure.
+    heading: "Observe",
     items: [
       { to: "/overview", label: "Overview", icon: LayoutDashboard },
       { to: "/traces", label: "Traces", icon: ListTree },
@@ -40,20 +44,31 @@ const SECTIONS: NavSection[] = [
     ],
   },
   {
-    heading: "Evaluate",
+    // Steps 02/04 — surface, prioritize, diagnose. Issues are the spine;
+    // Analysis is the engine that surfaces+diagnoses them from traces.
+    heading: "Diagnose",
     items: [
-      { to: "/detectors", label: "Detectors", icon: ScanSearch },
-      { to: "/judges", label: "Judges", icon: Scale },
-      { to: "/checks", label: "Checks & Replay", icon: FlaskConical },
+      { to: "/issues", label: "Issues", icon: CircleDot },
+      { to: "/analysis", label: "Analysis", icon: Sparkles },
     ],
   },
   {
-    heading: "Improve",
+    // Steps 05–07 — determine the fix (gate #1 → Proposal), validate
+    // (Checks & Replay), implement (Autonomy / gate #2).
+    heading: "Fix",
     items: [
-      { to: "/issues", label: "Review", icon: CircleDot },
-      { to: "/analysis", label: "Analysis", icon: Sparkles },
       { to: "/proposals", label: "Proposals", icon: GitPullRequestArrow },
+      { to: "/checks", label: "Checks & Replay", icon: FlaskConical },
       { to: "/autonomy", label: "Autonomy", icon: ShieldCheck },
+    ],
+  },
+  {
+    // Step 08 — standing measurements/guards that monitor future traces and
+    // re-raise an Issue on recurrence, closing the loop back to Diagnose.
+    heading: "Guard",
+    items: [
+      { to: "/detectors", label: "Detectors", icon: ScanSearch },
+      { to: "/judges", label: "Judges", icon: Scale },
     ],
   },
 ];
