@@ -21,6 +21,7 @@ from kyoko.metric_bindings import resolve_bindings
 
 ROOT = Path(__file__).resolve().parents[1]
 JUDGE = [sys.executable, str(ROOT / "tests/fixtures/llm_eval_judge.py")]
+OP_JUDGE = str(ROOT / "tests/fixtures/llm_eval_operator_judge.py")
 
 
 def _seed(db_path: Path, *, runs: int = 1, empty_completion: bool = False) -> None:
@@ -308,6 +309,188 @@ class SetStatusTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertEqual(payload["llm_eval"]["status"], "archived")
             self.assertEqual(get_llm_eval(db_path=db, llm_eval_id="toxicity")["status"], "archived")
+
+
+def _register_op_judge(db: Path, *, with_placeholder: bool = True) -> None:
+    from kyoko.operator_adapters import register_operator_adapter
+
+    command = [sys.executable, OP_JUDGE]
+    if with_placeholder:
+        command.append("{prompt_path}")
+    register_operator_adapter(
+        db_path=db, adapter_id="judge_claude", name="Judge",
+        command=command, operator_kind="claude", profile_id="p1",
+    )
+
+
+class OperatorJudgeTests(unittest.TestCase):
+    """The backend-agnostic judge path: an operator adapter (any agent CLI) scores via
+    {prompt_path}/{prompt} or stdin, and stdout is parsed tolerantly."""
+
+    def test_operator_numeric_persisted_placeholder(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db = Path(tmp) / "k.db"
+            _seed(db, runs=2)
+            _register_op_judge(db, with_placeholder=True)
+            report = run_llm_eval(
+                db_path=db, llm_eval_id="hallucination", corpus={"unit": "llm_span"},
+                operator_adapter_id="judge_claude", persist=True, profile_id="p1",
+            )
+            # 0.3 survives the echoed-prompt chatter (tolerant parse picks the last block)
+            self.assertEqual(report.aggregate["scored"], 2)
+            self.assertAlmostEqual(report.aggregate["value"], 0.3)
+            self.assertTrue(report.persisted)
+            self.assertTrue(all("operator mock" in r["reasoning"] for r in report.results))
+
+    def test_operator_stdin_delivery(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db = Path(tmp) / "k.db"
+            _seed(db, runs=1)
+            _register_op_judge(db, with_placeholder=False)  # no placeholder -> prompt on stdin
+            report = run_llm_eval(
+                db_path=db, llm_eval_id="hallucination", corpus={"unit": "llm_span"},
+                operator_adapter_id="judge_claude", profile_id="p1",
+            )
+            self.assertEqual(report.aggregate["scored"], 1)
+            self.assertAlmostEqual(report.aggregate["value"], 0.3)
+
+    def test_operator_boolean_template(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db = Path(tmp) / "k.db"
+            _seed(db, runs=1)
+            _register_op_judge(db)
+            report = run_llm_eval(
+                db_path=db, llm_eval_id="user_distress", corpus={"unit": "run"},
+                operator_adapter_id="judge_claude", profile_id="p1",
+            )
+            # numeric 0.3 coerces truthy -> notable under true_is_notable
+            self.assertEqual(report.aggregate["type"], "boolean")
+            self.assertEqual(report.aggregate["denominator"], 1)
+            self.assertEqual(report.aggregate["numerator"], 1)
+
+    def test_operator_alone_satisfies_command_requirement(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db = Path(tmp) / "k.db"
+            _seed(db, runs=1)
+            _register_op_judge(db)
+            # neither --command nor prepare_only, but operator_adapter_id is enough
+            report = run_llm_eval(
+                db_path=db, llm_eval_id="hallucination", corpus={"unit": "llm_span"},
+                operator_adapter_id="judge_claude", profile_id="p1",
+            )
+            self.assertEqual(report.status, "complete")
+
+    def test_cli_run_llm_eval_operator_flag(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db = Path(tmp) / "k.db"
+            _seed(db, runs=1)
+            _register_op_judge(db)
+            code, payload = _run_json([
+                "run-llm-eval", "hallucination", "--db", str(db),
+                "--corpus", '{"unit":"llm_span"}', "--operator", "judge_claude",
+                "--persist", "--json",
+            ])
+            self.assertEqual(code, 0)
+            self.assertAlmostEqual(payload["aggregate"]["value"], 0.3)
+
+
+class TruncationTests(unittest.TestCase):
+    def test_truncate_text_head_tail(self) -> None:
+        from kyoko.llm_evals import _truncate_text
+
+        kept, was = _truncate_text("x" * 100, 100)
+        self.assertFalse(was)
+        marker = "\n…[truncated for length]…\n"
+        kept, was = _truncate_text("a" * 300 + "b" * 300, 200)
+        self.assertTrue(was)
+        self.assertLessEqual(len(kept), 200 + len(marker))
+        self.assertTrue(kept.startswith("a"))
+        self.assertTrue(kept.endswith("b"))  # head AND tail retained, middle elided
+        self.assertIn(marker, kept)
+
+    def test_long_var_flagged_truncated_in_results(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db = Path(tmp) / "k.db"
+            _seed(db, runs=1)
+            # overwrite the completion with a >budget blob so the generation var truncates
+            con = storage.connect(db)
+            attrs = {
+                "gen_ai.prompt.0.role": "user",
+                "gen_ai.prompt.0.content": "What is the capital of country 0?",
+                "gen_ai.completion.0.content": "z" * 60000,
+            }
+            con.execute(
+                "UPDATE spans SET attributes_json = ? WHERE id = 'run_0_llm'",
+                (json.dumps(attrs),),
+            )
+            con.commit()
+            con.close()
+            report = run_llm_eval(
+                db_path=db, llm_eval_id="hallucination", corpus={"unit": "llm_span"},
+                command=JUDGE, profile_id="p1",
+            )
+            self.assertEqual(report.results[0]["status"], "scored")
+            self.assertEqual(report.results[0]["truncated"], ["generation"])
+
+
+class LlmJudgeScheduleTests(unittest.TestCase):
+    """The 'llm_judge' analysis schedule: judges new traces via an operator adapter,
+    advances a watermark, and is idempotent (a second fire with no new traces skips)."""
+
+    def _schedule(self, db: Path, **meta):
+        from kyoko.storage import create_analysis_schedule
+
+        return create_analysis_schedule(
+            db_path=db, analyzer_kind="llm_judge", adapter_id="judge_claude",
+            interval_hours=6, profile_id="p1",
+            metadata={"llm_eval_ids": meta["templates"]} if meta.get("templates") else None,
+        )
+
+    def test_schedule_scores_new_runs_then_skips(self) -> None:
+        from kyoko.analysis_runner import execute_analysis_job, job_from_schedule
+        from kyoko.storage import get_analysis_schedule
+
+        with TemporaryDirectory() as tmp:
+            db = Path(tmp) / "k.db"
+            _seed(db, runs=2)
+            _register_op_judge(db)
+            sched = self._schedule(db, templates=["hallucination"])
+
+            res = execute_analysis_job(db, job_from_schedule(sched))
+            self.assertEqual(res["status"], "succeeded")
+            judge = res["llm_judge"]
+            self.assertEqual(judge["template_count"], 1)
+            self.assertEqual(judge["runs"][0]["llm_eval_id"], "hallucination")
+            self.assertEqual(judge["runs"][0]["aggregate"]["scored"], 2)
+
+            # watermark advanced -> a second fire sees no new traces and skips
+            updated = get_analysis_schedule(db_path=db, schedule_id=sched["id"])
+            self.assertIsNotNone(updated["watermark"])
+            res2 = execute_analysis_job(db, job_from_schedule(updated))
+            self.assertEqual(res2["status"], "skipped")
+            self.assertEqual(res2["reason"], "no_new_traces")
+
+    def test_schedule_defaults_to_all_active_templates(self) -> None:
+        from kyoko.analysis_runner import execute_analysis_job, job_from_schedule
+
+        with TemporaryDirectory() as tmp:
+            db = Path(tmp) / "k.db"
+            _seed(db, runs=1)
+            _register_op_judge(db)
+            sched = self._schedule(db)  # no templates -> all active
+            res = execute_analysis_job(db, job_from_schedule(sched))
+            self.assertEqual(res["status"], "succeeded")
+            self.assertEqual(res["llm_judge"]["template_count"], 10)
+
+    def test_schedule_requires_adapter(self) -> None:
+        with TemporaryDirectory() as tmp:
+            db = Path(tmp) / "k.db"
+            _seed(db, runs=1)
+            with self.assertRaises(storage.StorageError):
+                storage.create_analysis_schedule(
+                    db_path=db, analyzer_kind="llm_judge", adapter_id=None,
+                    interval_hours=6, profile_id="p1",
+                )
 
 
 if __name__ == "__main__":

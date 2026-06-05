@@ -1041,6 +1041,56 @@ definition, oriented by its `direction`. The API mirrors these (`/api/evals`,
 equivalents) with SSE progress (`eval_progress`/`eval_complete`) over
 `GET /api/events/stream`; deterministic, no-live-model smokes are
 `kyoko doctor --eval-smoke` and `--llm-eval-smoke`.
+
+#### Judging with a local operator adapter (`--operator`, scheduled `llm_judge`)
+
+Instead of `--command "<byo cli>"`, `run-llm-eval` can point the judge at a
+registered operator adapter with `--operator <adapter-id>` (kind
+`claude`/`codex`/`hermes`/`openclaw`/`generic`). The adapter command runs once
+per unit with the rendered+redacted judge prompt delivered via a `{prompt_path}`
+temp file (or a `{prompt}` arg, or on stdin when the command has no placeholder);
+the `kyoko.llm_eval_result.v1` block is parsed tolerantly from stdout. Kyoko
+appends the exact output format to the prompt automatically, so the bundled
+templates only carry the rubric.
+
+```bash
+# Judge via a registered operator adapter (model outside core, no --command)
+python3 -m kyoko run-llm-eval conciseness --db /tmp/kyoko.db --corpus '{"unit":"llm_span"}' \
+  --operator claude_judge --persist --json
+```
+
+The same path is schedulable. `analysis-schedule-add --analyzer llm_judge`
+auto-judges **new** traces on a cadence while `kyoko serve` is running:
+
+```bash
+python3 -m kyoko analysis-schedule-add --db /tmp/kyoko.db \
+  --analyzer llm_judge --adapter-id claude_judge \
+  --templates conciseness,user_distress --interval-hours 6 --json
+```
+
+`--adapter-id` is **required** for `llm_judge` (the backend CLI to judge with);
+`--templates` is an optional comma-separated list of template ids (default: all
+active llm templates). The Scheduler fires it on scope `new` with a watermark, so
+each trace is judged exactly once (the first run / catch-up judges the whole
+corpus, then the watermark advances). It is **measurement-only**: results land in
+the `eval_measure_*` tables and never touch the autonomy gate. Long traces are
+head/tail elided per bound variable so a single unit can't blow up the model
+context.
+
+Register a judge adapter with `operator-adapter-register`. Use the
+weakest/cheapest model and disable tools — the judge is a one-shot, prompt-in /
+text-out call. For Claude Code that is roughly:
+
+```bash
+python3 -m kyoko operator-adapter-register claude_judge --db /tmp/kyoko.db \
+  --name "Claude judge (haiku, no tools)" --kind claude \
+  --command "claude -p --model claude-haiku-4-5 {prompt_path}" --json
+```
+
+`codex`/`hermes`/`openclaw` follow the same shape (one-shot, prompt in via
+`{prompt_path}` or stdin, text out); the exact tools-off / model flags depend on
+the CLI you point at.
+
 `run-check` never invokes a live judge provider. To use a model-backed or
 provider-backed judge, run `judge-command` explicitly. Kyoko writes a redacted
 `judge-request.json`, passes it on stdin and through `KYOKO_JUDGE_REQUEST_PATH`,
