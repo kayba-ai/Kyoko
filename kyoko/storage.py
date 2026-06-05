@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 
-SCHEMA_VERSION = 31
+SCHEMA_VERSION = 32
 
 
 class StorageError(Exception):
@@ -281,34 +281,81 @@ CREATE TABLE IF NOT EXISTS learning_proposals (
   proposed_changes_json TEXT NOT NULL,
   gate_expectations_json TEXT NOT NULL,
   validation_errors_json TEXT NOT NULL,
-  issue_id TEXT,                         -- v29: the Issue this proposal originates from
+  issue_id TEXT,                         -- v32: the skillbook entry (problem-phase) this proposal originates from
   created_at TEXT NOT NULL,
   updated_at TEXT,
   FOREIGN KEY (profile_id) REFERENCES profiles(id),
-  FOREIGN KEY (issue_id) REFERENCES issues(id)
+  FOREIGN KEY (issue_id) REFERENCES skills(id)
 );
 
+-- v32 (spec 0019): the skillbook entry is the single living unit, ACE-style. One row
+-- holds the problem (`issue`/`body`), the evidence trail (`occurrences_json`), the
+-- effectiveness feedback (helpful/harmful/neutral/used counts), and the learned fix
+-- (`insight`) — and it evolves over runs (tag/mark_used/update in place). The separate
+-- `issues` table is gone; its lifecycle folds onto these columns. The one divergence from
+-- ACE: `active` stays 0 (never injected into a run) until the autonomy gate flips it on.
+-- `status` is the lean lifecycle (surfaced | accepted | active | rolled_back | dismissed).
 CREATE TABLE IF NOT EXISTS skills (
   id TEXT PRIMARY KEY,
   profile_id TEXT NOT NULL,
-  proposal_id TEXT,
-  section TEXT NOT NULL,
-  issue TEXT NOT NULL,
-  insight TEXT NOT NULL,
-  keywords_json TEXT NOT NULL,
-  occurrences_json TEXT NOT NULL,
+  proposal_id TEXT,                      -- proposal that authored the current insight
+  section TEXT,                          -- context | harness (NULL until diagnosed)
+  issue TEXT NOT NULL,                   -- the problem statement
+  body TEXT,                             -- longer problem description (folded from issue.body)
+  insight TEXT,                          -- the learned fix (NULL until proposed/applied)
+  keywords_json TEXT NOT NULL DEFAULT '[]',
+  occurrences_json TEXT NOT NULL DEFAULT '[]',
   helpful_count INTEGER NOT NULL DEFAULT 0,
   harmful_count INTEGER NOT NULL DEFAULT 0,
   neutral_count INTEGER NOT NULL DEFAULT 0,
-  active INTEGER NOT NULL DEFAULT 1,
+  used_count INTEGER NOT NULL DEFAULT 0,        -- v32 (ACE): bumped when injected into a run
+  active INTEGER NOT NULL DEFAULT 0,            -- injected only after the gate flips this on
   human_locked INTEGER NOT NULL DEFAULT 0,
   human_lock_reason TEXT,
   source_run_id TEXT,
+  -- problem facet (folded from issues; `issue` above is the problem title/statement)
+  status TEXT NOT NULL DEFAULT 'surfaced',
+  category TEXT,
+  severity TEXT,
+  rank INTEGER,                          -- prioritization order (lower = more urgent)
+  review_comment TEXT,                   -- free-text triage; never gated
+  source TEXT,                           -- analysis | eval | llm_eval | manual
+  root_cause TEXT,                       -- diagnosis narrative
+  evidence_refs_json TEXT,
+  affected_agent_identity_ids_json TEXT,
+  affected_workflow_node_ids_json TEXT,
+  affected_task_ids_json TEXT,
+  affected_span_ids_json TEXT,
+  proposal_ids_json TEXT,                -- all proposals over the entry's life (backlink)
+  -- recurrence / deterministic dedup (a recurrence folds into THIS row)
+  signature TEXT,
+  recurrence_count INTEGER,
+  -- gate + guard + regression (ride-along; no FK on evaluator/source-eval to avoid a cycle)
+  accepted_at TEXT,                      -- gate-#1 acceptance watermark
+  evaluator_id TEXT,                     -- the standing guard eval_definitions.id
+  applied_at TEXT,                       -- gate-#2 apply watermark
+  recurrence_count_at_apply INTEGER,     -- regression baseline
+  auto_fix_attempts INTEGER,
+  autonomy_blocked INTEGER,
+  autonomy_blocked_reason TEXT,
+  source_eval_definition_id TEXT,        -- v32: the eval/llm_eval metric that DETECTED this
+  source_measure_run_id TEXT,            -- v32: the measurement run it was detected in
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   FOREIGN KEY (profile_id) REFERENCES profiles(id),
   FOREIGN KEY (proposal_id) REFERENCES learning_proposals(id),
   FOREIGN KEY (source_run_id) REFERENCES runs(id)
+);
+
+CREATE TABLE IF NOT EXISTS skill_similarity_decisions (
+  id TEXT PRIMARY KEY,
+  profile_id TEXT NOT NULL,
+  pair_key TEXT NOT NULL,                -- sorted "skill_id_a,skill_id_b"
+  decision TEXT NOT NULL,               -- KEEP
+  reasoning TEXT,
+  similarity_at_decision REAL,
+  decided_at TEXT NOT NULL,
+  FOREIGN KEY (profile_id) REFERENCES profiles(id)
 );
 
 CREATE TABLE IF NOT EXISTS context_delivery_rules (
@@ -604,6 +651,7 @@ CREATE INDEX IF NOT EXISTS idx_handoffs_profile_id ON handoffs(profile_id);
 CREATE INDEX IF NOT EXISTS idx_timeline_events_profile_id ON timeline_events(profile_id);
 CREATE INDEX IF NOT EXISTS idx_learning_proposals_profile_id ON learning_proposals(profile_id);
 CREATE INDEX IF NOT EXISTS idx_skills_profile_id ON skills(profile_id);
+CREATE INDEX IF NOT EXISTS idx_skill_similarity_decisions_profile_id ON skill_similarity_decisions(profile_id);
 CREATE INDEX IF NOT EXISTS idx_context_delivery_rules_profile_id ON context_delivery_rules(profile_id);
 CREATE INDEX IF NOT EXISTS idx_context_delivery_rules_proposal_id ON context_delivery_rules(proposal_id);
 CREATE INDEX IF NOT EXISTS idx_skill_revisions_skill_id ON skill_revisions(skill_id);
@@ -635,59 +683,9 @@ CREATE INDEX IF NOT EXISTS idx_mcp_log_profile_id ON mcp_log(profile_id);
 CREATE INDEX IF NOT EXISTS idx_annotations_profile_id ON annotations(profile_id);
 CREATE INDEX IF NOT EXISTS idx_annotations_run_id ON annotations(run_id);
 
-CREATE TABLE IF NOT EXISTS issues (
-  id TEXT PRIMARY KEY,
-  profile_id TEXT NOT NULL,
-  title TEXT NOT NULL,
-  body TEXT,
-  section TEXT,
-  category TEXT,
-  severity TEXT,
-  status TEXT NOT NULL,
-  evidence_refs_json TEXT,
-  affected_agent_identity_ids_json TEXT,
-  affected_workflow_node_ids_json TEXT,
-  affected_task_ids_json TEXT,
-  affected_span_ids_json TEXT,
-  proposal_ids_json TEXT,
-  review_comment TEXT,
-  -- v29: issue becomes the central lifecycle entity. `status` carries the state
-  -- machine open|prioritized|diagnosed|proposed|applied|resolved|guarded|dismissed.
-  rank INTEGER,                          -- prioritization order (lower = more urgent)
-  root_cause TEXT,                       -- diagnosis narrative (job step 04)
-  source TEXT,                           -- analysis | eval | llm_eval | manual
-  evaluator_id TEXT,                     -- the guard eval_definitions.id once resolved
-  -- v30: analysis is decoupled from proposal. Analysis surfaces issues; a deterministic
-  -- `signature` fingerprints the failure (run-independent: section + affected span
-  -- *names* + stable target ids) so recurrences of the same problem fold into one issue
-  -- across time instead of spawning duplicates. `recurrence_count` tracks how many times
-  -- it has been surfaced. `accepted_at` stamps gate-#1 acceptance (the lifecycle gained
-  -- an `accepted` state between `diagnosed` and `proposed`); a proposal is only authored
-  -- once an issue is accepted (auto in autonomous mode, human in propose mode).
-  signature TEXT,                        -- deterministic dedup fingerprint
-  recurrence_count INTEGER,              -- times this failure has been surfaced (>=1)
-  accepted_at TEXT,                      -- when gate #1 accepted the issue for a fix
-  -- v31 (spec 0018): gate #2's post-hoc validator. When a fix is applied,
-  -- `applied_at` watermarks the moment and `recurrence_count_at_apply` snapshots the
-  -- counter so the guard monitor counts only *post-fix* recurrences (never rolls back on
-  -- stale pre-fix traces). A confirmed regression rolls back, re-opens, and bumps
-  -- `auto_fix_attempts`; once it reaches the policy's max, `autonomy_blocked` flips so the
-  -- issue falls back to HITL even in autonomous mode.
-  applied_at TEXT,
-  recurrence_count_at_apply INTEGER,
-  auto_fix_attempts INTEGER,
-  autonomy_blocked INTEGER,
-  autonomy_blocked_reason TEXT,
-  created_at TEXT NOT NULL,
-  updated_at TEXT,
-  FOREIGN KEY (profile_id) REFERENCES profiles(id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_issues_profile_id ON issues(profile_id);
-CREATE INDEX IF NOT EXISTS idx_issues_status ON issues(status);
-CREATE INDEX IF NOT EXISTS idx_issues_section ON issues(section);
-CREATE INDEX IF NOT EXISTS idx_issues_evaluator_id ON issues(evaluator_id);
-CREATE INDEX IF NOT EXISTS idx_issues_signature ON issues(signature);
+-- v32 (spec 0019): the `issues` table is gone. Its lifecycle folded onto `skills`
+-- (the unified living skillbook entry above). "Issues" are now just skill entries in a
+-- problem-phase status (a lens), not a separate entity.
 
 -- v26: measurement plane (evidence only). `eval` = deterministic Python
 -- detector over a trace corpus; `llm_eval` = LLM-as-judge template. Neither
@@ -712,11 +710,11 @@ CREATE TABLE IF NOT EXISTS eval_definitions (
   output_json TEXT,                     -- llm only: {type, range}
   severity_bands_json TEXT,
   status TEXT NOT NULL,                 -- active | archived
-  issue_id TEXT,                        -- v29: the Issue this evaluator guards (NULL for library evals)
+  issue_id TEXT,                        -- v32: the skillbook entry this evaluator guards (NULL for library evals)
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   FOREIGN KEY (profile_id) REFERENCES profiles(id),
-  FOREIGN KEY (issue_id) REFERENCES issues(id)
+  FOREIGN KEY (issue_id) REFERENCES skills(id)
 );
 
 CREATE TABLE IF NOT EXISTS eval_measure_runs (
@@ -1026,7 +1024,7 @@ STATUS_TABLES = [
     "operator_adapters",
     "operator_runs",
     "patch_transactions",
-    "issues",
+    "skill_similarity_decisions",
     "analysis_schedules",
 ]
 
@@ -1071,6 +1069,19 @@ def initialize_database(db_path: Path) -> None:
         # operator's mode/threshold settings on every connect).
         if existing_version < 31:
             connection.execute("DROP TABLE IF EXISTS autonomy_policies")
+        # v32 (spec 0019): the `issues` table folds into `skills` (the unified living
+        # skillbook entry). Pre-prod, no data migration — DROP and let `skills` carry the
+        # lifecycle. Drop the issue indexes too. Existing pre-v32 DBs should be recreated.
+        if existing_version < 32:
+            for _issue_index in (
+                "idx_issues_profile_id",
+                "idx_issues_status",
+                "idx_issues_section",
+                "idx_issues_evaluator_id",
+                "idx_issues_signature",
+            ):
+                connection.execute(f"DROP INDEX IF EXISTS {_issue_index}")
+            connection.execute("DROP TABLE IF EXISTS issues")
         for _old_index in (
             "idx_eval_specs_profile_id",
             "idx_eval_spec_locks_profile_id",
@@ -1079,8 +1090,6 @@ def initialize_database(db_path: Path) -> None:
         ):
             connection.execute(f"DROP INDEX IF EXISTS {_old_index}")
         connection.executescript(SCHEMA_SQL)
-        # v27: per-issue free-text review comment (evidence triage; never gated).
-        _ensure_column(connection, "issues", "review_comment", "review_comment TEXT")
         # v28: link operator_runs back to the schedule that triggered them (if any)
         # and record the "new traces" cutoff that scoped the analysis.
         _ensure_column(connection, "operator_runs", "schedule_id", "schedule_id TEXT")
@@ -1092,36 +1101,51 @@ def initialize_database(db_path: Path) -> None:
             "human_lock_reason",
             "human_lock_reason TEXT",
         )
-        # v29: Issue becomes the central lifecycle entity. Additive columns back the
-        # open->prioritized->diagnosed->proposed->applied->resolved->guarded state machine
-        # (the states live in the existing `status` column), plus ranking, a root-cause
-        # narrative, provenance (`source`), and the guard evaluator each resolved issue
-        # owns. Evaluators link back to the issue they guard. All nullable: ADD COLUMN
-        # cannot add NOT-NULL-without-default or an FK to an existing table, so the FK
-        # constraints in SCHEMA_SQL bind only on fresh DBs.
-        _ensure_column(connection, "issues", "rank", "rank INTEGER")
-        _ensure_column(connection, "issues", "root_cause", "root_cause TEXT")
-        _ensure_column(connection, "issues", "source", "source TEXT")
-        _ensure_column(connection, "issues", "evaluator_id", "evaluator_id TEXT")
         _ensure_column(connection, "eval_definitions", "issue_id", "issue_id TEXT")
         _ensure_column(connection, "learning_proposals", "issue_id", "issue_id TEXT")
-        # v30: analysis decoupled from proposal. A deterministic `signature` lets
-        # recurrences of the same failure bundle into one issue across time;
-        # `recurrence_count` tracks how often it resurfaced; `accepted_at` records gate-#1
-        # acceptance (the lifecycle gained an `accepted` state). All additive/nullable.
-        _ensure_column(connection, "issues", "signature", "signature TEXT")
-        _ensure_column(connection, "issues", "recurrence_count", "recurrence_count INTEGER")
-        _ensure_column(connection, "issues", "accepted_at", "accepted_at TEXT")
-        # v31 (spec 0018): gate #2's post-hoc validator state on the issue. `applied_at`
-        # watermarks the fix so the guard monitor counts only post-fix recurrences;
-        # `recurrence_count_at_apply` is the regression baseline; `auto_fix_attempts` bounds
-        # autonomous retries; `autonomy_blocked` (+reason) escalates an issue to HITL after
-        # too many apply->rollback cycles. All additive/nullable.
-        _ensure_column(connection, "issues", "applied_at", "applied_at TEXT")
-        _ensure_column(connection, "issues", "recurrence_count_at_apply", "recurrence_count_at_apply INTEGER")
-        _ensure_column(connection, "issues", "auto_fix_attempts", "auto_fix_attempts INTEGER")
-        _ensure_column(connection, "issues", "autonomy_blocked", "autonomy_blocked INTEGER")
-        _ensure_column(connection, "issues", "autonomy_blocked_reason", "autonomy_blocked_reason TEXT")
+        # v32 (spec 0019): the issue lifecycle folds onto `skills` (the unified living
+        # skillbook entry). Additive/nullable columns carry the problem facet, the gate/guard
+        # watermarks, the recurrence dedup, ACE's `used_count`, and the durable source-eval
+        # link. The `active` default flipped to 0 (an entry is injected only after the gate);
+        # `status`/`section`/`insight` relaxed to nullable for problem-phase entries.
+        for _col, _ddl in (
+            ("body", "body TEXT"),
+            ("used_count", "used_count INTEGER NOT NULL DEFAULT 0"),
+            ("status", "status TEXT NOT NULL DEFAULT 'surfaced'"),
+            ("category", "category TEXT"),
+            ("severity", "severity TEXT"),
+            ("rank", "rank INTEGER"),
+            ("review_comment", "review_comment TEXT"),
+            ("source", "source TEXT"),
+            ("root_cause", "root_cause TEXT"),
+            ("evidence_refs_json", "evidence_refs_json TEXT"),
+            ("affected_agent_identity_ids_json", "affected_agent_identity_ids_json TEXT"),
+            ("affected_workflow_node_ids_json", "affected_workflow_node_ids_json TEXT"),
+            ("affected_task_ids_json", "affected_task_ids_json TEXT"),
+            ("affected_span_ids_json", "affected_span_ids_json TEXT"),
+            ("proposal_ids_json", "proposal_ids_json TEXT"),
+            ("signature", "signature TEXT"),
+            ("recurrence_count", "recurrence_count INTEGER"),
+            ("accepted_at", "accepted_at TEXT"),
+            ("evaluator_id", "evaluator_id TEXT"),
+            ("applied_at", "applied_at TEXT"),
+            ("recurrence_count_at_apply", "recurrence_count_at_apply INTEGER"),
+            ("auto_fix_attempts", "auto_fix_attempts INTEGER"),
+            ("autonomy_blocked", "autonomy_blocked INTEGER"),
+            ("autonomy_blocked_reason", "autonomy_blocked_reason TEXT"),
+            ("source_eval_definition_id", "source_eval_definition_id TEXT"),
+            ("source_measure_run_id", "source_measure_run_id TEXT"),
+        ):
+            _ensure_column(connection, "skills", _col, _ddl)
+        # Indexes over v32-added skill columns — created here (not in SCHEMA_SQL) so they
+        # bind AFTER the columns exist on a migrated legacy `skills` table.
+        for _idx_sql in (
+            "CREATE INDEX IF NOT EXISTS idx_skills_status ON skills(status)",
+            "CREATE INDEX IF NOT EXISTS idx_skills_section ON skills(section)",
+            "CREATE INDEX IF NOT EXISTS idx_skills_signature ON skills(signature)",
+            "CREATE INDEX IF NOT EXISTS idx_skills_evaluator_id ON skills(evaluator_id)",
+        ):
+            connection.execute(_idx_sql)
         # v31: re-seed the reshaped autonomy_policies for any pre-existing profiles
         # (the DROP above removed their old-shape rows).
         if existing_version < 31:
