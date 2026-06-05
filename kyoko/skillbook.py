@@ -2,14 +2,158 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import uuid
 from pathlib import Path
 from typing import Any, Optional
 
 from .apply import list_context_delivery_rules, list_skills
-from .storage import connect
+from .storage import connect, utc_now
 
 
 ACE_SKILLBOOK_SCHEMA_VERSION = "2"
+
+
+class SkillbookError(Exception):
+    """Raised for invalid living-state operations on a skillbook entry."""
+
+
+# --------------------------------------------------------------------------------------
+# ACE-style living state (spec 0019). A skillbook entry evolves over runs: `tag` records
+# effectiveness feedback, `mark_used` counts injections, and similarity decisions remember
+# "keep these two separate". These are measurement-only — they never change WHAT gets
+# injected (that stays behind the autonomy gate via proposals), so they mutate in place
+# like ACE rather than going through a proposal.
+# --------------------------------------------------------------------------------------
+
+_TAG_COLUMN = {1: "helpful_count", -1: "harmful_count", 0: "neutral_count"}
+
+
+def tag_skill(
+    db_path: Path,
+    *,
+    skill_id: str,
+    delta: int,
+    occurrence: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
+    """Record an effectiveness observation on an entry (ACE ``tag_skill``): ``delta`` 1
+    helpful / -1 harmful / 0 neutral bumps the matching counter, optionally appends an
+    occurrence to the evidence trail, and refreshes ``updated_at``. Returns a small
+    summary. Measurement only — never gated."""
+
+    if delta not in _TAG_COLUMN:
+        raise SkillbookError(f"unsupported_tag_delta:{delta}")
+    column = _TAG_COLUMN[delta]
+    now = utc_now()
+    with connect(db_path) as connection:
+        row = connection.execute(
+            "SELECT occurrences_json FROM skills WHERE id = ?", (skill_id,)
+        ).fetchone()
+        if row is None:
+            raise SkillbookError(f"skill_not_found:{skill_id}")
+        occurrences = _json_loads_list(row["occurrences_json"])
+        if occurrence is not None:
+            occurrences.append(occurrence)
+        connection.execute(
+            f"UPDATE skills SET {column} = {column} + 1, occurrences_json = ?, "
+            "updated_at = ? WHERE id = ?",
+            (json.dumps(occurrences, separators=(",", ":")), now, skill_id),
+        )
+        updated = connection.execute(
+            "SELECT helpful_count, harmful_count, neutral_count FROM skills WHERE id = ?",
+            (skill_id,),
+        ).fetchone()
+    return {
+        "id": skill_id,
+        "helpful_count": int(updated["helpful_count"]),
+        "harmful_count": int(updated["harmful_count"]),
+        "neutral_count": int(updated["neutral_count"]),
+        "updated_at": now,
+    }
+
+
+def mark_skills_used(db_path: Path, skill_ids: list[str]) -> int:
+    """Bump ``used_count`` for each ACTIVE entry whose insight was injected into a run
+    (ACE ``mark_used``). Inactive (problem-phase) entries are skipped. Returns the number
+    of rows bumped. Measurement only — never gated."""
+
+    ids = [s for s in dict.fromkeys(skill_ids) if isinstance(s, str) and s]
+    if not ids:
+        return 0
+    now = utc_now()
+    bumped = 0
+    with connect(db_path) as connection:
+        for skill_id in ids:
+            cur = connection.execute(
+                "UPDATE skills SET used_count = used_count + 1, updated_at = ? "
+                "WHERE id = ? AND active = 1",
+                (now, skill_id),
+            )
+            bumped += cur.rowcount
+    return bumped
+
+
+def _pair_key(skill_id_a: str, skill_id_b: str) -> str:
+    return ",".join(sorted((skill_id_a, skill_id_b)))
+
+
+def set_similarity_decision(
+    db_path: Path,
+    *,
+    skill_id_a: str,
+    skill_id_b: str,
+    reasoning: str = "",
+    similarity: float = 0.0,
+    profile_id: Optional[str] = None,
+) -> dict[str, Any]:
+    """Remember a SkillManager decision to KEEP two similar entries separate (ACE
+    ``set_similarity_decision``) so dedup does not re-surface the pair. Measurement only."""
+
+    pair_key = _pair_key(skill_id_a, skill_id_b)
+    now = utc_now()
+    with connect(db_path) as connection:
+        resolved_profile_id = profile_id or _any_profile_id(connection)
+        if resolved_profile_id is None:
+            raise SkillbookError("no_profiles_found")
+        connection.execute(
+            "DELETE FROM skill_similarity_decisions WHERE profile_id = ? AND pair_key = ?",
+            (resolved_profile_id, pair_key),
+        )
+        connection.execute(
+            """
+            INSERT INTO skill_similarity_decisions
+              (id, profile_id, pair_key, decision, reasoning, similarity_at_decision, decided_at)
+            VALUES (?, ?, ?, 'KEEP', ?, ?, ?)
+            """,
+            (f"simdec_{uuid.uuid4().hex[:12]}", resolved_profile_id, pair_key, reasoning, float(similarity), now),
+        )
+    return {"pair_key": pair_key, "decision": "KEEP", "decided_at": now}
+
+
+def has_keep_decision(db_path: Path, skill_id_a: str, skill_id_b: str) -> bool:
+    """True if the pair has a stored KEEP decision (ACE ``has_keep_decision``)."""
+
+    pair_key = _pair_key(skill_id_a, skill_id_b)
+    with connect(db_path) as connection:
+        row = connection.execute(
+            "SELECT 1 FROM skill_similarity_decisions WHERE pair_key = ? AND decision = 'KEEP' LIMIT 1",
+            (pair_key,),
+        ).fetchone()
+    return row is not None
+
+
+def _json_loads_list(value: Any) -> list[Any]:
+    if not isinstance(value, str):
+        return []
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return []
+    return parsed if isinstance(parsed, list) else []
+
+
+def _any_profile_id(connection: sqlite3.Connection) -> Optional[str]:
+    row = connection.execute("SELECT id FROM profiles ORDER BY id LIMIT 1").fetchone()
+    return str(row[0]) if row is not None else None
 
 
 def export_skillbook(
@@ -339,7 +483,7 @@ def _ace_skill(skill: dict[str, Any]) -> dict[str, Any]:
             for occurrence in skill.get("occurrences", [])
         ],
         "active": bool(skill.get("active", True)),
-        "used_count": 0,
+        "used_count": int(skill.get("used_count", 0)),
         "helpful_count": int(skill.get("helpful_count", 0)),
         "harmful_count": int(skill.get("harmful_count", 0)),
         "neutral_count": int(skill.get("neutral_count", 0)),
