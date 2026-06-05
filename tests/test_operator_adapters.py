@@ -59,7 +59,7 @@ class OperatorAdapterTests(unittest.TestCase):
             self.assertEqual(status.counts["operator_runs"], 1)
             # Analysis is diagnosis-only — it authors no proposal.
             self.assertEqual(status.counts["learning_proposals"], 0)
-            self.assertEqual(status.counts["issues"], 1)
+            self.assertEqual(status.counts["skills"], 1)
 
     def test_disabled_operator_adapter_is_not_runnable(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -190,7 +190,7 @@ class OperatorAdapterTests(unittest.TestCase):
             self.assertEqual(len(report.new_issue_ids), 1)
             self.assertEqual(status.counts["operator_runs"], 1)
             self.assertEqual(status.counts["learning_proposals"], 0)
-            self.assertEqual(status.counts["issues"], 1)
+            self.assertEqual(status.counts["skills"], 1)
             self.assertIn("OpenClaw local", report.raw_output_path.read_text(encoding="utf-8"))
 
     def test_bootstrap_hermes_preset_runs_one_shot_prompt_argument_operator(self) -> None:
@@ -230,7 +230,7 @@ class OperatorAdapterTests(unittest.TestCase):
             self.assertEqual(len(report.new_issue_ids), 1)
             self.assertEqual(status.counts["operator_runs"], 1)
             self.assertEqual(status.counts["learning_proposals"], 0)
-            self.assertEqual(status.counts["issues"], 1)
+            self.assertEqual(status.counts["skills"], 1)
             self.assertIn("Hermes one-shot", report.raw_output_path.read_text(encoding="utf-8"))
 
     def test_operator_presets_are_listable(self) -> None:

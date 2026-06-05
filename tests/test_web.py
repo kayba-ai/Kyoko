@@ -1795,7 +1795,7 @@ class WebTests(unittest.TestCase):
             self.assertEqual(proposals["proposals"], [])
             self.assertEqual(status["counts"]["operator_adapters"], 1)
             self.assertEqual(status["counts"]["operator_runs"], 1)
-            self.assertEqual(status["counts"]["issues"], 1)
+            self.assertEqual(status["counts"]["skills"], 1)
             self.assertEqual(operator_runs["operator_runs"][0]["status"], "succeeded")
             self.assertEqual(operator_runs["operator_runs"][0]["attempt_count"], 1)
             self.assertIsNone(operator_runs["operator_runs"][0]["failure_kind"])

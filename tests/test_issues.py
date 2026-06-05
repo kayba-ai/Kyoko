@@ -60,7 +60,7 @@ class IssueModelTests(unittest.TestCase):
             self.assertIsNone(issue["severity"])
             self.assertEqual(issue["evidence_refs"], [])
             self.assertEqual(issue["proposal_ids"], [])
-            self.assertIsNone(issue["updated_at"])
+            self.assertEqual(issue["updated_at"], issue["created_at"])
 
     def test_create_validates_enums(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -84,7 +84,7 @@ class IssueModelTests(unittest.TestCase):
             create_issue(db_path=db_path, title="Two")
 
             status = get_database_status(db_path)
-            self.assertEqual(status.counts["issues"], 2)
+            self.assertEqual(status.counts["skills"], 2)
 
     def test_list_filters_by_status_and_section(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -493,9 +493,10 @@ class IssueMcpSafetyTests(unittest.TestCase):
             self.assertTrue(result["issue"]["id"].startswith("issue_"))
             self.assertEqual(result["issue"]["status"], "diagnosed")
 
-            # Surfacing an issue is evidence-only — no proposal/skill/harness write.
+            # Surfacing an issue is evidence-only — no proposal/harness write.
+            # The issue now lives as a problem-phase skillbook entry (skills row).
             status = get_database_status(db_path)
-            self.assertEqual(status.counts["issues"], 1)
+            self.assertEqual(status.counts["skills"], 1)
             self.assertEqual(status.counts["learning_proposals"], 0)
 
     def test_create_issue_tool_persists_evidence_only(self) -> None:
@@ -522,10 +523,11 @@ class IssueMcpSafetyTests(unittest.TestCase):
             self.assertTrue(result["id"].startswith("issue_"))
             self.assertEqual(result["severity"], "medium")
 
-            # Creating an issue never touches skills/proposals/harness — pure evidence.
+            # Creating an issue is pure evidence — it never produces a proposal or
+            # harness write. The issue itself now lives as a problem-phase skillbook
+            # entry (skills row), so the skills count reflects that single entry.
             status = get_database_status(db_path)
-            self.assertEqual(status.counts["issues"], 1)
-            self.assertEqual(status.counts["skills"], 0)
+            self.assertEqual(status.counts["skills"], 1)
             self.assertEqual(status.counts["learning_proposals"], 0)
             self.assertEqual(status.counts["patch_transactions"], 0)
 

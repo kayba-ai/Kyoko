@@ -173,9 +173,9 @@ class CliTests(unittest.TestCase):
 
             payload = json.loads(status_out.getvalue())
             self.assertTrue(payload["initialized"])
-            self.assertEqual(payload["schema_version"], 31)
+            self.assertEqual(payload["schema_version"], 32)
             self.assertEqual(payload["counts"]["spans"], 2)
-            self.assertEqual(payload["counts"]["issues"], 0)
+            self.assertEqual(payload["counts"]["skill_similarity_decisions"], 0)
 
             metrics_out = io.StringIO()
             with redirect_stdout(metrics_out):

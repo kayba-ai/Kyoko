@@ -6189,7 +6189,7 @@ def _issue_summary_contract(issue: dict) -> dict:
         "affected_task_ids": issue["affected_task_ids"],
         "evidence_refs": issue["evidence_refs"],
         "has_created_at": bool(issue["created_at"]),
-        "updated_at": issue["updated_at"],
+        "has_updated_at": bool(issue["updated_at"]),
     }
 
 
@@ -6248,8 +6248,14 @@ def _improve_contract(payload: dict) -> dict:
             "decisions": [
                 {
                     "action": decision["action"],
-                    "applied_context_rule_ids": decision["applied_context_rule_ids"],
-                    "applied_skill_ids": decision["applied_skill_ids"],
+                    "applied_context_rule_ids": [
+                        _normalize_issue_ids(rule_id)
+                        for rule_id in decision["applied_context_rule_ids"]
+                    ],
+                    "applied_skill_ids": [
+                        _normalize_issue_ids(skill_id)
+                        for skill_id in decision["applied_skill_ids"]
+                    ],
                     "patch_transaction_ids": decision["patch_transaction_ids"],
                     "proposal_id": decision["proposal_id"],
                     "reason": decision["reason"],
