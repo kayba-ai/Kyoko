@@ -121,9 +121,11 @@ export function Layout() {
     <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground">
       <aside className="flex w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
         <div className="flex h-14 items-center gap-2.5 px-5">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-xs">
-            <span className="text-sm font-bold leading-none">京</span>
-          </div>
+          <img
+            src="/kayba-logo.png"
+            alt="Kayba"
+            className="h-7 w-7 rounded-lg shadow-xs"
+          />
           <div className="flex flex-col leading-none">
             <span className="text-md font-bold tracking-tight">Kyoko</span>
             <span className="mt-0.5 text-xs font-medium text-muted-foreground">
