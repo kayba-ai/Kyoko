@@ -188,6 +188,13 @@ def run_improvement_loop(
                     profile_id=profile_id,
                 )
             except (AnalyzeError, IssueError, OperatorAdapterError) as exc:
+                # Per-trace analysis can surface several issues in one sweep. If authoring a
+                # fix for one of them collides with a proposal already authored this run
+                # (an operator that emits the same fix for distinct issues), that one issue
+                # is skipped — it must not abort the whole sweep. Any other failure is fatal.
+                if "proposal_already_exists" in str(exc):
+                    notes.append(f"gate1_propose_skipped:{issue_id}:{exc}")
+                    continue
                 raise ImproveError(str(exc)) from exc
             authored_proposal_ids.append(propose_report.proposal_id)
             notes.append(f"gate1_authored:{issue_id}:{propose_report.proposal_id}:{decision.reason}")
@@ -434,6 +441,178 @@ def _issue_id_for_proposal(db_path: Path, proposal_id: str) -> Optional[str]:
 
 
 def _run_analysis(
+    *,
+    db_path: Path,
+    output_dir: Path,
+    operator: str,
+    operator_command: Optional[Sequence[str]],
+    operator_adapter: Optional[str],
+    operator_timeout_seconds: int,
+    operator_max_retries: int,
+    profile_id: Optional[str],
+    run_id: Optional[str],
+    schema_path: Optional[Path],
+    since: Optional[str] = None,
+    schedule_id: Optional[str] = None,
+) -> AnalyzeReport:
+    """Diagnosis phase — analyse ONE trace per operator ask.
+
+    The operator's job is to read a trace and judge it; cramming the whole corpus into a
+    single prompt starves each trace of attention (and barely exercises the dedup net). So
+    when no specific ``run_id`` is given (scope ``all``/``new``), enumerate the profile's
+    runs and run the diagnosis turn once per run, each into its own artifact subdir. The
+    deterministic dedup net (:func:`issues.surface_issue`) folds recurrences of the same
+    failure across traces into one unified skillbook entry, bumping ``recurrence_count``.
+
+    A single ``run_id`` (scope ``run``) and the ``<=1`` run case keep the original single
+    turn unchanged (so single-run fixtures/goldens are untouched)."""
+
+    if run_id is not None:
+        return _run_single_trace_analysis(
+            db_path=db_path,
+            output_dir=output_dir,
+            operator=operator,
+            operator_command=operator_command,
+            operator_adapter=operator_adapter,
+            operator_timeout_seconds=operator_timeout_seconds,
+            operator_max_retries=operator_max_retries,
+            profile_id=profile_id,
+            run_id=run_id,
+            schema_path=schema_path,
+            since=since,
+            schedule_id=schedule_id,
+        )
+
+    resolved_profile_id = _resolve_analysis_profile_id(db_path, profile_id)
+    trace_run_ids = (
+        _profile_run_ids(db_path, resolved_profile_id, since)
+        if resolved_profile_id is not None
+        else ()
+    )
+    if len(trace_run_ids) <= 1:
+        # 0 runs (let the single turn surface the empty/edge case) or exactly 1 run
+        # (per-trace == whole-corpus): unchanged single turn over the whole profile.
+        return _run_single_trace_analysis(
+            db_path=db_path,
+            output_dir=output_dir,
+            operator=operator,
+            operator_command=operator_command,
+            operator_adapter=operator_adapter,
+            operator_timeout_seconds=operator_timeout_seconds,
+            operator_max_retries=operator_max_retries,
+            profile_id=profile_id,
+            run_id=None,
+            schema_path=schema_path,
+            since=since,
+            schedule_id=schedule_id,
+        )
+
+    reports: list[AnalyzeReport] = []
+    last_error: Optional[str] = None
+    for index, trace_run_id in enumerate(trace_run_ids):
+        trace_output_dir = output_dir / f"trace_{index + 1:03d}_{trace_run_id}"
+        try:
+            reports.append(
+                _run_single_trace_analysis(
+                    db_path=db_path,
+                    output_dir=trace_output_dir,
+                    operator=operator,
+                    operator_command=operator_command,
+                    operator_adapter=operator_adapter,
+                    operator_timeout_seconds=operator_timeout_seconds,
+                    operator_max_retries=operator_max_retries,
+                    profile_id=resolved_profile_id,
+                    run_id=trace_run_id,
+                    schema_path=schema_path,
+                    since=None,
+                    schedule_id=schedule_id,
+                )
+            )
+        except (AnalyzeError, ImproveError) as exc:
+            # A single trace with no diagnosable failure (mock) or a transient operator
+            # error must not abort the sweep — record it and move on.
+            last_error = str(exc)
+            continue
+    if not reports:
+        raise AnalyzeError(last_error or "no_traces_analyzed")
+    return _merge_analyze_reports(reports)
+
+
+def _resolve_analysis_profile_id(
+    db_path: Path, profile_id: Optional[str]
+) -> Optional[str]:
+    """The profile whose traces we iterate. Mirrors ``evidence._first_profile_id`` ordering
+    so we pick the same implicit single profile the evidence bundle would."""
+
+    if profile_id:
+        return profile_id
+    with connect(db_path) as connection:
+        row = connection.execute(
+            "SELECT id FROM profiles ORDER BY created_at, id LIMIT 1"
+        ).fetchone()
+    return str(row["id"]) if row is not None else None
+
+
+def _profile_run_ids(
+    db_path: Path, profile_id: str, since: Optional[str]
+) -> tuple[str, ...]:
+    """Ordered run ids for a profile (optionally only those started at/after ``since``)."""
+
+    clauses = ["profile_id = ?"]
+    params: list[Any] = [profile_id]
+    if since:
+        clauses.append("started_at >= ?")
+        params.append(since)
+    where = " AND ".join(clauses)
+    with connect(db_path) as connection:
+        rows = connection.execute(
+            f"SELECT id FROM runs WHERE {where} ORDER BY started_at, id",
+            tuple(params),
+        ).fetchall()
+    return tuple(str(row["id"]) for row in rows)
+
+
+def _merge_analyze_reports(reports: Sequence[AnalyzeReport]) -> AnalyzeReport:
+    """Fold per-trace diagnosis reports into one. Issue ids are de-duplicated across the
+    sweep (a failure created in trace A then re-surfaced — bundled — in trace B counts as
+    *new* once). Paths/operator_run_id point at the last trace for display; every per-trace
+    operator run is still its own ``operator_runs`` row."""
+
+    last = reports[-1]
+    all_ids: list[str] = []
+    new_ids: list[str] = []
+    bundled_ids: list[str] = []
+    seen_all: set[str] = set()
+    new_set: set[str] = set()
+    for report in reports:
+        for issue_id in report.new_issue_ids:
+            if issue_id not in new_set:
+                new_set.add(issue_id)
+                new_ids.append(issue_id)
+        for issue_id in report.issue_ids:
+            if issue_id not in seen_all:
+                seen_all.add(issue_id)
+                all_ids.append(issue_id)
+    for report in reports:
+        for issue_id in report.bundled_issue_ids:
+            if issue_id not in new_set and issue_id not in bundled_ids:
+                bundled_ids.append(issue_id)
+    return AnalyzeReport(
+        operator=last.operator,
+        profile_id=last.profile_id,
+        issue_ids=tuple(all_ids),
+        new_issue_ids=tuple(new_ids),
+        bundled_issue_ids=tuple(bundled_ids),
+        evidence_path=last.evidence_path,
+        prompt_path=last.prompt_path,
+        persisted=any(report.persisted for report in reports),
+        operator_run_id=last.operator_run_id,
+        raw_output_path=last.raw_output_path,
+        attempts=sum(report.attempts for report in reports),
+    )
+
+
+def _run_single_trace_analysis(
     *,
     db_path: Path,
     output_dir: Path,
