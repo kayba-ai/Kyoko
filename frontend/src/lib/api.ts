@@ -3,6 +3,7 @@
 // server's CSRF content-type guard requires it.
 
 import type {
+  AcceptIssueResult,
   AnalysisRun,
   AnalysisSchedule,
   AnalyzersBundle,
@@ -10,6 +11,7 @@ import type {
   AnnotationKind,
   AutonomyPolicy,
   Comparison,
+  ConsolidationReport,
   CreateScheduleBody,
   DashboardMetrics,
   ChecksBundle,
@@ -188,6 +190,15 @@ export const api = {
     postJson<{ issue: Issue }>("/api/issue-status", { id, status }).then((d) => d.issue),
   updateIssueComment: (id: string, comment: string) =>
     postJson<{ issue: Issue }>("/api/issue-comment", { id, comment }).then((d) => d.issue),
+  // Accept an issue at gate #1 and author a proposal (subject to the section's
+  // autonomy mode). `propose` is null when authoring was skipped.
+  acceptIssue: (issueId: string, operator?: string) =>
+    postJson<AcceptIssueResult>("/api/issues/accept", { issue_id: issueId, operator }),
+
+  // Deterministic skillbook merge/dedup pass. Optional `run_autonomy` lets the
+  // gate auto-apply the authored proposals.
+  consolidateSkillbook: (body: { operator?: string; run_autonomy?: boolean } = {}) =>
+    postJson<ConsolidationReport>("/api/skillbook/consolidate", body),
 
   policy: () => getJson<{ policy: AutonomyPolicy }>("/api/policy").then((d) => d.policy),
   updatePolicy: (body: PolicyUpdate) =>

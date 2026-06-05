@@ -254,13 +254,16 @@ export interface Proposal {
 export type IssueSection = "context" | "harness";
 export type IssueSeverity = "low" | "medium" | "high";
 // Expanded lifecycle: an Issue is the spine of the optimization loop and moves
-// through prioritized → diagnosed → proposed → applied → resolved, can be
-// guarded (a regression check now protects the fix), or dismissed. The original
-// "open"|"resolved"|"dismissed" remain valid.
+// through prioritized → diagnosed → accepted → proposed → applied → resolved,
+// can be guarded (a regression check now protects the fix), or dismissed. The
+// original "open"|"resolved"|"dismissed" remain valid. "accepted" is the gate-#1
+// approval point: analysis only surfaces a diagnosis, and proposal authoring
+// happens in a separate, autonomy-gated step.
 export type IssueStatus =
   | "open"
   | "prioritized"
   | "diagnosed"
+  | "accepted"
   | "proposed"
   | "applied"
   | "resolved"
@@ -288,6 +291,14 @@ export interface Issue {
   source?: IssueSource | null;
   // The evaluator/guard that now protects a resolved fix, when guarded.
   evaluator_id?: string | null;
+  // Dedup fingerprint for this failure; the deterministic dedup net folds
+  // recurrences of the same failure into one issue. Rarely worth surfacing.
+  signature?: string | null;
+  // How many times this failure has been surfaced across time (≥1). >1 means a
+  // recurring failure folded into this issue.
+  recurrence_count?: number | null;
+  // When this issue was accepted at gate #1 (iso), null until accepted.
+  accepted_at?: string | null;
   evidence_refs: Record<string, unknown>[];
   affected_agent_identity_ids: string[];
   affected_workflow_node_ids: string[];
@@ -307,6 +318,65 @@ export interface GuardReport {
   evaluator_kind: string;
   deterministic: boolean;
   affected_span_names: string[];
+}
+
+// Result of accepting an issue at gate #1 (POST /api/issues/accept). `propose` is
+// the authored proposal context (null when authoring was skipped — e.g. the
+// section's autonomy mode is `off`, so the issue stays diagnosed/awaiting).
+export interface AcceptIssueResult {
+  issue: Issue;
+  propose: { proposal_id?: string | null; [k: string]: unknown } | null;
+}
+
+// Report from the deterministic skillbook merge/dedup pass
+// (POST /api/skillbook/consolidate). Authored proposals still pass the gate;
+// `applied_proposal_ids` is the subset that the autonomy policy auto-applied.
+export interface ConsolidationReport {
+  profile_id: string;
+  duplicate_group_count: number;
+  proposal_ids: string[];
+  applied_proposal_ids: string[];
+  notes: string[];
+}
+
+// Issue-centric analysis report (POST /api/analyze). Analysis surfaces Issues
+// only (diagnosis); proposal authoring is a separate, autonomy-gated step, so
+// there is NO proposal_id here.
+export interface AnalyzeReport {
+  operator: string;
+  profile_id: string;
+  issue_ids: string[];
+  new_issue_ids: string[];
+  bundled_issue_ids: string[];
+  evidence_path?: string | null;
+  prompt_path?: string | null;
+  persisted?: boolean;
+  operator_run_id?: string | null;
+  raw_output_path?: string | null;
+  attempts?: number;
+  [k: string]: unknown;
+}
+
+// One per-issue gate-#1 outcome from an improve run. `action`:
+// proposed → a proposal was authored; awaiting_acceptance → mode is `propose`,
+// issue awaits human acceptance; diagnosed_only → mode is `off`, no authoring.
+export interface Gate1Outcome {
+  issue_id: string;
+  section: string;
+  mode: string;
+  action: "proposed" | "awaiting_acceptance" | "diagnosed_only";
+}
+
+// Report from an improve run (POST /api/improve). Keeps `proposal_id` (the first
+// authored proposal, or null) for back-compat and adds the issue-centric fields.
+export interface ImproveReport {
+  proposal_id?: string | null;
+  proposal_ids?: string[];
+  gate1_outcomes?: Gate1Outcome[];
+  consolidation?: ConsolidationReport | null;
+  guards?: GuardReport[];
+  analyze?: AnalyzeReport | null;
+  [k: string]: unknown;
 }
 
 export interface AutonomyPolicy {

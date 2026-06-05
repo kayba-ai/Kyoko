@@ -1,19 +1,23 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import {
+  ArrowRight,
   Check,
   CircleDot,
   FileSearch,
   Lightbulb,
   Loader2,
   MessageSquare,
+  Repeat,
   RotateCcw,
   Search,
   Shield,
+  ShieldCheck,
   Stethoscope,
   X,
 } from "lucide-react";
 import { api } from "@/lib/api";
-import type { Issue, IssueStatus, Skill } from "@/lib/types";
+import type { AcceptIssueResult, AutonomyPolicy, Issue, IssueStatus, Skill } from "@/lib/types";
 import { ago, fmtTime, humanize } from "@/lib/format";
 import { useApi } from "@/hooks/useApi";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
@@ -41,7 +45,12 @@ const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
   { value: "all", label: "All" },
 ];
 
-// Bucket any lifecycle status into the three review-queue filters.
+// Statuses where the issue is still in the triage/diagnosis stage and can be
+// accepted at gate #1. "accepted" and beyond are already past the gate.
+const ACCEPTABLE_STATUSES = new Set<string>(["open", "prioritized", "diagnosed"]);
+
+// Bucket any lifecycle status into the three review-queue filters. "accepted" and
+// the downstream authoring/applying states are work-in-progress → Pending.
 function bucket(status: string): "open" | "resolved" | "dismissed" {
   if (status === "resolved" || status === "applied" || status === "guarded") return "resolved";
   if (status === "dismissed") return "dismissed";
@@ -65,6 +74,8 @@ function lifecycle(status: string): { label: string; tone: NonNullable<BadgeProp
       return { label: "Prioritized", tone: "warn" };
     case "diagnosed":
       return { label: "Diagnosed", tone: "warn" };
+    case "accepted":
+      return { label: "Accepted (gate #1)", tone: "primary" };
     case "proposed":
       return { label: "Proposed", tone: "primary" };
     case "applied":
@@ -95,7 +106,12 @@ function matchesQuery(issue: Issue, q: string): boolean {
   return haystack.includes(q);
 }
 
-// ---- Review actions (accept / reject / reopen) ------------------------------
+// ---- Review actions (accept at gate #1 / reject / reopen) -------------------
+//
+// "Accept" is the gate-#1 approval: it calls POST /api/issues/accept, which (per
+// the section's autonomy mode) authors a proposal. In `off` the issue stays
+// diagnosed; in `propose`/`autonomous` a proposal is authored and the result
+// carries `propose.proposal_id`. Reject/Reopen are plain status bookkeeping.
 
 function ReviewActions({
   issue,
@@ -106,8 +122,26 @@ function ReviewActions({
   onReviewed: () => void;
   size?: "sm" | "default";
 }) {
-  const [pending, setPending] = useState<IssueStatus | null>(null);
+  const [pending, setPending] = useState<"accept" | IssueStatus | null>(null);
   const [error, setError] = useState<Error | null>(null);
+  const [accepted, setAccepted] = useState<AcceptIssueResult | null>(null);
+
+  const canAccept = ACCEPTABLE_STATUSES.has(issue.status);
+  const busy = pending !== null;
+
+  async function accept() {
+    setPending("accept");
+    setError(null);
+    try {
+      const res = await api.acceptIssue(issue.id);
+      setAccepted(res);
+      onReviewed();
+    } catch (e) {
+      setError(e instanceof Error ? e : new Error(String(e)));
+    } finally {
+      setPending(null);
+    }
+  }
 
   async function review(next: IssueStatus) {
     setPending(next);
@@ -122,15 +156,20 @@ function ReviewActions({
     }
   }
 
-  const busy = pending !== null;
+  const proposalId = accepted?.propose?.proposal_id ?? null;
 
   return (
     <div className="flex flex-col items-end gap-1.5">
       <div className="flex items-center gap-2">
-        {issue.status === "open" ? (
+        {issue.status === "dismissed" ? (
+          <Button variant="outline" size={size} disabled={busy} onClick={() => review("open")}>
+            {pending === "open" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+            Reopen
+          </Button>
+        ) : canAccept ? (
           <>
-            <Button variant="default" size={size} disabled={busy} onClick={() => review("resolved")}>
-              {pending === "resolved" ? (
+            <Button variant="default" size={size} disabled={busy} onClick={accept}>
+              {pending === "accept" ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
                 <Check className="h-3.5 w-3.5" />
@@ -146,18 +185,56 @@ function ReviewActions({
               Reject
             </Button>
           </>
-        ) : (
-          <Button variant="outline" size={size} disabled={busy} onClick={() => review("open")}>
-            {pending === "open" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
-            Reopen
-          </Button>
-        )}
+        ) : null}
       </div>
+      {accepted && (
+        <span className="text-right text-xs text-muted-foreground">
+          {proposalId ? (
+            <Link to="/proposals" className="text-primary hover:underline" title={proposalId}>
+              Proposal authored →
+            </Link>
+          ) : (
+            "Accepted — no proposal authored (section mode off)."
+          )}
+        </span>
+      )}
       {error && (
         <span className="text-xs text-danger" role="alert">
           {error.message}
         </span>
       )}
+    </div>
+  );
+}
+
+// ---- Autonomy summary (read-only, deep-links to the control) ----------------
+//
+// The gate-#1 mode lives on the Autonomy page; surface it here near the accept
+// controls so what "Accept" will do is discoverable from where you triage.
+
+function AutonomySummary({ section }: { section: Issue["section"] }) {
+  const { data: policy } = useApi<AutonomyPolicy>(() => api.policy(), []);
+  if (!policy) return null;
+  const mode = section === "harness" ? policy.harness_mode : policy.context_mode;
+  const sectionLabel = section ? humanize(section) : "Context";
+  const tone: NonNullable<BadgeProps["tone"]> =
+    mode === "autonomous" ? "ok" : mode === "propose" ? "primary" : "neutral";
+  const hint =
+    mode === "autonomous"
+      ? "accepting auto-authors, gates, and applies."
+      : mode === "propose"
+        ? "accepting authors a proposal for review."
+        : "accepting records the diagnosis; no proposal authored.";
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+      <ShieldCheck className="h-3.5 w-3.5 text-muted-foreground" />
+      <span>
+        {sectionLabel} autonomy: <Badge tone={tone}>{humanize(mode)}</Badge>
+      </span>
+      <span className="text-muted-foreground/80">{hint}</span>
+      <Link to="/autonomy" className="ml-auto inline-flex items-center gap-1 text-primary hover:underline">
+        Change <ArrowRight className="h-3 w-3" />
+      </Link>
     </div>
   );
 }
@@ -323,6 +400,12 @@ function IssueDetail({
           {typeof issue.rank === "number" && (
             <Badge tone="neutral" className="tabular-nums">{`Rank ${issue.rank}`}</Badge>
           )}
+          {typeof issue.recurrence_count === "number" && issue.recurrence_count > 1 && (
+            <Badge tone="warn" title="Times this failure has recurred" className="tabular-nums">
+              <Repeat className="h-3 w-3" />
+              {`seen ${issue.recurrence_count}×`}
+            </Badge>
+          )}
           {issue.severity && <Badge tone={severityTone(issue.severity)}>{humanize(issue.severity)}</Badge>}
           {issue.section && <Badge tone="neutral">{humanize(issue.section)}</Badge>}
           {issue.category && <Badge tone="neutral">{humanize(issue.category)}</Badge>}
@@ -338,6 +421,9 @@ function IssueDetail({
           <ReviewActions issue={issue} onReviewed={onReviewed} />
         </div>
       </div>
+
+      {/* Autonomy summary — what "Accept" (gate #1) will do for this section. */}
+      {ACCEPTABLE_STATUSES.has(issue.status) && <AutonomySummary section={issue.section} />}
 
       {/* Statement */}
       <div className="space-y-1.5">
@@ -486,6 +572,12 @@ function ReviewCard({
       <div className="flex flex-wrap items-center gap-1.5">
         <Badge tone={dec.tone}>{dec.label}</Badge>
         {life && <Badge tone={life.tone}>{life.label}</Badge>}
+        {typeof issue.recurrence_count === "number" && issue.recurrence_count > 1 && (
+          <Badge tone="warn" title="Times this failure has recurred" className="tabular-nums">
+            <Repeat className="h-3 w-3" />
+            {`${issue.recurrence_count}×`}
+          </Badge>
+        )}
         {issue.severity && <Badge tone={severityTone(issue.severity)}>{humanize(issue.severity)}</Badge>}
         {issue.section && <Badge tone="neutral">{humanize(issue.section)}</Badge>}
         {issue.evaluator_id && (
@@ -496,7 +588,7 @@ function ReviewCard({
         )}
         <span className="ml-auto text-label text-muted-foreground">{ago(issue.created_at)}</span>
       </div>
-      {issue.status === "open" && (
+      {ACCEPTABLE_STATUSES.has(issue.status) && (
         <div className="mt-2.5" onClick={(e) => e.stopPropagation()} role="presentation">
           <ReviewActions issue={issue} onReviewed={onReviewed} size="sm" />
         </div>
