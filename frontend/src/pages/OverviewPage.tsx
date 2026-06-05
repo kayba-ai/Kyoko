@@ -231,6 +231,44 @@ export function OverviewPage() {
           />
         ) : (
           <div className="flex flex-col gap-6">
+            {/* Where the improvement loop stands — outcome-framed, each links onward. */}
+            <div>
+              <div className="mb-3 text-xs font-medium text-muted-foreground">Improvement loop</div>
+              <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                <LoopCard
+                  to="/proposals"
+                  icon={<GitPullRequestArrow />}
+                  label="Proposals pending"
+                  value={pendingProposals.toLocaleString()}
+                  detail={pendingProposals > 0 ? "Awaiting review" : "Nothing to review"}
+                  tone={pendingProposals > 0 ? "warn" : "neutral"}
+                />
+                <LoopCard
+                  to="/checks"
+                  icon={<FlaskConical />}
+                  label="Check pass rate"
+                  value={fmtPercent(checkRate)}
+                  detail={checkTotal > 0 ? `${checkPassed} passed · ${checkFailed} failed` : "No checks run"}
+                  tone={checkRate === null ? "neutral" : checkRate >= 100 ? "ok" : "warn"}
+                />
+                <LoopCard
+                  to="/checks"
+                  icon={<RotateCcw />}
+                  label="Verified improvement"
+                  value={verified ? "Yes" : "Pending"}
+                  detail={replayTotal > 0 ? `${replayPassed} of ${replayTotal} replays passed` : "No replays yet"}
+                  tone={verified ? "ok" : "neutral"}
+                />
+                <LoopCard
+                  to="/autonomy"
+                  icon={<ShieldCheck />}
+                  label="Autonomy actions"
+                  value={autonomyDecisions.toLocaleString()}
+                  detail={autonomyDecisions > 0 ? "Gated decisions made" : "No actions yet"}
+                />
+              </div>
+            </div>
+
             {/* Hero: failure rate gets the prominence. */}
             <Card>
               <CardBody className="flex flex-col gap-6 p-6 lg:flex-row lg:items-center lg:justify-between">
@@ -347,44 +385,6 @@ export function OverviewPage() {
                 )}
               </CardBody>
             </Card>
-
-            {/* Where the improvement loop stands — outcome-framed, each links onward. */}
-            <div>
-              <div className="mb-3 text-xs font-medium text-muted-foreground">Improvement loop</div>
-              <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-                <LoopCard
-                  to="/proposals"
-                  icon={<GitPullRequestArrow />}
-                  label="Proposals pending"
-                  value={pendingProposals.toLocaleString()}
-                  detail={pendingProposals > 0 ? "Awaiting review" : "Nothing to review"}
-                  tone={pendingProposals > 0 ? "warn" : "neutral"}
-                />
-                <LoopCard
-                  to="/checks"
-                  icon={<FlaskConical />}
-                  label="Check pass rate"
-                  value={fmtPercent(checkRate)}
-                  detail={checkTotal > 0 ? `${checkPassed} passed · ${checkFailed} failed` : "No checks run"}
-                  tone={checkRate === null ? "neutral" : checkRate >= 100 ? "ok" : "warn"}
-                />
-                <LoopCard
-                  to="/checks"
-                  icon={<RotateCcw />}
-                  label="Verified improvement"
-                  value={verified ? "Yes" : "Pending"}
-                  detail={replayTotal > 0 ? `${replayPassed} of ${replayTotal} replays passed` : "No replays yet"}
-                  tone={verified ? "ok" : "neutral"}
-                />
-                <LoopCard
-                  to="/autonomy"
-                  icon={<ShieldCheck />}
-                  label="Autonomy actions"
-                  value={autonomyDecisions.toLocaleString()}
-                  detail={autonomyDecisions > 0 ? "Gated decisions made" : "No actions yet"}
-                />
-              </div>
-            </div>
           </div>
         )}
       </div>
