@@ -1,0 +1,85 @@
+{
+  "assets": [
+    {
+      "kind": "learning-proposals",
+      "path": "learning-proposals/hermes-one-shot-proposal.json"
+    },
+    {
+      "kind": "learning-proposals",
+      "path": "learning-proposals/invalid-hallucinated-span.json"
+    },
+    {
+      "kind": "learning-proposals",
+      "path": "learning-proposals/openclaw-local-operator-proposal.json"
+    },
+    {
+      "kind": "learning-proposals",
+      "path": "learning-proposals/valid-context-proposal.json"
+    },
+    {
+      "kind": "learning-proposals",
+      "path": "learning-proposals/valid-harness-generated-file-proposal.json"
+    },
+    {
+      "kind": "learning-proposals",
+      "path": "learning-proposals/valid-harness-proposal.json"
+    },
+    {
+      "kind": "llm_evals",
+      "path": "llm_evals/conciseness.json"
+    },
+    {
+      "kind": "llm_evals",
+      "path": "llm_evals/faithfulness_v1.json"
+    },
+    {
+      "kind": "llm_evals",
+      "path": "llm_evals/goal_accuracy.json"
+    },
+    {
+      "kind": "llm_evals",
+      "path": "llm_evals/hallucination.json"
+    },
+    {
+      "kind": "llm_evals",
+      "path": "llm_evals/helpfulness.json"
+    },
+    {
+      "kind": "llm_evals",
+      "path": "llm_evals/out_of_scope_request.json"
+    },
+    {
+      "kind": "llm_evals",
+      "path": "llm_evals/relevance.json"
+    },
+    {
+      "kind": "llm_evals",
+      "path": "llm_evals/toxicity.json"
+    },
+    {
+      "kind": "llm_evals",
+      "path": "llm_evals/user_disagreement.json"
+    },
+    {
+      "kind": "llm_evals",
+      "path": "llm_evals/user_distress.json"
+    },
+    {
+      "kind": "replay-results",
+      "path": "replay-results/researcher-fetch-timeout-success.json"
+    },
+    {
+      "kind": "schemas",
+      "path": "schemas/issue.schema.json"
+    },
+    {
+      "kind": "schemas",
+      "path": "schemas/learning-proposal.schema.json"
+    },
+    {
+      "kind": "source-events",
+      "path": "source-events/hermes-news-research-minimal.json"
+    }
+  ],
+  "exported": []
+}

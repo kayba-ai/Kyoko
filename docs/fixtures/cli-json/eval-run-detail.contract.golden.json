@@ -1,0 +1,120 @@
+{
+  "eval_run": {
+    "aggregate": {
+      "denominator": 4,
+      "numerator": 1,
+      "type": "boolean",
+      "value": 0.25
+    },
+    "baseline_run_id": null,
+    "corpus": {
+      "unit": "event"
+    },
+    "created_at": "<ts>",
+    "definition_snapshot": {
+      "bindings": null,
+      "created_at": "<ts>",
+      "detector_ref": "blob_sha256_9a949ac417bbeb3e8c55461c1eec2a14",
+      "direction": "true_is_notable",
+      "id": "failed_span",
+      "issue_id": null,
+      "kind": "python",
+      "name": "Failed span",
+      "output": null,
+      "output_type": "boolean",
+      "partner": null,
+      "problem_statement": "A span in the run ended in a failed or error status.",
+      "profile_id": "p1",
+      "prompt": null,
+      "severity_bands": null,
+      "source": "bundled",
+      "status": "active",
+      "unit_type": "event",
+      "updated_at": "<ts>",
+      "vars": null,
+      "version": 1
+    },
+    "ended_at": "<ts>",
+    "eval_definition_id": "failed_span",
+    "id": "<id>",
+    "kind": "python",
+    "profile_id": "p1",
+    "started_at": "<ts>",
+    "status": "complete",
+    "unit_scored": 4,
+    "unit_skipped": 0,
+    "unit_total": 4,
+    "unit_type": "event",
+    "updated_at": "<ts>"
+  },
+  "results": [
+    {
+      "created_at": "<ts>",
+      "degraded": false,
+      "detail": {
+        "event_id": "run_0_llm",
+        "has_problem": false
+      },
+      "eval_run_id": "<id>",
+      "id": "<id>",
+      "profile_id": "p1",
+      "reasoning": null,
+      "score_bool": false,
+      "score_numeric": null,
+      "status": "scored",
+      "unit_ref": "run_0_llm",
+      "unit_type": "event"
+    },
+    {
+      "created_at": "<ts>",
+      "degraded": false,
+      "detail": {
+        "event_id": "run_0_tool",
+        "has_problem": false
+      },
+      "eval_run_id": "<id>",
+      "id": "<id>",
+      "profile_id": "p1",
+      "reasoning": null,
+      "score_bool": false,
+      "score_numeric": null,
+      "status": "scored",
+      "unit_ref": "run_0_tool",
+      "unit_type": "event"
+    },
+    {
+      "created_at": "<ts>",
+      "degraded": false,
+      "detail": {
+        "event_id": "run_1_llm",
+        "has_problem": false
+      },
+      "eval_run_id": "<id>",
+      "id": "<id>",
+      "profile_id": "p1",
+      "reasoning": null,
+      "score_bool": false,
+      "score_numeric": null,
+      "status": "scored",
+      "unit_ref": "run_1_llm",
+      "unit_type": "event"
+    },
+    {
+      "created_at": "<ts>",
+      "degraded": false,
+      "detail": {
+        "event_id": "run_1_tool",
+        "has_problem": true
+      },
+      "eval_run_id": "<id>",
+      "id": "<id>",
+      "profile_id": "p1",
+      "reasoning": null,
+      "score_bool": true,
+      "score_numeric": null,
+      "status": "scored",
+      "unit_ref": "run_1_tool",
+      "unit_type": "event"
+    }
+  ]
+}

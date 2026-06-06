@@ -1,0 +1,33 @@
+{
+  "policy": {
+    "allow_repo_patch": false,
+    "allowed_paths": [
+      "agents/**",
+      "prompts/**",
+      "checks/**",
+      "tests/**",
+      ".kyoko/**"
+    ],
+    "auto_rollback_on_regression": true,
+    "dirty_worktree_policy": "block",
+    "max_auto_fix_attempts": 1,
+    "mode": "hitl",
+    "profile_id": "profile_news_research_001",
+    "protected_paths": [
+      ".env",
+      ".env.*",
+      "secrets/**",
+      "**/secrets/**",
+      "node_modules/**",
+      ".git/**",
+      "*.pem",
+      "*.key",
+      "*.p12"
+    ],
+    "recurrence_threshold": 3,
+    "regression_threshold": 2,
+    "timestamps_present": {
+      "updated_at": true
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "schema_version": "kyoko.llm_eval.v1",
+  "id": "goal_accuracy",
+  "name": "Goal Accuracy",
+  "version": 1,
+  "partner": "ragas",
+  "unit": "run",
+  "output": {
+    "type": "boolean"
+  },
+  "direction": "false_is_notable",
+  "prompt": "Given user goal, desired outcome and achieved outcome compare them and identify if they are the same (1) or different(0).\nUser Goal: {{user_goal}}\nDesired Outcome: {{desired_outcome}}\nAchieved Outcome: {{acheived_outcome}}",
+  "vars": [
+    "acheived_outcome",
+    "desired_outcome",
+    "user_goal"
+  ],
+  "bindings": {
+    "acheived_outcome": "run.final_output",
+    "desired_outcome": "annotation.desired_outcome|run.first_user_message",
+    "user_goal": "run.first_user_message"
+  }
+}

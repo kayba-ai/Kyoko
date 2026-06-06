@@ -1,0 +1,311 @@
+{
+  "artifact_exists": {
+    "replay_hook_path": true,
+    "replay_server_path": true
+  },
+  "external_model_invoked": false,
+  "flags": {
+    "generated_replay_server_invoked": true,
+    "installed_framework_invoked": true,
+    "live_operator_invoked": false
+  },
+  "framework": "langgraph-python",
+  "framework_package": "langgraph",
+  "framework_version": "9.9.0",
+  "kind": "installed_framework_replay_smoke",
+  "output_dir": "<OUTPUT_DIR>",
+  "passed": true,
+  "paths": {
+    "replay_hook_path": "<OUTPUT_DIR>/hooks/replay_hook.py",
+    "replay_server_path": "<OUTPUT_DIR>/replay/kyoko_replay_server.py",
+    "workspace_root": "<OUTPUT_DIR>/workspace"
+  },
+  "python_executable": "<PYTHON>",
+  "replay_server_url": "<SERVER_URL>",
+  "replay_smoke": {
+    "artifact_exists": {
+      "state_path": true,
+      "stderr_path": true,
+      "stdout_path": true
+    },
+    "command": [
+      "<PYTHON>",
+      "<TMP>/framework-replay/replay/kyoko_replay_server.py",
+      "--port",
+      "<PORT>"
+    ],
+    "health": {
+      "health_path": "/health",
+      "ok": true,
+      "response": {
+        "capabilities": [
+          "trace",
+          "replay"
+        ],
+        "framework": "langgraph-python",
+        "ok": true,
+        "profile": "Installed LangGraph Smoke",
+        "side_effect_modes": [
+          "filesystem_read",
+          "network_mocked",
+          "none",
+          "sandboxed_filesystem"
+        ]
+      },
+      "server_url": "<SERVER_URL>"
+    },
+    "health_path": "/health",
+    "healthy": true,
+    "kind": "replay_server",
+    "logs": {
+      "max_bytes": 40000,
+      "paths": {
+        "stderr_path": "<OUTPUT_DIR>/replay-smoke/replay-server-stderr.txt",
+        "stdout_path": "<OUTPUT_DIR>/replay-smoke/replay-server-stdout.txt"
+      },
+      "stderr": "",
+      "stderr_truncated": false,
+      "stdout_contract": {
+        "stdout_present": false
+      },
+      "stdout_truncated": false
+    },
+    "output_dir": "<OUTPUT_DIR>/replay-smoke",
+    "paths": {
+      "state_path": "<OUTPUT_DIR>/replay-smoke/replay-server-state.json",
+      "stderr_path": "<OUTPUT_DIR>/replay-smoke/replay-server-stderr.txt",
+      "stdout_path": "<OUTPUT_DIR>/replay-smoke/replay-server-stdout.txt"
+    },
+    "pid_present": true,
+    "replay_ok": true,
+    "replay_path": "/replay",
+    "replay_request": {
+      "check_spec_id": "check_spec_integration_smoke",
+      "profile_id": "profile_integration_smoke",
+      "replay_run_id": "replay_integration_smoke_001",
+      "side_effect_mode": "network_mocked"
+    },
+    "replay_response": {
+      "agent_identities": [
+        {
+          "external_id": "installed-langgraph-replay-agent",
+          "id": "agent_installed_langgraph_replay",
+          "kind": "agent",
+          "metadata_json": {
+            "external_model_invoked": false,
+            "framework": "langgraph-python",
+            "framework_package": "langgraph",
+            "framework_version": "9.9.0",
+            "installed_framework_invoked": true,
+            "live_operator_invoked": false,
+            "replay_smoke": true
+          },
+          "model": null,
+          "name": "installed-langgraph-replay-agent",
+          "profile_id": "profile_integration_smoke",
+          "role": "researcher",
+          "source_id": "source_installed_langgraph_replay",
+          "workspace_path": "."
+        }
+      ],
+      "fixture_version": "kyoko.replay_result.v1",
+      "handoffs": [],
+      "profile": {
+        "created_at": "2026-01-01T00:00:00Z",
+        "id": "profile_integration_smoke",
+        "name": "Installed LangGraph Replay Smoke",
+        "root_path": ".",
+        "status": "active",
+        "updated_at": "2026-01-01T00:00:00Z"
+      },
+      "queues": [],
+      "replay": {
+        "actual_side_effect_mode": "network_mocked",
+        "executed_agent": true,
+        "note": "installed LangGraph replay smoke completed without live model calls",
+        "output_run_id": "run_installed_langgraph_replay_001",
+        "replay_run_id": "replay_integration_smoke_001",
+        "status": "passed",
+        "target_map": {
+          "span_framework_source": "span_installed_langgraph_replay_fetch_001"
+        }
+      },
+      "runs": [
+        {
+          "agent_identity_id": "agent_installed_langgraph_replay",
+          "ended_at": "2026-01-01T00:00:00Z",
+          "external_id": "installed-langgraph-replay-001",
+          "id": "run_installed_langgraph_replay_001",
+          "input_payload": {
+            "content": {
+              "check_spec_id": "check_spec_integration_smoke",
+              "profile_id": "profile_integration_smoke",
+              "replay_run_id": "replay_integration_smoke_001",
+              "side_effect_mode": "network_mocked"
+            },
+            "kind": "replay_request"
+          },
+          "input_ref": null,
+          "metadata_json": {
+            "external_model_invoked": false,
+            "framework": "langgraph-python",
+            "framework_package": "langgraph",
+            "framework_version": "9.9.0",
+            "graph_result": {
+              "plan": "fetch:framework-replay",
+              "result": "timeout",
+              "topic": "framework-replay"
+            },
+            "installed_framework_invoked": true,
+            "live_operator_invoked": false,
+            "replay_smoke": true
+          },
+          "output_payload": {
+            "content": {
+              "plan": "fetch:framework-replay",
+              "result": "timeout",
+              "topic": "framework-replay"
+            },
+            "kind": "replay_output"
+          },
+          "output_ref": null,
+          "profile_id": "profile_integration_smoke",
+          "root_span_id": "span_installed_langgraph_replay_plan_001",
+          "source_id": "source_installed_langgraph_replay",
+          "started_at": "2026-01-01T00:00:00Z",
+          "status": "succeeded",
+          "summary": "Installed LangGraph replay smoke ran a deterministic graph.",
+          "task_attempt_id": null
+        }
+      ],
+      "sources": [
+        {
+          "adapter_version": "kyoko.installed_framework_replay_smoke.v0",
+          "capabilities_json": {
+            "replay": true,
+            "trace": true
+          },
+          "config_json": {
+            "external_model_invoked": false,
+            "framework": "langgraph-python",
+            "framework_package": "langgraph",
+            "framework_version": "9.9.0",
+            "installed_framework_invoked": true,
+            "live_operator_invoked": false,
+            "replay_smoke": true
+          },
+          "display_name": "Installed LangGraph replay source",
+          "id": "source_installed_langgraph_replay",
+          "kind": "langgraph-python",
+          "last_seen_at": "2026-01-01T00:00:00Z",
+          "profile_id": "profile_integration_smoke",
+          "status": "active"
+        }
+      ],
+      "spans": [
+        {
+          "agent_identity_id": "agent_installed_langgraph_replay",
+          "attributes_json": {
+            "external_model_invoked": false,
+            "framework": "langgraph-python",
+            "framework_package": "langgraph",
+            "framework_version": "9.9.0",
+            "installed_framework_invoked": true,
+            "live_operator_invoked": false,
+            "replay_smoke": true
+          },
+          "ended_at": "2026-01-01T00:00:00Z",
+          "external_id": "langgraph-replay-plan",
+          "id": "span_installed_langgraph_replay_plan_001",
+          "input_payload": {
+            "content": {
+              "topic": "framework-replay"
+            },
+            "kind": "span_input"
+          },
+          "input_ref": null,
+          "kind": "agent",
+          "name": "plan",
+          "output_payload": {
+            "content": {
+              "plan": "fetch:framework-replay"
+            },
+            "kind": "span_output"
+          },
+          "output_ref": null,
+          "parent_span_id": null,
+          "raw_ref": null,
+          "run_id": "run_installed_langgraph_replay_001",
+          "source_id": "source_installed_langgraph_replay",
+          "started_at": "2026-01-01T00:00:00Z",
+          "status": "succeeded",
+          "usage_json": {},
+          "workflow_node_id": "node_installed_langgraph_replay"
+        },
+        {
+          "agent_identity_id": "agent_installed_langgraph_replay",
+          "attributes_json": {
+            "external_model_invoked": false,
+            "framework": "langgraph-python",
+            "framework_package": "langgraph",
+            "framework_version": "9.9.0",
+            "installed_framework_invoked": true,
+            "live_operator_invoked": false,
+            "replay_smoke": true
+          },
+          "ended_at": "2026-01-01T00:00:00Z",
+          "external_id": "langgraph-replay-fetch",
+          "id": "span_installed_langgraph_replay_fetch_001",
+          "input_payload": {
+            "content": {
+              "plan": "fetch:framework-replay"
+            },
+            "kind": "tool_args"
+          },
+          "input_ref": null,
+          "kind": "tool",
+          "name": "fetch_source",
+          "output_payload": {
+            "content": "timeout mocked for replay",
+            "kind": "tool_output"
+          },
+          "output_ref": null,
+          "parent_span_id": "span_installed_langgraph_replay_plan_001",
+          "raw_ref": null,
+          "run_id": "run_installed_langgraph_replay_001",
+          "source_id": "source_installed_langgraph_replay",
+          "started_at": "2026-01-01T00:00:00Z",
+          "status": "succeeded",
+          "usage_json": {},
+          "workflow_node_id": "node_installed_langgraph_replay"
+        }
+      ],
+      "task_attempts": [],
+      "tasks": [],
+      "timeline_events": [],
+      "workflow_nodes": [
+        {
+          "agent_identity_id": "agent_installed_langgraph_replay",
+          "external_id": "langgraph-replay-plan-fetch",
+          "id": "node_installed_langgraph_replay",
+          "kind": "agent",
+          "metadata_json": {
+            "external_model_invoked": false,
+            "framework": "langgraph-python",
+            "framework_package": "langgraph",
+            "framework_version": "9.9.0",
+            "installed_framework_invoked": true,
+            "live_operator_invoked": false,
+            "replay_smoke": true
+          },
+          "name": "replay-plan-fetch",
+          "profile_id": "profile_integration_smoke",
+          "source_id": "source_installed_langgraph_replay"
+        }
+      ]
+    },
+    "server_url": "<SERVER_URL>",
+    "started": true,
+    "stopped": true
+  }
+}

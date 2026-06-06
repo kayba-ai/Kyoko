@@ -1,0 +1,95 @@
+{
+  "resourceSpans": [
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "service.name",
+            "value": {
+              "stringValue": "news-research-agent"
+            }
+          },
+          {
+            "key": "telemetry.sdk.name",
+            "value": {
+              "stringValue": "opentelemetry"
+            }
+          }
+        ]
+      },
+      "scopeSpans": [
+        {
+          "scope": {
+            "name": "kyoko-test"
+          },
+          "spans": [
+            {
+              "traceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "spanId": "bbbbbbbbbbbbbbbb",
+              "name": "invoke_agent researcher",
+              "kind": "SPAN_KIND_INTERNAL",
+              "startTimeUnixNano": "1790773200000000000",
+              "endTimeUnixNano": "1790773500000000000",
+              "attributes": [
+                {
+                  "key": "gen_ai.operation.name",
+                  "value": {
+                    "stringValue": "invoke_agent"
+                  }
+                },
+                {
+                  "key": "gen_ai.agent.name",
+                  "value": {
+                    "stringValue": "researcher"
+                  }
+                },
+                {
+                  "key": "gen_ai.request.model",
+                  "value": {
+                    "stringValue": "test-model"
+                  }
+                }
+              ],
+              "status": {
+                "code": "STATUS_CODE_OK"
+              }
+            },
+            {
+              "traceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "spanId": "cccccccccccccccc",
+              "parentSpanId": "bbbbbbbbbbbbbbbb",
+              "name": "execute_tool fetch_source",
+              "kind": "SPAN_KIND_INTERNAL",
+              "startTimeUnixNano": "1790773260000000000",
+              "endTimeUnixNano": "1790773290000000000",
+              "attributes": [
+                {
+                  "key": "gen_ai.operation.name",
+                  "value": {
+                    "stringValue": "execute_tool"
+                  }
+                },
+                {
+                  "key": "gen_ai.tool.name",
+                  "value": {
+                    "stringValue": "fetch_source"
+                  }
+                },
+                {
+                  "key": "error.type",
+                  "value": {
+                    "stringValue": "timeout"
+                  }
+                }
+              ],
+              "status": {
+                "code": "STATUS_CODE_ERROR",
+                "message": "source timed out"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

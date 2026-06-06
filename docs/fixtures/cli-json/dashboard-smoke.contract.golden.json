@@ -1,0 +1,53 @@
+{
+  "api_metric_cards_count": 6,
+  "api_status": {
+    "counts": {
+      "check_specs": 1,
+      "learning_proposals": 1,
+      "profiles": 1,
+      "replay_runs": 1,
+      "runs": 2,
+      "skills": 1,
+      "spans": 4
+    },
+    "initialized": true,
+    "schema_version": 30
+  },
+  "browser_backend": "npx-playwright",
+  "console_errors": [],
+  "db_path": "<DB_PATH>",
+  "kind": "dashboard_browser_smoke",
+  "output_dir": "<OUTPUT_DIR>",
+  "page_errors": [],
+  "passed": true,
+  "request_failures": [],
+  "seeded_demo": true,
+  "server_url_loopback": true,
+  "temporary": false,
+  "viewports": [
+    {
+      "height": 1000,
+      "metric_count": 22,
+      "metric_overflows": [],
+      "name": "desktop",
+      "passed": true,
+      "screenshot_path": {
+        "exists": true,
+        "path": "<OUTPUT_DIR>/screenshots/dashboard-desktop.png"
+      },
+      "width": 1440
+    },
+    {
+      "height": 844,
+      "metric_count": 22,
+      "metric_overflows": [],
+      "name": "mobile",
+      "passed": true,
+      "screenshot_path": {
+        "exists": true,
+        "path": "<OUTPUT_DIR>/screenshots/dashboard-mobile.png"
+      },
+      "width": 390
+    }
+  ]
+}

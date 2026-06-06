@@ -1,0 +1,10 @@
+{
+  "busy": 0,
+  "checkpointed_frames_nonnegative": true,
+  "db_path": "<DB_PATH>",
+  "log_frames_nonnegative": true,
+  "mode": "TRUNCATE",
+  "wal_path": "<TMP>/kyoko.db-wal",
+  "wal_size_after_nonnegative": true,
+  "wal_size_before_nonnegative": true
+}

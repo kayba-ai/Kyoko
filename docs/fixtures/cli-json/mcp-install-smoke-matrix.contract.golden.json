@@ -1,0 +1,136 @@
+{
+  "output_dir": "<OUTPUT_DIR>",
+  "passed": true,
+  "results": [
+    {
+      "has_report": true,
+      "reason": null,
+      "report": {
+        "command_contract": {
+          "env_keys": [
+            "PYTHONPATH"
+          ],
+          "prefix": [
+            "codex",
+            "mcp",
+            "add",
+            "kyoko-dev"
+          ],
+          "server_args_prefix": [
+            "-m",
+            "kyoko",
+            "mcp",
+            "serve"
+          ],
+          "server_db_path": "<TMP>/kyoko.db",
+          "server_schema_path": "<REPO>/docs/schemas/learning-proposal.schema.json"
+        },
+        "config_exists": true,
+        "config_path_hint": "<OUTPUT_DIR>/codex/codex-home/config.toml",
+        "cwd": "<OUTPUT_DIR>/codex/workspace",
+        "home": "<OUTPUT_DIR>/codex/home",
+        "list_command": [
+          "codex",
+          "mcp",
+          "list"
+        ],
+        "list_returncode": 0,
+        "list_stdout_tail_present": true,
+        "list_verified": true,
+        "notes_contract": {
+          "has_config_check_note": true,
+          "has_list_verified_note": true,
+          "note_count": 4
+        },
+        "passed": true,
+        "returncode": 0,
+        "server": "kyoko-dev",
+        "stdout_tail_present": true,
+        "target": "codex"
+      },
+      "status": "passed",
+      "target": "codex"
+    },
+    {
+      "has_report": true,
+      "reason": null,
+      "report": {
+        "command_contract": {
+          "prefix": [
+            "claude",
+            "mcp",
+            "add-json",
+            "--scope",
+            "user",
+            "kyoko-dev"
+          ],
+          "scope": "user",
+          "server_args_prefix": [
+            "-m",
+            "kyoko",
+            "mcp",
+            "serve"
+          ],
+          "server_db_path": "<TMP>/kyoko.db",
+          "server_env_keys": [
+            "PYTHONPATH"
+          ],
+          "server_schema_path": "<REPO>/docs/schemas/learning-proposal.schema.json"
+        },
+        "config_exists": true,
+        "config_path_hint": "<OUTPUT_DIR>/claude/home/.claude.json",
+        "cwd": "<OUTPUT_DIR>/claude/workspace",
+        "home": "<OUTPUT_DIR>/claude/home",
+        "list_command": [
+          "claude",
+          "mcp",
+          "list"
+        ],
+        "list_returncode": 0,
+        "list_stdout_tail_present": true,
+        "list_verified": true,
+        "notes_contract": {
+          "has_config_check_note": true,
+          "has_list_verified_note": true,
+          "note_count": 4
+        },
+        "passed": true,
+        "returncode": 0,
+        "server": "kyoko-dev",
+        "stdout_tail_present": true,
+        "target": "claude"
+      },
+      "status": "passed",
+      "target": "claude"
+    },
+    {
+      "has_report": false,
+      "reason": "mcp_install_smoke_no_native_command:hermes",
+      "report": null,
+      "status": "skipped",
+      "target": "hermes"
+    },
+    {
+      "has_report": false,
+      "reason": "mcp_install_smoke_no_native_command:openclaw",
+      "report": null,
+      "status": "skipped",
+      "target": "openclaw"
+    }
+  ],
+  "server": "kyoko-dev",
+  "summary": {
+    "available": 2,
+    "failed": 0,
+    "passed": 2,
+    "skipped": 2,
+    "total": 4
+  },
+  "targets": [
+    "codex",
+    "claude",
+    "hermes",
+    "openclaw"
+  ],
+  "temporary": false
+}

@@ -1,0 +1,60 @@
+{
+  "command": {
+    "client_command": [
+      "codex",
+      "mcp",
+      "add",
+      "kyoko-dev"
+    ],
+    "env_key": "--env",
+    "env_repo_path": "<REPO>",
+    "separator": "--",
+    "server": {
+      "command_present": true,
+      "db_flag": "--db",
+      "db_path": "<DB_PATH>",
+      "module_args": [
+        "-m",
+        "kyoko",
+        "mcp",
+        "serve"
+      ],
+      "schema_flag": "--schema",
+      "schema_path": "<REPO>/docs/schemas/learning-proposal.schema.json"
+    }
+  },
+  "config": {
+    "kyoko-dev": {
+      "command_present": true,
+      "env": {
+        "PYTHONPATH": "<REPO>"
+      },
+      "server": {
+        "command_present": false,
+        "db_flag": "--db",
+        "db_path": "<DB_PATH>",
+        "module_args": [
+          "-m",
+          "kyoko",
+          "mcp",
+          "serve"
+        ],
+        "schema_flag": "--schema",
+        "schema_path": "<REPO>/docs/schemas/learning-proposal.schema.json"
+      }
+    },
+    "server_names": [
+      "kyoko-dev"
+    ],
+    "target": "codex"
+  },
+  "config_path_hint": ".codex/config.toml",
+  "notes": [
+    "Run the command to let Codex add Kyoko to its MCP registry.",
+    "Use `codex mcp list` after installation to verify the server."
+  ],
+  "requires_manual_config": false,
+  "server": "kyoko-dev",
+  "shell_command_present": true,
+  "target": "codex"
+}

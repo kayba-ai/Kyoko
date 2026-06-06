@@ -1,0 +1,30 @@
+{
+  "schema_version": "kyoko.llm_eval.v1",
+  "id": "faithfulness_v1",
+  "name": "Faithfulness v1",
+  "version": 1,
+  "partner": "ragas",
+  "unit": "llm_span",
+  "output": {
+    "type": "numeric",
+    "range": [
+      0,
+      1
+    ]
+  },
+  "direction": "higher_is_better",
+  "prompt": "Given a question and an answer, analyze the complexity of each sentence in the answer. Break down each sentence into one or more fully understandable statements. Ensure that no pronouns are used in any statement.\nQuestion: {{question}}\nAnswer: {{answer}}",
+  "vars": [
+    "answer",
+    "question"
+  ],
+  "bindings": {
+    "answer": "unit.output_text",
+    "question": "unit.user_query"
+  },
+  "severity_bands": {
+    "low": 0.2,
+    "medium": 0.5,
+    "high": 0.8
+  }
+}

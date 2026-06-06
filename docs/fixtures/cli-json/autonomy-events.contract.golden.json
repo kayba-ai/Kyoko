@@ -1,0 +1,24 @@
+{
+  "autonomy_events": [
+    {
+      "entity_id": "proposal_context_timeout_001",
+      "entity_type": "learning_proposal",
+      "kind": "autonomy_decision",
+      "metadata": {
+        "action": "applied",
+        "applied_context_rule_ids": [],
+        "applied_skill_ids": [
+          "skill_proposal_context_timeout_001_1"
+        ],
+        "decision_kind": "gate_decision",
+        "patch_transaction_ids": [],
+        "profile_id": "profile_news_research_001",
+        "reason": "autonomous_auto_apply",
+        "section": "context",
+        "state_after": "applied",
+        "state_before": "pending"
+      },
+      "profile_id": "profile_news_research_001"
+    }
+  ]
+}

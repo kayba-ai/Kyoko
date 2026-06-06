@@ -1,0 +1,68 @@
+{
+  "artifact_exists": {
+    "raw_output_path": true,
+    "request_path": true,
+    "result_path": true
+  },
+  "artifact_paths": {
+    "raw_output_path": "<OUTPUT_DIR>/judge-command-output.txt",
+    "request_path": "<OUTPUT_DIR>/judge-request.json",
+    "result_path": "<OUTPUT_DIR>/judge-result.json"
+  },
+  "check_run": {
+    "check_run_id": "checkrun_check_proposal_context_timeout_001_1_001",
+    "promoted_trust_level": null,
+    "result": {
+      "assertion_counts": {
+        "failed": 0,
+        "passed": 1,
+        "total": 1
+      },
+      "assertions": [
+        {
+          "actual": "passed",
+          "expected": [
+            "accept",
+            "accepted",
+            "meets_rubric",
+            "pass",
+            "passed"
+          ],
+          "passed": true,
+          "reason": "verdict_passed",
+          "type": "recorded_judge_verdict"
+        }
+      ],
+      "comparison": "judge_verdict_passed",
+      "check_type": "judge",
+      "gateable": false,
+      "judge": "fixture_external_judge",
+      "judge_backend": "external_command",
+      "reason": "recorded_judge_passed",
+      "score": 0.93,
+      "target": {
+        "entity_id": "span_fetch_timeout_001",
+        "entity_type": "span",
+        "role": "failure",
+        "source": "failure_evidence"
+      },
+      "verdict": "passed"
+    },
+    "status": "passed"
+  },
+  "check_spec_id": "check_proposal_context_timeout_001_1",
+  "judgment": {
+    "backend": "external_command",
+    "judge": "fixture_external_judge",
+    "judge_backend": "external_command",
+    "score": 0.93,
+    "verdict": "passed"
+  },
+  "profile_id": "profile_news_research_001",
+  "proposal_id": "proposal_context_timeout_001",
+  "raw_output_contract": {
+    "contains_begin_marker": true,
+    "contains_end_marker": true,
+    "contains_result_schema": true
+  }
+}

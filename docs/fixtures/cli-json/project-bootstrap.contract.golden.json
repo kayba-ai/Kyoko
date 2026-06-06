@@ -1,0 +1,152 @@
+{
+  "artifact_exists": {
+    "db_path": true,
+    "mcp_config_path": true,
+    "next_steps_path": true,
+    "replay_server": true,
+    "source_adapter": true
+  },
+  "commands": {
+    "discover_sources": "python3 -m kyoko discover-sources --db <PROJECT_DIR>/.kyoko/kyoko.db --profile-id profile_news_research --profile-name news-research --root-path <PROJECT_DIR> --json",
+    "doctor": "python3 -m kyoko doctor --db <PROJECT_DIR>/.kyoko/kyoko.db --json",
+    "doctor_safe_smokes": "python3 -m kyoko doctor --db <PROJECT_DIR>/.kyoko/kyoko.db --safe-smokes --smoke-output-dir <PROJECT_DIR>/.kyoko/smoke/doctor --json",
+    "import_hermes_kanban": "python3 -m kyoko import-hermes-kanban --db <PROJECT_DIR>/.kyoko/kyoko.db ~/.hermes/kanban.db --board default --profile-id profile_news_research --profile-name news-research --root-path <PROJECT_DIR> --json",
+    "import_openclaw_sessions": "python3 -m kyoko import-openclaw-sessions --db <PROJECT_DIR>/.kyoko/kyoko.db ~/.openclaw/agents/main/sessions --agent-id main --profile-id profile_news_research --profile-name news-research --root-path <PROJECT_DIR> --json",
+    "ingest": "python3 -m kyoko ingest --db <PROJECT_DIR>/.kyoko/kyoko.db /tmp/kyoko-source-events.json --json",
+    "mcp": "Use MCP config: <PROJECT_DIR>/.kyoko/config/mcp.json",
+    "profile_next": "python3 -m kyoko profile-next --db <PROJECT_DIR>/.kyoko/kyoko.db --json",
+    "replay": "KYOKO_REPLAY_HOOK=/absolute/path/to/replay_hook.py:replay python3 <PROJECT_DIR>/.kyoko/scripts/kyoko_replay_server.py --port 61200",
+    "replay_adapter_register": "python3 -m kyoko replay-adapter-register --db <PROJECT_DIR>/.kyoko/kyoko.db profile_news_research_replay --name 'news-research replay' --command 'env KYOKO_REPLAY_HOOK=/absolute/path/to/replay_hook.py:replay python3 <PROJECT_DIR>/.kyoko/scripts/kyoko_replay_server.py --port 61200' --server-url http://127.0.0.1:61200 --cwd <PROJECT_DIR> --output-dir <PROJECT_DIR>/.kyoko/replay-runs --mode dry_run --side-effect-mode network_mocked --profile-id profile_news_research --json",
+    "replay_smoke": "python3 -m kyoko integration-smoke replay-server --command 'python3 <PROJECT_DIR>/.kyoko/scripts/kyoko_replay_server.py --port 61200' --server-url http://127.0.0.1:61200 --output-dir <PROJECT_DIR>/.kyoko/smoke/replay --hook /absolute/path/to/replay_hook.py:replay --run-replay --json",
+    "serve": "python3 -m kyoko serve --db <PROJECT_DIR>/.kyoko/kyoko.db",
+    "source": "KYOKO_SOURCE_HOOK=/absolute/path/to/source_hook.py:collect python3 <PROJECT_DIR>/.kyoko/scripts/kyoko_source_adapter.py --output /tmp/kyoko-source-events.json"
+  },
+  "embedded_commands_match": true,
+  "mcp_config": {
+    "server": {
+      "args": [
+        "-m",
+        "kyoko",
+        "mcp",
+        "serve",
+        "--db",
+        "<PROJECT_DIR>/.kyoko/kyoko.db"
+      ],
+      "command_is_current_python": true,
+      "env_keys": [
+        "PYTHONPATH"
+      ]
+    },
+    "server_names": [
+      "kyoko"
+    ],
+    "target": "codex"
+  },
+  "next_steps_contract": {
+    "contains_discover_sources": true,
+    "contains_machine_readable_commands": true,
+    "contains_native_ace_prepare": true,
+    "contains_no_live_notice": true,
+    "contains_replay_smoke": true,
+    "contains_safe_smokes": true
+  },
+  "operator_bootstrap": {
+    "registered": [
+      {
+        "adapter_id": "codex",
+        "command": [
+          "codex",
+          "exec",
+          "--sandbox",
+          "read-only",
+          "--skip-git-repo-check",
+          "--ephemeral",
+          "--color",
+          "never",
+          "-"
+        ],
+        "enabled": true,
+        "name": "Codex",
+        "operator_kind": "codex",
+        "output_dir": "<PROJECT_DIR>/.kyoko/operator-runs",
+        "profile_id": "profile_news_research",
+        "timeout_seconds": 120
+      },
+      {
+        "adapter_id": "claude",
+        "command": [
+          "claude",
+          "--print",
+          "--input-format",
+          "text",
+          "--output-format",
+          "text",
+          "--permission-mode",
+          "dontAsk",
+          "--allowedTools",
+          "Read",
+          "--no-session-persistence"
+        ],
+        "enabled": true,
+        "name": "Claude Code",
+        "operator_kind": "claude",
+        "output_dir": "<PROJECT_DIR>/.kyoko/operator-runs",
+        "profile_id": "profile_news_research",
+        "timeout_seconds": 120
+      },
+      {
+        "adapter_id": "hermes",
+        "command": [
+          "hermes",
+          "-z",
+          "{prompt}"
+        ],
+        "enabled": true,
+        "name": "Hermes",
+        "operator_kind": "hermes",
+        "output_dir": "<PROJECT_DIR>/.kyoko/operator-runs",
+        "profile_id": "profile_news_research",
+        "timeout_seconds": 120
+      },
+      {
+        "adapter_id": "openclaw",
+        "command": [
+          "openclaw",
+          "agent",
+          "--agent",
+          "main",
+          "--local",
+          "--message",
+          "{prompt}",
+          "--timeout",
+          "120"
+        ],
+        "enabled": true,
+        "name": "OpenClaw",
+        "operator_kind": "openclaw",
+        "output_dir": "<PROJECT_DIR>/.kyoko/operator-runs",
+        "profile_id": "profile_news_research",
+        "timeout_seconds": 120
+      }
+    ],
+    "skipped": []
+  },
+  "paths": {
+    "db_path": "<PROJECT_DIR>/.kyoko/kyoko.db",
+    "mcp_config_path": "<PROJECT_DIR>/.kyoko/config/mcp.json",
+    "next_steps_path": "<PROJECT_DIR>/.kyoko/NEXT_STEPS.md",
+    "project_dir": "<PROJECT_DIR>",
+    "replay_server": "<PROJECT_DIR>/.kyoko/scripts/kyoko_replay_server.py",
+    "source_adapter": "<PROJECT_DIR>/.kyoko/scripts/kyoko_source_adapter.py"
+  },
+  "replay_server": {
+    "framework": "hermes-python",
+    "profile_name": "news-research",
+    "wrote": true
+  },
+  "source_adapter": {
+    "framework": "langgraph-python",
+    "profile_name": "news-research",
+    "wrote": true
+  }
+}

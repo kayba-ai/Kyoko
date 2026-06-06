@@ -1,0 +1,135 @@
+{
+  "autonomy_gate": {
+    "action": "awaiting_human_review",
+    "mutates": false,
+    "reason": "hitl_awaiting_human_approve",
+    "section": "context"
+  },
+  "check_guidance": {
+    "assertion_presets": [
+      {
+        "assertions": [
+          "replay_run_status_equals",
+          "replay_no_failed_spans",
+          "replay_span_count_at_least"
+        ],
+        "gateable_check_types": [
+          "deterministic_assertion",
+          "regression_replay"
+        ],
+        "name": "replay_success_shape"
+      },
+      {
+        "assertions": [
+          "replay_handoff_count_at_least"
+        ],
+        "gateable_check_types": [
+          "deterministic_assertion",
+          "regression_replay"
+        ],
+        "name": "replay_handoff_present"
+      }
+    ],
+    "gateable_check_types": [
+      "deterministic_assertion",
+      "regression_replay"
+    ],
+    "informational_check_types": [
+      "judge",
+      "smoke_run"
+    ],
+    "recorded_judge_only": true,
+    "safe_replay_side_effect_modes": [
+      "none",
+      "filesystem_read",
+      "sandboxed_filesystem",
+      "network_mocked"
+    ]
+  },
+  "confidence_assessment": {
+    "evidence": {
+      "resolved_refs": 2,
+      "target_found": true,
+      "total_refs": 2
+    },
+    "kyoko_confidence": 0.66,
+    "level": "medium",
+    "operator_confidence": 0.82,
+    "verification": {
+      "check_runs": 0,
+      "latest_check_status": "not_run",
+      "latest_replay_status": "not_run",
+      "replay_runs": 0
+    }
+  },
+  "counts": {
+    "check_runs": 0,
+    "check_specs": 0,
+    "evidence": 2,
+    "gate_history": 0,
+    "patch_transactions": 0,
+    "replay_runs": 0,
+    "timeline_events": 0
+  },
+  "evidence": [
+    {
+      "entity_id": "span_fetch_timeout_001",
+      "entity_type": "span",
+      "found": true,
+      "role": "failure"
+    },
+    {
+      "entity_id": "handoff_research_to_writer_001",
+      "entity_type": "handoff",
+      "found": true,
+      "role": "context"
+    }
+  ],
+  "evidence_chain": {
+    "blocking_reason": "hitl_awaiting_human_approve",
+    "ready_to_apply": false,
+    "steps": [
+      {
+        "stage": "observed_issue",
+        "status": "resolved",
+        "title": "Observed issue"
+      },
+      {
+        "stage": "proposed_fix",
+        "status": "pending",
+        "title": "Proposed fix"
+      },
+      {
+        "stage": "check_gate",
+        "status": "not_generated",
+        "title": "Check gate"
+      },
+      {
+        "stage": "replay",
+        "status": "not_run",
+        "title": "Replay"
+      },
+      {
+        "stage": "autonomy",
+        "status": "awaiting_human_review",
+        "title": "Autonomy decision"
+      }
+    ]
+  },
+  "proposal": {
+    "id": "proposal_context_timeout_001",
+    "problem_severity": "medium",
+    "section": "context",
+    "section_description": "A change to agent-facing skillbook context or context delivery.",
+    "section_label": "Context fix",
+    "state": "pending",
+    "title": "Add retry guidance for source fetch timeouts",
+    "validation_errors": []
+  },
+  "target": {
+    "entity_id": "agent_researcher_001",
+    "entity_type": "agent_identity",
+    "found": true,
+    "name": "researcher"
+  }
+}

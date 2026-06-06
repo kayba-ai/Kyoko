@@ -1,0 +1,47 @@
+{
+  "adapter_id": "persistent_http_replay",
+  "artifact_exists": {
+    "state_path": true,
+    "stderr_path": true,
+    "stdout_path": true
+  },
+  "command": [
+    "<PYTHON>",
+    "-m",
+    "kyoko.fixture_replay_server",
+    "--port",
+    "<PORT>"
+  ],
+  "error": null,
+  "health": {
+    "health_path": "/health",
+    "ok": true,
+    "response": {
+      "capabilities": [
+        "trace",
+        "replay"
+      ],
+      "framework": "fixture",
+      "ok": true,
+      "profile": "news-research-agent",
+      "side_effect_modes": [
+        "network_mocked",
+        "none"
+      ]
+    },
+    "server_url": "<SERVER_URL>"
+  },
+  "health_path": "/health",
+  "healthy": true,
+  "output_dir": "<OUTPUT_DIR>/persistent_http_replay/server",
+  "paths": {
+    "state_path": "<OUTPUT_DIR>/persistent_http_replay/server/replay-server-state.json",
+    "stderr_path": "<OUTPUT_DIR>/persistent_http_replay/server/replay-server-stderr.txt",
+    "stdout_path": "<OUTPUT_DIR>/persistent_http_replay/server/replay-server-stdout.txt"
+  },
+  "pid_present": true,
+  "running": true,
+  "server_url": "<SERVER_URL>",
+  "started": true,
+  "stopped": false
+}

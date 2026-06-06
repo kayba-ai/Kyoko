@@ -1,0 +1,12 @@
+{
+  "patch_transaction_id": "patch_proposal_harness_generated_check_001_1",
+  "profile_id": "profile_news_research_001",
+  "proposal_id": "proposal_harness_generated_check_001",
+  "status": "rolled_back",
+  "target_files_exist": {
+    "checks/generated_timeout_check.py": false
+  },
+  "target_paths": [
+    "checks/generated_timeout_check.py"
+  ]
+}

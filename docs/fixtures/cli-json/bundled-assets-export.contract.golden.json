@@ -1,0 +1,187 @@
+{
+  "assets": [
+    {
+      "kind": "learning-proposals",
+      "path": "learning-proposals/hermes-one-shot-proposal.json"
+    },
+    {
+      "kind": "learning-proposals",
+      "path": "learning-proposals/invalid-hallucinated-span.json"
+    },
+    {
+      "kind": "learning-proposals",
+      "path": "learning-proposals/openclaw-local-operator-proposal.json"
+    },
+    {
+      "kind": "learning-proposals",
+      "path": "learning-proposals/valid-context-proposal.json"
+    },
+    {
+      "kind": "learning-proposals",
+      "path": "learning-proposals/valid-harness-generated-file-proposal.json"
+    },
+    {
+      "kind": "learning-proposals",
+      "path": "learning-proposals/valid-harness-proposal.json"
+    },
+    {
+      "kind": "llm_evals",
+      "path": "llm_evals/conciseness.json"
+    },
+    {
+      "kind": "llm_evals",
+      "path": "llm_evals/faithfulness_v1.json"
+    },
+    {
+      "kind": "llm_evals",
+      "path": "llm_evals/goal_accuracy.json"
+    },
+    {
+      "kind": "llm_evals",
+      "path": "llm_evals/hallucination.json"
+    },
+    {
+      "kind": "llm_evals",
+      "path": "llm_evals/helpfulness.json"
+    },
+    {
+      "kind": "llm_evals",
+      "path": "llm_evals/out_of_scope_request.json"
+    },
+    {
+      "kind": "llm_evals",
+      "path": "llm_evals/relevance.json"
+    },
+    {
+      "kind": "llm_evals",
+      "path": "llm_evals/toxicity.json"
+    },
+    {
+      "kind": "llm_evals",
+      "path": "llm_evals/user_disagreement.json"
+    },
+    {
+      "kind": "llm_evals",
+      "path": "llm_evals/user_distress.json"
+    },
+    {
+      "kind": "replay-results",
+      "path": "replay-results/researcher-fetch-timeout-success.json"
+    },
+    {
+      "kind": "schemas",
+      "path": "schemas/issue.schema.json"
+    },
+    {
+      "kind": "schemas",
+      "path": "schemas/learning-proposal.schema.json"
+    },
+    {
+      "kind": "source-events",
+      "path": "source-events/hermes-news-research-minimal.json"
+    }
+  ],
+  "exported": [
+    {
+      "asset": "learning-proposals/hermes-one-shot-proposal.json",
+      "exists": true,
+      "output_path": "<OUTPUT_DIR>/learning-proposals/hermes-one-shot-proposal.json"
+    },
+    {
+      "asset": "learning-proposals/invalid-hallucinated-span.json",
+      "exists": true,
+      "output_path": "<OUTPUT_DIR>/learning-proposals/invalid-hallucinated-span.json"
+    },
+    {
+      "asset": "learning-proposals/openclaw-local-operator-proposal.json",
+      "exists": true,
+      "output_path": "<OUTPUT_DIR>/learning-proposals/openclaw-local-operator-proposal.json"
+    },
+    {
+      "asset": "learning-proposals/valid-context-proposal.json",
+      "exists": true,
+      "output_path": "<OUTPUT_DIR>/learning-proposals/valid-context-proposal.json"
+    },
+    {
+      "asset": "learning-proposals/valid-harness-generated-file-proposal.json",
+      "exists": true,
+      "output_path": "<OUTPUT_DIR>/learning-proposals/valid-harness-generated-file-proposal.json"
+    },
+    {
+      "asset": "learning-proposals/valid-harness-proposal.json",
+      "exists": true,
+      "output_path": "<OUTPUT_DIR>/learning-proposals/valid-harness-proposal.json"
+    },
+    {
+      "asset": "llm_evals/conciseness.json",
+      "exists": true,
+      "output_path": "<OUTPUT_DIR>/llm_evals/conciseness.json"
+    },
+    {
+      "asset": "llm_evals/faithfulness_v1.json",
+      "exists": true,
+      "output_path": "<OUTPUT_DIR>/llm_evals/faithfulness_v1.json"
+    },
+    {
+      "asset": "llm_evals/goal_accuracy.json",
+      "exists": true,
+      "output_path": "<OUTPUT_DIR>/llm_evals/goal_accuracy.json"
+    },
+    {
+      "asset": "llm_evals/hallucination.json",
+      "exists": true,
+      "output_path": "<OUTPUT_DIR>/llm_evals/hallucination.json"
+    },
+    {
+      "asset": "llm_evals/helpfulness.json",
+      "exists": true,
+      "output_path": "<OUTPUT_DIR>/llm_evals/helpfulness.json"
+    },
+    {
+      "asset": "llm_evals/out_of_scope_request.json",
+      "exists": true,
+      "output_path": "<OUTPUT_DIR>/llm_evals/out_of_scope_request.json"
+    },
+    {
+      "asset": "llm_evals/relevance.json",
+      "exists": true,
+      "output_path": "<OUTPUT_DIR>/llm_evals/relevance.json"
+    },
+    {
+      "asset": "llm_evals/toxicity.json",
+      "exists": true,
+      "output_path": "<OUTPUT_DIR>/llm_evals/toxicity.json"
+    },
+    {
+      "asset": "llm_evals/user_disagreement.json",
+      "exists": true,
+      "output_path": "<OUTPUT_DIR>/llm_evals/user_disagreement.json"
+    },
+    {
+      "asset": "llm_evals/user_distress.json",
+      "exists": true,
+      "output_path": "<OUTPUT_DIR>/llm_evals/user_distress.json"
+    },
+    {
+      "asset": "replay-results/researcher-fetch-timeout-success.json",
+      "exists": true,
+      "output_path": "<OUTPUT_DIR>/replay-results/researcher-fetch-timeout-success.json"
+    },
+    {
+      "asset": "schemas/issue.schema.json",
+      "exists": true,
+      "output_path": "<OUTPUT_DIR>/schemas/issue.schema.json"
+    },
+    {
+      "asset": "schemas/learning-proposal.schema.json",
+      "exists": true,
+      "output_path": "<OUTPUT_DIR>/schemas/learning-proposal.schema.json"
+    },
+    {
+      "asset": "source-events/hermes-news-research-minimal.json",
+      "exists": true,
+      "output_path": "<OUTPUT_DIR>/source-events/hermes-news-research-minimal.json"
+    }
+  ],
+  "output_dir": "<OUTPUT_DIR>"
+}

@@ -1,0 +1,10 @@
+{
+  "blob_root": "<BLOB_ROOT>",
+  "db_path": "<DB_PATH>",
+  "db_size_bytes_positive": true,
+  "missing_blobs": [],
+  "orphan_files": [],
+  "registered_blob_bytes": 21,
+  "registered_blobs": 1,
+  "wal_size_bytes_nonnegative": true
+}

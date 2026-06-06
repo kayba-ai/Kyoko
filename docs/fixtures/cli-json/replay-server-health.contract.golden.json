@@ -1,0 +1,18 @@
+{
+  "health_path": "/health",
+  "ok": true,
+  "response": {
+    "capabilities": [
+      "trace",
+      "replay"
+    ],
+    "framework": "fixture",
+    "ok": true,
+    "profile": "news-research-agent",
+    "side_effect_modes": [
+      "network_mocked",
+      "none"
+    ]
+  },
+  "server_url": "<SERVER_URL>"
+}

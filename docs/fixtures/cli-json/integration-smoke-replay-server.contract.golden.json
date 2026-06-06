@@ -1,0 +1,80 @@
+{
+  "artifact_exists": {
+    "state_path": true,
+    "stderr_path": true,
+    "stdout_path": true
+  },
+  "command": [
+    "<PYTHON>",
+    "<TMP>/kyoko_replay_server.py",
+    "--port",
+    "<PORT>"
+  ],
+  "health": {
+    "health_path": "/health",
+    "ok": true,
+    "response": {
+      "capabilities": [
+        "trace",
+        "replay"
+      ],
+      "framework": "generic-python",
+      "ok": true,
+      "profile": "news-research",
+      "side_effect_modes": [
+        "filesystem_read",
+        "network_mocked",
+        "none",
+        "sandboxed_filesystem"
+      ]
+    },
+    "server_url": "<SERVER_URL>"
+  },
+  "health_path": "/health",
+  "healthy": true,
+  "kind": "replay_server",
+  "logs": {
+    "max_bytes": 40000,
+    "paths": {
+      "stderr_path": "<OUTPUT_DIR>/replay-server-stderr.txt",
+      "stdout_path": "<OUTPUT_DIR>/replay-server-stdout.txt"
+    },
+    "stderr": "",
+    "stderr_truncated": false,
+    "stdout_contract": {
+      "stdout_present": false
+    },
+    "stdout_truncated": false
+  },
+  "output_dir": "<OUTPUT_DIR>",
+  "paths": {
+    "state_path": "<OUTPUT_DIR>/replay-server-state.json",
+    "stderr_path": "<OUTPUT_DIR>/replay-server-stderr.txt",
+    "stdout_path": "<OUTPUT_DIR>/replay-server-stdout.txt"
+  },
+  "pid_present": true,
+  "replay_ok": true,
+  "replay_path": "/replay",
+  "replay_request": {
+    "check_spec_id": "check_spec_integration_smoke",
+    "profile_id": "profile_integration_smoke",
+    "replay_run_id": "replay_integration_smoke_001",
+    "side_effect_mode": "network_mocked"
+  },
+  "replay_response": {
+    "actual_side_effect_mode": "network_mocked",
+    "executed_agent": false,
+    "idempotency_key": "replay_integration_smoke_001",
+    "note": "bounded contract replay",
+    "output_run_id": "run_contract_smoke_replay_001",
+    "replay_run_id": "replay_integration_smoke_001",
+    "run_id": "run_contract_smoke_replay_001",
+    "status": "passed",
+    "target_map": {
+      "span_source": "span_replay"
+    }
+  },
+  "server_url": "<SERVER_URL>",
+  "started": true,
+  "stopped": true
+}

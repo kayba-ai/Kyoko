@@ -1,0 +1,67 @@
+{
+  "adapter_path": "<TMP>/kyoko_source_adapter.py",
+  "artifact_exists": {
+    "db_path": true,
+    "source_events_path": true,
+    "stderr_path": true,
+    "stdout_path": true
+  },
+  "db_path": "<TMP>/kyoko.db",
+  "exit_code": 0,
+  "hook": "<TMP>/source_hook.py:collect",
+  "ingested_counts": {
+    "agent_identities": 1,
+    "handoffs": 0,
+    "profiles": 1,
+    "queues": 0,
+    "runs": 1,
+    "sources": 1,
+    "spans": 1,
+    "task_attempts": 0,
+    "tasks": 0,
+    "timeline_events": 0,
+    "workflow_nodes": 1
+  },
+  "kind": "source_adapter",
+  "output_dir": "<OUTPUT_DIR>",
+  "paths": {
+    "source_events_path": "<OUTPUT_DIR>/source-events.json",
+    "stderr_path": "<OUTPUT_DIR>/source-adapter.stderr.txt",
+    "stdout_path": "<OUTPUT_DIR>/source-adapter.stdout.txt"
+  },
+  "profile_id": "profile_cli_smoke",
+  "status": {
+    "counts": {
+      "agent_identities": 1,
+      "analysis_schedules": 0,
+      "autonomy_policies": 1,
+      "check_locks": 0,
+      "check_runs": 0,
+      "check_specs": 0,
+      "context_delivery_rule_revisions": 0,
+      "context_delivery_rules": 0,
+      "handoffs": 0,
+      "harness_target_locks": 0,
+      "learning_proposals": 0,
+      "operator_adapters": 0,
+      "operator_runs": 0,
+      "patch_transactions": 0,
+      "payload_blobs": 0,
+      "profiles": 1,
+      "queues": 0,
+      "replay_adapters": 0,
+      "replay_runs": 0,
+      "runs": 1,
+      "skill_revisions": 0,
+      "skills": 0,
+      "sources": 1,
+      "spans": 1,
+      "task_attempts": 0,
+      "tasks": 0,
+      "timeline_events": 0,
+      "workflow_nodes": 1
+    },
+    "db_path": "<TMP>/kyoko.db",
+    "schema_version": 34
+  }
+}

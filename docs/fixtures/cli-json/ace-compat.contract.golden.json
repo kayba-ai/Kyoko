@@ -1,0 +1,29 @@
+{
+  "ace_import_error": null,
+  "ace_import_path": "<OUTPUT_DIR>/ace/__init__.py",
+  "ace_import_stderr": "",
+  "ace_import_stdout": "",
+  "ace_importable": true,
+  "ace_module_version": null,
+  "ace_package_version": null,
+  "ace_path": "<OUTPUT_DIR>",
+  "ace_source_version": "9.9.9",
+  "available": true,
+  "detected_api": "skillbook_v2",
+  "error": null,
+  "expected_api": "ace.core.skillbook.Skillbook",
+  "import_path": "<OUTPUT_DIR>/ace/core/skillbook.py",
+  "import_stderr": "",
+  "import_stdout": "",
+  "python_version_segments": 3,
+  "roundtrip_schema_version": "2",
+  "roundtrip_skill_count": 1,
+  "schema_version": "2",
+  "skill_count": 1,
+  "skillbook_api_error": null,
+  "skillbook_import_path": "<OUTPUT_DIR>/ace/core/skillbook.py",
+  "stats": {
+    "sections": 1,
+    "skills": 1
+  }
+}

@@ -1,0 +1,87 @@
+{
+  "action": "generate_checks",
+  "notes": [],
+  "profile_id": "profile_news_research_001",
+  "reason": "dry_run",
+  "result": null,
+  "routing_after": {
+    "check_run_id": null,
+    "check_spec_id": null,
+    "next_action": "generate_checks",
+    "proposal_id": "proposal_context_timeout_001",
+    "proposal_section": "context",
+    "proposal_state": "pending",
+    "reason": "active_proposal_without_check_specs",
+    "replay_run_id": null,
+    "run_id": "run_research_topic_001",
+    "state": "needs_check_generation",
+    "suggested_commands": [
+      {
+        "cli_args": [
+          "python3",
+          "-m",
+          "kyoko",
+          "generate-checks",
+          "--db",
+          "<DB_PATH>",
+          "proposal_context_timeout_001",
+          "--json"
+        ],
+        "intent": "generate_checks",
+        "label": "Generate check specs for the active proposal",
+        "mutating": true,
+        "requires": []
+      }
+    ]
+  },
+  "routing_before": {
+    "check_run_id": null,
+    "check_spec_id": null,
+    "next_action": "generate_checks",
+    "proposal_id": "proposal_context_timeout_001",
+    "proposal_section": "context",
+    "proposal_state": "pending",
+    "reason": "active_proposal_without_check_specs",
+    "replay_run_id": null,
+    "run_id": "run_research_topic_001",
+    "state": "needs_check_generation",
+    "suggested_commands": [
+      {
+        "cli_args": [
+          "python3",
+          "-m",
+          "kyoko",
+          "generate-checks",
+          "--db",
+          "<DB_PATH>",
+          "proposal_context_timeout_001",
+          "--json"
+        ],
+        "intent": "generate_checks",
+        "label": "Generate check specs for the active proposal",
+        "mutating": true,
+        "requires": []
+      }
+    ]
+  },
+  "run_requested": false,
+  "status": "planned",
+  "suggested_commands": [
+    {
+      "cli_args": [
+        "python3",
+        "-m",
+        "kyoko",
+        "generate-checks",
+        "--db",
+        "<DB_PATH>",
+        "proposal_context_timeout_001",
+        "--json"
+      ],
+      "intent": "generate_checks",
+      "label": "Generate check specs for the active proposal",
+      "mutating": true,
+      "requires": []
+    }
+  ]
+}

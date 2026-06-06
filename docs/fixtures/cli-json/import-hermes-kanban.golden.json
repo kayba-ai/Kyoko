@@ -1,0 +1,30 @@
+{
+  "counts": {
+    "agent_identities": 3,
+    "handoffs": 1,
+    "queues": 1,
+    "runs": 1,
+    "sources": 1,
+    "spans": 1,
+    "task_attempts": 1,
+    "tasks": 2,
+    "timeline_events": 4,
+    "workflow_nodes": 3
+  },
+  "ingested_counts": {
+    "agent_identities": 3,
+    "handoffs": 1,
+    "profiles": 1,
+    "queues": 1,
+    "runs": 1,
+    "sources": 1,
+    "spans": 1,
+    "task_attempts": 1,
+    "tasks": 2,
+    "timeline_events": 4,
+    "workflow_nodes": 3
+  },
+  "kanban_db_path": "<KANBAN_DB_PATH>",
+  "normalized_path": null,
+  "profile_id": "profile_cli_hermes"
+}

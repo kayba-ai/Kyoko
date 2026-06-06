@@ -1,0 +1,181 @@
+{
+  "db_path": "<OUTPUT_DIR>/smoke.db",
+  "operators": [
+    "codex",
+    "claude",
+    "hermes",
+    "openclaw"
+  ],
+  "output_dir": "<OUTPUT_DIR>",
+  "passed": true,
+  "prepare_only": true,
+  "summary": {
+    "available": 2,
+    "failed": 0,
+    "passed": 0,
+    "prepared": 2,
+    "skipped": 2,
+    "total": 4
+  },
+  "targets": [
+    {
+      "has_plan": true,
+      "has_report": false,
+      "operator": "codex",
+      "plan": {
+        "artifact_exists": {
+          "db_path": true,
+          "evidence_path": true,
+          "output_dir": true,
+          "prompt_path": true,
+          "raw_output_path": false
+        },
+        "artifact_paths": {
+          "db_path": "<OUTPUT_DIR>/smoke.db",
+          "evidence_path": "<OUTPUT_DIR>/codex/evidence-bundle.json",
+          "output_dir": "<OUTPUT_DIR>/codex",
+          "prompt_path": "<OUTPUT_DIR>/codex/operator-instructions.md",
+          "raw_output_path": "<OUTPUT_DIR>/codex/operator-output.txt"
+        },
+        "command": [
+          "codex",
+          "exec",
+          "--sandbox",
+          "read-only",
+          "--skip-git-repo-check",
+          "--ephemeral",
+          "--color",
+          "never",
+          "-"
+        ],
+        "environment_contract": {
+          "evidence_path": "<OUTPUT_DIR>/codex/evidence-bundle.json",
+          "operator_target": "codex",
+          "profile_id": "profile_news_research_001",
+          "prompt_path": "<OUTPUT_DIR>/codex/operator-instructions.md",
+          "proposal_block_begin": "BEGIN_KYOKO_LEARNING_PROPOSAL_JSON",
+          "proposal_block_end": "END_KYOKO_LEARNING_PROPOSAL_JSON",
+          "schema_path": "<REPO>/docs/schemas/learning-proposal.schema.json"
+        },
+        "environment_keys": [
+          "KYOKO_EVIDENCE_PATH",
+          "KYOKO_LEARNING_PROPOSAL_SCHEMA_PATH",
+          "KYOKO_OPERATOR_PROMPT_PATH",
+          "KYOKO_OPERATOR_TARGET",
+          "KYOKO_PROFILE_ID",
+          "KYOKO_PROPOSAL_BLOCK_BEGIN",
+          "KYOKO_PROPOSAL_BLOCK_END"
+        ],
+        "expanded_command": [
+          "codex",
+          "exec",
+          "--sandbox",
+          "read-only",
+          "--skip-git-repo-check",
+          "--ephemeral",
+          "--color",
+          "never",
+          "-"
+        ],
+        "live_operator_invoked": false,
+        "operator": "codex",
+        "operator_kind": "codex",
+        "profile_id": "profile_news_research_001",
+        "shell_command": "codex exec --sandbox read-only --skip-git-repo-check --ephemeral --color never -",
+        "used_demo_database": false
+      },
+      "reason": null,
+      "status": "prepared"
+    },
+    {
+      "has_plan": true,
+      "has_report": false,
+      "operator": "claude",
+      "plan": {
+        "artifact_exists": {
+          "db_path": true,
+          "evidence_path": true,
+          "output_dir": true,
+          "prompt_path": true,
+          "raw_output_path": false
+        },
+        "artifact_paths": {
+          "db_path": "<OUTPUT_DIR>/smoke.db",
+          "evidence_path": "<OUTPUT_DIR>/claude/evidence-bundle.json",
+          "output_dir": "<OUTPUT_DIR>/claude",
+          "prompt_path": "<OUTPUT_DIR>/claude/operator-instructions.md",
+          "raw_output_path": "<OUTPUT_DIR>/claude/operator-output.txt"
+        },
+        "command": [
+          "claude",
+          "--print",
+          "--input-format",
+          "text",
+          "--output-format",
+          "text",
+          "--permission-mode",
+          "dontAsk",
+          "--allowedTools",
+          "Read",
+          "--no-session-persistence"
+        ],
+        "environment_contract": {
+          "evidence_path": "<OUTPUT_DIR>/claude/evidence-bundle.json",
+          "operator_target": "claude",
+          "profile_id": "profile_news_research_001",
+          "prompt_path": "<OUTPUT_DIR>/claude/operator-instructions.md",
+          "proposal_block_begin": "BEGIN_KYOKO_LEARNING_PROPOSAL_JSON",
+          "proposal_block_end": "END_KYOKO_LEARNING_PROPOSAL_JSON",
+          "schema_path": "<REPO>/docs/schemas/learning-proposal.schema.json"
+        },
+        "environment_keys": [
+          "KYOKO_EVIDENCE_PATH",
+          "KYOKO_LEARNING_PROPOSAL_SCHEMA_PATH",
+          "KYOKO_OPERATOR_PROMPT_PATH",
+          "KYOKO_OPERATOR_TARGET",
+          "KYOKO_PROFILE_ID",
+          "KYOKO_PROPOSAL_BLOCK_BEGIN",
+          "KYOKO_PROPOSAL_BLOCK_END"
+        ],
+        "expanded_command": [
+          "claude",
+          "--print",
+          "--input-format",
+          "text",
+          "--output-format",
+          "text",
+          "--permission-mode",
+          "dontAsk",
+          "--allowedTools",
+          "Read",
+          "--no-session-persistence"
+        ],
+        "live_operator_invoked": false,
+        "operator": "claude",
+        "operator_kind": "claude",
+        "profile_id": "profile_news_research_001",
+        "shell_command": "claude --print --input-format text --output-format text --permission-mode dontAsk --allowedTools Read --no-session-persistence",
+        "used_demo_database": false
+      },
+      "reason": null,
+      "status": "prepared"
+    },
+    {
+      "has_plan": false,
+      "has_report": false,
+      "operator": "hermes",
+      "plan": null,
+      "reason": "operator_preset_command_not_found:hermes",
+      "status": "skipped"
+    },
+    {
+      "has_plan": false,
+      "has_report": false,
+      "operator": "openclaw",
+      "plan": null,
+      "reason": "operator_preset_command_not_found:openclaw",
+      "status": "skipped"
+    }
+  ],
+  "used_demo_database": true
+}

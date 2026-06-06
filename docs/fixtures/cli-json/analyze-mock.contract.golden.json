@@ -1,0 +1,19 @@
+{
+  "attempts": 1,
+  "bundled_issue_id_count": 0,
+  "evidence_path": "<OUTPUT_DIR>/evidence-bundle.json",
+  "evidence_path_exists": true,
+  "issue_id_count": 1,
+  "new_issue_id_count": 1,
+  "operator": "mock",
+  "operator_run_id": {
+    "prefix": "oprun",
+    "present": true,
+    "segments": 3
+  },
+  "persisted": true,
+  "profile_id": "profile_news_research_001",
+  "prompt_path": "<OUTPUT_DIR>/operator-instructions.md",
+  "prompt_path_exists": true,
+  "raw_output_path": null
+}

@@ -1,0 +1,18 @@
+{
+  "cutoff": null,
+  "dry_run": true,
+  "pruned_blobs": [
+    {
+      "blob_id_prefix": [
+        "blob",
+        "sha256"
+      ],
+      "blob_id_present": true,
+      "path_contract": "<BLOB_PATH>",
+      "path_exists": true,
+      "reason": "expired",
+      "size_bytes": 21
+    }
+  ],
+  "pruned_bytes": 21
+}

@@ -1,0 +1,16 @@
+{
+  "adapter_id": "persistent_http_replay",
+  "max_bytes": 2000,
+  "output_dir": "<OUTPUT_DIR>/persistent_http_replay/server",
+  "paths": {
+    "stderr_path": "<OUTPUT_DIR>/persistent_http_replay/server/replay-server-stderr.txt",
+    "stdout_path": "<OUTPUT_DIR>/persistent_http_replay/server/replay-server-stdout.txt"
+  },
+  "stderr": "",
+  "stderr_truncated": false,
+  "stdout_contract": {
+    "contains_listening_marker": true,
+    "stdout_present": true
+  },
+  "stdout_truncated": false
+}

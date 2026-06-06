@@ -1,0 +1,70 @@
+{
+  "artifact_exists": {
+    "db_path": true,
+    "normalized_path": true
+  },
+  "candidate": {
+    "exists": true,
+    "id": "openclaw_main",
+    "import_command_args": [
+      "python3",
+      "-m",
+      "kyoko",
+      "import-openclaw-sessions",
+      "--db",
+      "<DB_PATH>",
+      "<HOME>/.openclaw/agents/main/sessions",
+      "--agent-id",
+      "main",
+      "--profile-id",
+      "profile_discovered_import_contract",
+      "--profile-name",
+      "Discovered Import Contract",
+      "--root-path",
+      "<ROOT_PATH>",
+      "--json"
+    ],
+    "kind": "openclaw_sessions",
+    "label": "OpenClaw sessions (main)",
+    "metadata": {
+      "agent_id": "main",
+      "session_count": 1,
+      "sessions_json": "<HOME>/.openclaw/agents/main/sessions/sessions.json",
+      "transcript_count": 1
+    },
+    "path": "<HOME>/.openclaw/agents/main/sessions",
+    "status": "ready"
+  },
+  "db_path": "<DB_PATH>",
+  "import": {
+    "counts": {
+      "agent_identities": 3,
+      "handoffs": 1,
+      "queues": 1,
+      "runs": 1,
+      "sources": 1,
+      "spans": 6,
+      "task_attempts": 1,
+      "tasks": 1,
+      "timeline_events": 5,
+      "workflow_nodes": 3
+    },
+    "ingested_counts": {
+      "agent_identities": 3,
+      "handoffs": 1,
+      "payload_blobs": 17,
+      "profiles": 1,
+      "queues": 1,
+      "runs": 1,
+      "sources": 1,
+      "spans": 6,
+      "task_attempts": 1,
+      "tasks": 1,
+      "timeline_events": 5,
+      "workflow_nodes": 3
+    },
+    "normalized_path": "<OUTPUT_DIR>/openclaw_main-source-events.json",
+    "profile_id": "profile_discovered_import_contract",
+    "source_path": "<HOME>/.openclaw/agents/main/sessions"
+  }
+}

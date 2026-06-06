@@ -1,0 +1,21 @@
+{
+  "adapter_id": "fixture_replay",
+  "allow_remote_server": false,
+  "command": [
+    "<PYTHON>",
+    "<REPO>/tests/fixtures/replay_command.py"
+  ],
+  "cwd": null,
+  "default_mode": "dry_run",
+  "default_side_effect_mode": "network_mocked",
+  "enabled": true,
+  "health_path": null,
+  "kind": "command",
+  "name": "Fixture replay",
+  "output_dir": "<OUTPUT_DIR>",
+  "profile_id": "profile_news_research_001",
+  "replay_path": null,
+  "server_url": null,
+  "startup_timeout_seconds": null,
+  "timeout_seconds": 180
+}

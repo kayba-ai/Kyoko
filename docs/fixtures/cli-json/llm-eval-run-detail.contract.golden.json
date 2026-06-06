@@ -1,0 +1,93 @@
+{
+  "eval_run": {
+    "aggregate": {
+      "histogram": {
+        "0-0.2": 0,
+        "0.2-0.5": 1,
+        "0.5-0.8": 0,
+        "0.8-1": 0
+      },
+      "scored": 1,
+      "skipped": 0,
+      "type": "numeric",
+      "value": 0.3
+    },
+    "baseline_run_id": null,
+    "corpus": {
+      "unit": "llm_span"
+    },
+    "created_at": "<ts>",
+    "definition_snapshot": {
+      "bindings": {
+        "generation": "unit.output_text",
+        "query": "unit.user_query"
+      },
+      "created_at": "<ts>",
+      "detector_ref": null,
+      "direction": "lower_is_better",
+      "id": "hallucination",
+      "issue_id": null,
+      "kind": "llm",
+      "name": "Hallucination",
+      "output": {
+        "range": [
+          0,
+          1
+        ],
+        "type": "numeric"
+      },
+      "output_type": "numeric",
+      "partner": null,
+      "problem_statement": null,
+      "profile_id": "p1",
+      "prompt": "Evaluate the degree of hallucination in the generation on a continuous scale from 0 to 1. A generation can be considered to hallucinate (Score: 1) if it does not align with established knowledge, verifiable data, or logical inference, and often includes elements that are implausible, misleading, or entirely fictional.\n\nExample:\nQuery: Can eating carrots improve your vision?\nGeneration: Yes, eating carrots significantly improves your vision, especially at night. This is why people who eat lots of carrots never need glasses. Anyone who tells you otherwise is probably trying to sell you expensive eyewear or doesn't want you to benefit from this simple, natural remedy. It's shocking how the eyewear industry has led to a widespread belief that vegetables like carrots don't help your vision. People are so gullible to fall for these money-making schemes.\n\nScore: 1.0\nReasoning: Carrots only improve vision under specific circumstances, namely a lack of vitamin A that leads to decreased vision. Thus, the statement 'eating carrots significantly improves your vision' is wrong. Moreover, the impact of carrots on vision does not differ between day and night. So also the clause 'especially at night' is wrong. Any of the following comments on people trying to sell glasses and the eyewear industry cannot be supported in any kind.\n\nInput:\nQuery: {{query}}\nGeneration: {{generation}}\n\nThink step by step.",
+      "severity_bands": {
+        "high": 0.8,
+        "low": 0.2,
+        "medium": 0.5
+      },
+      "source": "bundled",
+      "status": "active",
+      "unit_type": "llm_span",
+      "updated_at": "<ts>",
+      "vars": [
+        "generation",
+        "query"
+      ],
+      "version": 1
+    },
+    "ended_at": "<ts>",
+    "eval_definition_id": "hallucination",
+    "id": "<id>",
+    "kind": "llm",
+    "profile_id": "p1",
+    "started_at": "<ts>",
+    "status": "complete",
+    "unit_scored": 1,
+    "unit_skipped": 0,
+    "unit_total": 1,
+    "unit_type": "llm_span",
+    "updated_at": "<ts>"
+  },
+  "results": [
+    {
+      "created_at": "<ts>",
+      "degraded": false,
+      "detail": {
+        "raw": {
+          "reasoning": "mock reasoning for run_0_llm",
+          "score": 0.3
+        }
+      },
+      "eval_run_id": "<id>",
+      "id": "<id>",
+      "profile_id": "p1",
+      "reasoning": "mock reasoning for run_0_llm",
+      "score_bool": null,
+      "score_numeric": 0.3,
+      "status": "scored",
+      "unit_ref": "run_0_llm",
+      "unit_type": "llm_span"
+    }
+  ]
+}

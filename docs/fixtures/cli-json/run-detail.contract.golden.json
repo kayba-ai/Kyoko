@@ -1,0 +1,278 @@
+{
+  "agent_identity": {
+    "external_id": "hermes-profile-researcher",
+    "id": "agent_researcher_001",
+    "kind": "hermes_profile",
+    "metadata": {},
+    "model": "unknown",
+    "name": "researcher",
+    "profile_id": "profile_news_research_001",
+    "role": "source research",
+    "source_id": "source_hermes_001",
+    "workspace_path": "<FIXTURE_ROOT>/news-research"
+  },
+  "handoffs": [
+    {
+      "from_agent_identity_id": "agent_researcher_001",
+      "from_task_id": "task_research_topic_001",
+      "from_workflow_node_id": "node_researcher_001",
+      "id": "handoff_research_to_writer_001",
+      "kind": "agent_handoff",
+      "metadata": {
+        "source_status": "incomplete"
+      },
+      "payload_ref": "blob_handoff_payload_001",
+      "profile_id": "profile_news_research_001",
+      "reason_ref": "blob_handoff_reason_001",
+      "run_id": "run_research_topic_001",
+      "source_id": "source_hermes_001",
+      "span_id": null,
+      "timestamps_present": {
+        "created_at": true
+      },
+      "to_agent_identity_id": "agent_writer_001",
+      "to_task_id": null,
+      "to_workflow_node_id": "node_writer_001"
+    }
+  ],
+  "related_proposals": [
+    {
+      "matched_evidence_refs": [
+        {
+          "entity_id": "span_fetch_timeout_001",
+          "entity_type": "span",
+          "note": "The tool call timed out and the agent did not retry.",
+          "quote_ref": "blob_fetch_timeout_quote_001",
+          "role": "failure"
+        },
+        {
+          "entity_id": "handoff_research_to_writer_001",
+          "entity_type": "handoff",
+          "note": "The writer received the task after the failed fetch was treated as complete.",
+          "role": "context"
+        }
+      ],
+      "proposal": {
+        "confidence": 0.82,
+        "id": "proposal_context_timeout_001",
+        "section": "context",
+        "state": "pending",
+        "summary": "The researcher agent treated a transient fetch timeout as a final source failure and moved forward with weak evidence.",
+        "timestamps_present": {
+          "created_at": true
+        },
+        "title": "Add retry guidance for source fetch timeouts"
+      }
+    }
+  ],
+  "replay_runs": [],
+  "run": {
+    "agent_identity_id": "agent_researcher_001",
+    "external_id": "hermes-run-001",
+    "id": "run_research_topic_001",
+    "input_ref": "blob_run_input_001",
+    "metadata": {},
+    "output_ref": "blob_run_output_001",
+    "profile_id": "profile_news_research_001",
+    "root_span_id": "span_research_root_001",
+    "source_id": "source_hermes_001",
+    "status": "succeeded",
+    "summary": "Research completed but one source fetch timed out and was not retried.",
+    "task_attempt_id": "attempt_research_topic_001",
+    "timestamps_present": {
+      "ended_at": true,
+      "started_at": true
+    }
+  },
+  "source": {
+    "adapter_version": "kyoko.hermes.v0",
+    "capabilities": {
+      "handoffs": true,
+      "runs": true,
+      "tasks": true
+    },
+    "config": {},
+    "display_name": "Hermes Kanban",
+    "id": "source_hermes_001",
+    "kind": "hermes_kanban",
+    "profile_id": "profile_news_research_001",
+    "status": "active",
+    "timestamps_present": {
+      "last_seen_at": true
+    }
+  },
+  "span_tree": [
+    {
+      "agent_identity_id": "agent_researcher_001",
+      "attributes": {},
+      "children": [
+        {
+          "agent_identity_id": "agent_researcher_001",
+          "attributes": {
+            "error_type": "timeout",
+            "retry_count": 0
+          },
+          "children": [],
+          "external_id": "tool-fetch-source-a",
+          "id": "span_fetch_timeout_001",
+          "input_ref": "blob_fetch_input_001",
+          "kind": "tool",
+          "name": "fetch_source",
+          "output_ref": "blob_fetch_timeout_output_001",
+          "parent_span_id": "span_research_root_001",
+          "raw_ref": "blob_raw_span_fetch_001",
+          "run_id": "run_research_topic_001",
+          "source_id": "source_hermes_001",
+          "status": "failed",
+          "timestamps_present": {
+            "ended_at": true,
+            "started_at": true
+          },
+          "usage": {},
+          "workflow_node_id": "node_researcher_001"
+        }
+      ],
+      "external_id": "root",
+      "id": "span_research_root_001",
+      "input_ref": "blob_run_input_001",
+      "kind": "agent",
+      "name": "research topic",
+      "output_ref": "blob_run_output_001",
+      "parent_span_id": null,
+      "raw_ref": "blob_raw_span_root_001",
+      "run_id": "run_research_topic_001",
+      "source_id": "source_hermes_001",
+      "status": "succeeded",
+      "timestamps_present": {
+        "ended_at": true,
+        "started_at": true
+      },
+      "usage": {},
+      "workflow_node_id": "node_researcher_001"
+    }
+  ],
+  "spans": [
+    {
+      "agent_identity_id": "agent_researcher_001",
+      "attributes": {},
+      "external_id": "root",
+      "id": "span_research_root_001",
+      "input_ref": "blob_run_input_001",
+      "kind": "agent",
+      "name": "research topic",
+      "output_ref": "blob_run_output_001",
+      "parent_span_id": null,
+      "raw_ref": "blob_raw_span_root_001",
+      "run_id": "run_research_topic_001",
+      "source_id": "source_hermes_001",
+      "status": "succeeded",
+      "timestamps_present": {
+        "ended_at": true,
+        "started_at": true
+      },
+      "usage": {},
+      "workflow_node_id": "node_researcher_001"
+    },
+    {
+      "agent_identity_id": "agent_researcher_001",
+      "attributes": {
+        "error_type": "timeout",
+        "retry_count": 0
+      },
+      "external_id": "tool-fetch-source-a",
+      "id": "span_fetch_timeout_001",
+      "input_ref": "blob_fetch_input_001",
+      "kind": "tool",
+      "name": "fetch_source",
+      "output_ref": "blob_fetch_timeout_output_001",
+      "parent_span_id": "span_research_root_001",
+      "raw_ref": "blob_raw_span_fetch_001",
+      "run_id": "run_research_topic_001",
+      "source_id": "source_hermes_001",
+      "status": "failed",
+      "timestamps_present": {
+        "ended_at": true,
+        "started_at": true
+      },
+      "usage": {},
+      "workflow_node_id": "node_researcher_001"
+    }
+  ],
+  "summary": {
+    "failed_spans": 1,
+    "handoffs": 1,
+    "related_proposals": 1,
+    "replay_runs": 0,
+    "spans": 2,
+    "timeline_events": 2
+  },
+  "task": {
+    "assignee_agent_identity_id": "agent_researcher_001",
+    "body_ref": "blob_task_body_001",
+    "created_by_agent_identity_id": "agent_writer_001",
+    "external_id": "hermes-task-001",
+    "id": "task_research_topic_001",
+    "metadata": {},
+    "priority": "normal",
+    "profile_id": "profile_news_research_001",
+    "queue_id": "queue_news_board_001",
+    "source_id": "source_hermes_001",
+    "status": "done",
+    "timestamps_present": {
+      "completed_at": true,
+      "created_at": true,
+      "started_at": true
+    },
+    "title": "Research source coverage for a breaking AI infrastructure story",
+    "workspace_kind": "repo",
+    "workspace_path": "<FIXTURE_ROOT>/news-research"
+  },
+  "task_attempt": {
+    "agent_identity_id": "agent_researcher_001",
+    "claim_token_hash_present": true,
+    "error_ref": null,
+    "id": "attempt_research_topic_001",
+    "metadata": {},
+    "outcome": "completed_with_incomplete_source",
+    "run_id": "run_research_topic_001",
+    "status": "done",
+    "summary_ref": "blob_attempt_summary_001",
+    "task_id": "task_research_topic_001",
+    "timestamps_present": {
+      "ended_at": true,
+      "last_heartbeat_at": true,
+      "started_at": true
+    },
+    "worker_pid_present": true
+  },
+  "timeline_events": [
+    {
+      "agent_identity_id": "agent_researcher_001",
+      "entity_id": "span_fetch_timeout_001",
+      "entity_type": "span",
+      "id": "event_fetch_timeout_001",
+      "kind": "tool_timeout",
+      "metadata": {},
+      "payload_ref": "blob_fetch_timeout_quote_001",
+      "profile_id": "profile_news_research_001",
+      "source_id": "source_hermes_001",
+      "timestamps_present": {
+        "at": true
+      }
+    },
+    {
+      "agent_identity_id": "agent_researcher_001",
+      "entity_id": "handoff_research_to_writer_001",
+      "entity_type": "handoff",
+      "id": "event_handoff_001",
+      "kind": "handoff_created",
+      "metadata": {},
+      "payload_ref": "blob_handoff_payload_001",
+      "profile_id": "profile_news_research_001",
+      "source_id": "source_hermes_001",
+      "timestamps_present": {
+        "at": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,144 @@
+{
+  "artifact_types": [
+    "wheel"
+  ],
+  "dashboard_smoke": false,
+  "install_dependencies": false,
+  "output_dir": "<OUTPUT_DIR>",
+  "passed": true,
+  "project_root": "<REPO>",
+  "python_targets": [
+    "3.10",
+    "3.11",
+    "3.12"
+  ],
+  "run_demo": false,
+  "summary": {
+    "available": 2,
+    "failed": 0,
+    "passed": 2,
+    "skipped": 1,
+    "total": 3
+  },
+  "targets": [
+    {
+      "has_report": true,
+      "python_executable": "/opt/python/3.10/bin/python3.10",
+      "reason": null,
+      "report": {
+        "artifact_dir": "<OUTPUT_DIR>/3-10/artifacts",
+        "artifact_reports": [
+          {
+            "artifact_path": "<OUTPUT_DIR>/3-10/artifacts/kyoko-0.1.0-py3-none-any.whl",
+            "artifact_type": "wheel",
+            "command_names": [
+              "wheel_doctor"
+            ],
+            "dashboard_smoke_ok": null,
+            "dashboard_smoke_summary": null,
+            "doctor_ok": true,
+            "doctor_summary": {
+              "failed": 0,
+              "passed": 9,
+              "warnings": 1
+            },
+            "install_ok": true,
+            "install_strategy": "pip",
+            "installed_version": "0.1.0",
+            "legacy_fallback_used": false,
+            "modern_install_returncode": 0,
+            "run_cwd": "<OUTPUT_DIR>/3-10/run-wheel",
+            "venv_path": "<OUTPUT_DIR>/3-10/venv-wheel"
+          }
+        ],
+        "build_commands": [
+          {
+            "command": [
+              "/opt/python/3.10/bin/python3.10",
+              "-m",
+              "pip",
+              "wheel"
+            ],
+            "cwd": "<OUTPUT_DIR>/3-10/source",
+            "name": "build_wheel",
+            "returncode": 0,
+            "stdout_tail_present": true
+          }
+        ],
+        "dashboard_smoke": false,
+        "install_dependencies": false,
+        "output_dir": "<OUTPUT_DIR>/3-10",
+        "passed": true,
+        "project_root": "<REPO>",
+        "python_executable": "/opt/python/3.10/bin/python3.10",
+        "run_demo": false
+      },
+      "status": "passed",
+      "target": "3.10"
+    },
+    {
+      "has_report": false,
+      "python_executable": null,
+      "reason": "python_executable_not_found",
+      "report": null,
+      "status": "skipped",
+      "target": "3.11"
+    },
+    {
+      "has_report": true,
+      "python_executable": "/opt/python/3.12/bin/python3.12",
+      "reason": null,
+      "report": {
+        "artifact_dir": "<OUTPUT_DIR>/3-12/artifacts",
+        "artifact_reports": [
+          {
+            "artifact_path": "<OUTPUT_DIR>/3-12/artifacts/kyoko-0.1.0-py3-none-any.whl",
+            "artifact_type": "wheel",
+            "command_names": [
+              "wheel_doctor"
+            ],
+            "dashboard_smoke_ok": null,
+            "dashboard_smoke_summary": null,
+            "doctor_ok": true,
+            "doctor_summary": {
+              "failed": 0,
+              "passed": 9,
+              "warnings": 1
+            },
+            "install_ok": true,
+            "install_strategy": "pip",
+            "installed_version": "0.1.0",
+            "legacy_fallback_used": false,
+            "modern_install_returncode": 0,
+            "run_cwd": "<OUTPUT_DIR>/3-12/run-wheel",
+            "venv_path": "<OUTPUT_DIR>/3-12/venv-wheel"
+          }
+        ],
+        "build_commands": [
+          {
+            "command": [
+              "/opt/python/3.12/bin/python3.12",
+              "-m",
+              "pip",
+              "wheel"
+            ],
+            "cwd": "<OUTPUT_DIR>/3-12/source",
+            "name": "build_wheel",
+            "returncode": 0,
+            "stdout_tail_present": true
+          }
+        ],
+        "dashboard_smoke": false,
+        "install_dependencies": false,
+        "output_dir": "<OUTPUT_DIR>/3-12",
+        "passed": true,
+        "project_root": "<REPO>",
+        "python_executable": "/opt/python/3.12/bin/python3.12",
+        "run_demo": false
+      },
+      "status": "passed",
+      "target": "3.12"
+    }
+  ],
+  "temporary": false
+}

@@ -1,0 +1,27 @@
+{
+  "context_delivery_rules": [
+    {
+      "active": true,
+      "human_lock_reason": null,
+      "human_locked": false,
+      "id": "context_rule_researcher_timeout",
+      "profile_id": "profile_news_research_001",
+      "proposal_id": "proposal_context_rule_001",
+      "rule": {
+        "id": "context_rule_researcher_timeout",
+        "include_keywords": [
+          "timeout"
+        ],
+        "mode": "prompt"
+      },
+      "target": {
+        "entity_id": "agent_researcher_001",
+        "entity_type": "agent_identity"
+      },
+      "timestamps_present": {
+        "created_at": true,
+        "updated_at": true
+      }
+    }
+  ]
+}

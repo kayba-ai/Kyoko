@@ -1,0 +1,360 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kayba-ai.com/kyoko/schemas/event-envelope.schema.json",
+  "title": "Kyoko Ingest Event Envelope",
+  "description": "The normalized source-event envelope Kyoko accepts at `kyoko ingest`, `POST /api/ingest`, the SDK recorder flush, and as the normalized output of `kyoko ingest-otlp`. See docs/specs/0013-event-envelope.md and docs/specs/0001-canonical-model.md.",
+  "type": "object",
+  "required": ["profile"],
+  "properties": {
+    "fixture_version": {
+      "type": "string",
+      "enum": ["kyoko.source_events.v1", "kyoko.source_fixture.v1"]
+    },
+    "name": { "type": "string" },
+    "description": { "type": "string" },
+    "profile": { "$ref": "#/$defs/profile" },
+    "sources": { "type": "array", "items": { "$ref": "#/$defs/source" } },
+    "agent_identities": { "type": "array", "items": { "$ref": "#/$defs/agent_identity" } },
+    "workflow_nodes": { "type": "array", "items": { "$ref": "#/$defs/workflow_node" } },
+    "queues": { "type": "array", "items": { "$ref": "#/$defs/queue" } },
+    "tasks": { "type": "array", "items": { "$ref": "#/$defs/task" } },
+    "task_attempts": { "type": "array", "items": { "$ref": "#/$defs/task_attempt" } },
+    "runs": { "type": "array", "items": { "$ref": "#/$defs/run" } },
+    "spans": { "type": "array", "items": { "$ref": "#/$defs/span" } },
+    "handoffs": { "type": "array", "items": { "$ref": "#/$defs/handoff" } },
+    "timeline_events": { "type": "array", "items": { "$ref": "#/$defs/timeline_event" } }
+  },
+  "$defs": {
+    "id": { "type": "string", "minLength": 1 },
+    "id_or_null": { "type": ["string", "null"], "minLength": 1 },
+    "timestamp": {
+      "type": "string",
+      "description": "UTC ISO-8601 string, e.g. 2026-05-31T11:46:00Z."
+    },
+    "timestamp_or_null": { "type": ["string", "null"] },
+    "json_object": { "type": "object" },
+    "inline_payload": {
+      "description": "An inline payload sibling for a *_ref field. May be a plain string, any JSON value, or a wrapper object with content/encoding/media_type/kind/retention_days/retained_until/metadata. Materialized into payload_blobs at ingest; mutually exclusive with the matching *_ref field.",
+      "anyOf": [
+        { "type": ["string", "number", "boolean", "array", "null"] },
+        {
+          "type": "object",
+          "properties": {
+            "content": {},
+            "encoding": { "type": "string" },
+            "media_type": { "type": "string" },
+            "kind": { "type": "string" },
+            "redaction_mode": { "type": "string" },
+            "retention_days": { "type": ["integer", "null"] },
+            "retained_until": { "type": ["string", "null"] },
+            "metadata": { "type": "object" }
+          }
+        }
+      ]
+    },
+    "profile": {
+      "type": "object",
+      "required": ["id", "name", "root_path", "status", "created_at", "updated_at"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "type": "string" },
+        "root_path": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "archived"] },
+        "created_at": { "$ref": "#/$defs/timestamp" },
+        "updated_at": { "$ref": "#/$defs/timestamp" }
+      }
+    },
+    "source": {
+      "type": "object",
+      "required": [
+        "id", "profile_id", "kind", "display_name", "status",
+        "adapter_version", "config_json", "capabilities_json", "last_seen_at"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "profile_id": { "$ref": "#/$defs/id" },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "otlp_http", "kyoko_sdk", "hermes_kanban", "openclaw_sessions",
+            "ai_sdk", "pydantic_ai", "openai_agents", "langgraph", "crewai",
+            "operator_agent", "manual", "unknown"
+          ]
+        },
+        "display_name": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "inactive", "error"] },
+        "adapter_version": { "type": "string" },
+        "config_json": { "$ref": "#/$defs/json_object" },
+        "capabilities_json": { "$ref": "#/$defs/json_object" },
+        "last_seen_at": { "$ref": "#/$defs/timestamp_or_null" }
+      }
+    },
+    "agent_identity": {
+      "type": "object",
+      "required": [
+        "id", "profile_id", "source_id", "external_id", "name",
+        "kind", "role", "model", "workspace_path", "metadata_json"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "profile_id": { "$ref": "#/$defs/id" },
+        "source_id": { "$ref": "#/$defs/id" },
+        "external_id": { "type": ["string", "null"] },
+        "name": { "type": "string" },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "agent", "subagent", "hermes_profile", "openclaw_agent",
+            "framework_node", "human", "operator", "unknown"
+          ]
+        },
+        "role": { "type": ["string", "null"] },
+        "model": { "type": ["string", "null"] },
+        "workspace_path": { "type": ["string", "null"] },
+        "metadata_json": { "$ref": "#/$defs/json_object" }
+      }
+    },
+    "workflow_node": {
+      "type": "object",
+      "required": [
+        "id", "profile_id", "source_id", "external_id",
+        "agent_identity_id", "kind", "name", "metadata_json"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "profile_id": { "$ref": "#/$defs/id" },
+        "source_id": { "$ref": "#/$defs/id" },
+        "external_id": { "type": ["string", "null"] },
+        "agent_identity_id": { "$ref": "#/$defs/id_or_null" },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "workflow", "agent", "subagent", "router", "handoff",
+            "tool", "retriever", "evaluator", "queue", "unknown"
+          ]
+        },
+        "name": { "type": "string" },
+        "metadata_json": { "$ref": "#/$defs/json_object" }
+      }
+    },
+    "queue": {
+      "type": "object",
+      "required": ["id", "profile_id", "source_id", "external_id", "name", "kind", "metadata_json"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "profile_id": { "$ref": "#/$defs/id" },
+        "source_id": { "$ref": "#/$defs/id" },
+        "external_id": { "type": ["string", "null"] },
+        "name": { "type": "string" },
+        "kind": {
+          "type": "string",
+          "enum": ["hermes_board", "openclaw_queue", "generic", "unknown"]
+        },
+        "metadata_json": { "$ref": "#/$defs/json_object" }
+      }
+    },
+    "task": {
+      "type": "object",
+      "required": [
+        "id", "profile_id", "source_id", "queue_id", "external_id", "title",
+        "status", "assignee_agent_identity_id", "created_by_agent_identity_id",
+        "priority", "workspace_kind", "workspace_path", "created_at",
+        "started_at", "completed_at", "metadata_json"
+      ],
+      "not": { "required": ["body_ref", "body_payload"] },
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "profile_id": { "$ref": "#/$defs/id" },
+        "source_id": { "$ref": "#/$defs/id" },
+        "queue_id": { "$ref": "#/$defs/id_or_null" },
+        "external_id": { "type": ["string", "null"] },
+        "title": { "type": "string" },
+        "body_ref": { "$ref": "#/$defs/id_or_null" },
+        "body_payload": { "$ref": "#/$defs/inline_payload" },
+        "status": {
+          "type": "string",
+          "enum": ["triage", "todo", "ready", "running", "blocked", "done", "archived", "unknown"]
+        },
+        "assignee_agent_identity_id": { "$ref": "#/$defs/id_or_null" },
+        "created_by_agent_identity_id": { "$ref": "#/$defs/id_or_null" },
+        "priority": { "type": ["string", "null"] },
+        "workspace_kind": { "type": ["string", "null"], "enum": ["repo", "temp", "external", "unknown", null] },
+        "workspace_path": { "type": ["string", "null"] },
+        "created_at": { "$ref": "#/$defs/timestamp" },
+        "started_at": { "$ref": "#/$defs/timestamp_or_null" },
+        "completed_at": { "$ref": "#/$defs/timestamp_or_null" },
+        "metadata_json": { "$ref": "#/$defs/json_object" }
+      }
+    },
+    "task_attempt": {
+      "type": "object",
+      "required": [
+        "id", "task_id", "agent_identity_id", "status", "outcome",
+        "claim_token_hash", "worker_pid", "started_at", "ended_at",
+        "last_heartbeat_at", "metadata_json"
+      ],
+      "not": { "required": ["summary_ref", "summary_payload"] },
+      "allOf": [
+        { "not": { "required": ["error_ref", "error_payload"] } }
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "task_id": { "$ref": "#/$defs/id" },
+        "run_id": { "$ref": "#/$defs/id_or_null" },
+        "agent_identity_id": { "$ref": "#/$defs/id" },
+        "status": {
+          "type": "string",
+          "enum": ["running", "done", "blocked", "crashed", "timed_out", "failed", "released", "unknown"]
+        },
+        "outcome": { "type": ["string", "null"] },
+        "claim_token_hash": { "type": ["string", "null"] },
+        "worker_pid": { "type": ["integer", "null"] },
+        "started_at": { "$ref": "#/$defs/timestamp" },
+        "ended_at": { "$ref": "#/$defs/timestamp_or_null" },
+        "last_heartbeat_at": { "$ref": "#/$defs/timestamp_or_null" },
+        "summary_ref": { "$ref": "#/$defs/id_or_null" },
+        "summary_payload": { "$ref": "#/$defs/inline_payload" },
+        "error_ref": { "$ref": "#/$defs/id_or_null" },
+        "error_payload": { "$ref": "#/$defs/inline_payload" },
+        "metadata_json": { "$ref": "#/$defs/json_object" }
+      }
+    },
+    "run": {
+      "type": "object",
+      "required": [
+        "id", "profile_id", "source_id", "external_id", "root_span_id",
+        "agent_identity_id", "task_attempt_id", "status", "started_at",
+        "ended_at", "summary", "metadata_json"
+      ],
+      "not": { "required": ["input_ref", "input_payload"] },
+      "allOf": [
+        { "not": { "required": ["output_ref", "output_payload"] } }
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "profile_id": { "$ref": "#/$defs/id" },
+        "source_id": { "$ref": "#/$defs/id" },
+        "external_id": { "type": ["string", "null"] },
+        "root_span_id": { "$ref": "#/$defs/id_or_null" },
+        "agent_identity_id": { "$ref": "#/$defs/id_or_null" },
+        "task_attempt_id": { "$ref": "#/$defs/id_or_null" },
+        "status": {
+          "type": "string",
+          "enum": ["running", "succeeded", "failed", "cancelled", "timed_out", "unknown"]
+        },
+        "started_at": { "$ref": "#/$defs/timestamp" },
+        "ended_at": { "$ref": "#/$defs/timestamp_or_null" },
+        "input_ref": { "$ref": "#/$defs/id_or_null" },
+        "input_payload": { "$ref": "#/$defs/inline_payload" },
+        "output_ref": { "$ref": "#/$defs/id_or_null" },
+        "output_payload": { "$ref": "#/$defs/inline_payload" },
+        "summary": { "type": ["string", "null"] },
+        "metadata_json": { "$ref": "#/$defs/json_object" }
+      }
+    },
+    "span": {
+      "type": "object",
+      "required": [
+        "id", "run_id", "source_id", "external_id", "parent_span_id",
+        "workflow_node_id", "agent_identity_id", "kind", "name", "status",
+        "started_at", "ended_at", "usage_json", "attributes_json"
+      ],
+      "not": { "required": ["input_ref", "input_payload"] },
+      "allOf": [
+        { "not": { "required": ["output_ref", "output_payload"] } },
+        { "not": { "required": ["raw_ref", "raw_payload"] } }
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "run_id": { "$ref": "#/$defs/id" },
+        "source_id": { "$ref": "#/$defs/id" },
+        "external_id": { "type": ["string", "null"] },
+        "parent_span_id": { "$ref": "#/$defs/id_or_null" },
+        "workflow_node_id": { "$ref": "#/$defs/id_or_null" },
+        "agent_identity_id": { "$ref": "#/$defs/id_or_null" },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "workflow", "agent", "handoff", "llm", "tool",
+            "retrieval", "check", "system", "unknown"
+          ]
+        },
+        "name": { "type": "string" },
+        "status": {
+          "type": "string",
+          "enum": ["running", "succeeded", "failed", "cancelled", "timed_out", "unknown"]
+        },
+        "started_at": { "$ref": "#/$defs/timestamp" },
+        "ended_at": { "$ref": "#/$defs/timestamp_or_null" },
+        "input_ref": { "$ref": "#/$defs/id_or_null" },
+        "input_payload": { "$ref": "#/$defs/inline_payload" },
+        "output_ref": { "$ref": "#/$defs/id_or_null" },
+        "output_payload": { "$ref": "#/$defs/inline_payload" },
+        "usage_json": { "$ref": "#/$defs/json_object" },
+        "attributes_json": { "$ref": "#/$defs/json_object" },
+        "raw_ref": { "$ref": "#/$defs/id_or_null" },
+        "raw_payload": { "$ref": "#/$defs/inline_payload" }
+      }
+    },
+    "handoff": {
+      "type": "object",
+      "required": [
+        "id", "profile_id", "source_id", "from_agent_identity_id",
+        "to_agent_identity_id", "from_workflow_node_id", "to_workflow_node_id",
+        "from_task_id", "to_task_id", "run_id", "span_id", "kind",
+        "created_at", "metadata_json"
+      ],
+      "not": { "required": ["reason_ref", "reason_payload"] },
+      "allOf": [
+        { "not": { "required": ["payload_ref", "payload"] } }
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "profile_id": { "$ref": "#/$defs/id" },
+        "source_id": { "$ref": "#/$defs/id" },
+        "from_agent_identity_id": { "$ref": "#/$defs/id_or_null" },
+        "to_agent_identity_id": { "$ref": "#/$defs/id_or_null" },
+        "from_workflow_node_id": { "$ref": "#/$defs/id_or_null" },
+        "to_workflow_node_id": { "$ref": "#/$defs/id_or_null" },
+        "from_task_id": { "$ref": "#/$defs/id_or_null" },
+        "to_task_id": { "$ref": "#/$defs/id_or_null" },
+        "run_id": { "$ref": "#/$defs/id_or_null" },
+        "span_id": { "$ref": "#/$defs/id_or_null" },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "agent_handoff", "task_created", "task_assigned",
+            "queue_dependency", "human_block", "tool_delegation", "unknown"
+          ]
+        },
+        "reason_ref": { "$ref": "#/$defs/id_or_null" },
+        "reason_payload": { "$ref": "#/$defs/inline_payload" },
+        "payload_ref": { "$ref": "#/$defs/id_or_null" },
+        "payload": { "$ref": "#/$defs/inline_payload" },
+        "created_at": { "$ref": "#/$defs/timestamp" },
+        "metadata_json": { "$ref": "#/$defs/json_object" }
+      }
+    },
+    "timeline_event": {
+      "type": "object",
+      "required": [
+        "id", "profile_id", "source_id", "entity_type", "entity_id",
+        "kind", "at", "agent_identity_id", "metadata_json"
+      ],
+      "not": { "required": ["payload_ref", "payload"] },
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "profile_id": { "$ref": "#/$defs/id" },
+        "source_id": { "$ref": "#/$defs/id" },
+        "entity_type": { "type": "string" },
+        "entity_id": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string" },
+        "at": { "$ref": "#/$defs/timestamp" },
+        "agent_identity_id": { "$ref": "#/$defs/id_or_null" },
+        "payload_ref": { "$ref": "#/$defs/id_or_null" },
+        "payload": { "$ref": "#/$defs/inline_payload" },
+        "metadata_json": { "$ref": "#/$defs/json_object" }
+      }
+    }
+  }
+}

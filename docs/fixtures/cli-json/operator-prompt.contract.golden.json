@@ -1,0 +1,11 @@
+{
+  "evidence_path": "<OUTPUT_DIR>/evidence-bundle.json",
+  "evidence_path_exists": true,
+  "profile_id": "profile_news_research_001",
+  "prompt_path": "<OUTPUT_DIR>/operator-instructions.md",
+  "prompt_path_exists": true,
+  "proposal_block_begin": "BEGIN_KYOKO_LEARNING_PROPOSAL_JSON",
+  "proposal_block_end": "END_KYOKO_LEARNING_PROPOSAL_JSON",
+  "schema_path": "<REPO>/docs/schemas/learning-proposal.schema.json",
+  "target": "codex"
+}

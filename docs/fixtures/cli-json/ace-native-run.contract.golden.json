@@ -1,0 +1,171 @@
+{
+  "after_path": {
+    "exists": true,
+    "path": "<OUTPUT_DIR>/after.skillbook.json"
+  },
+  "before_path": {
+    "exists": true,
+    "path": "<OUTPUT_DIR>/before.skillbook.json"
+  },
+  "canonical_mutation": false,
+  "command": [
+    "<PYTHON>",
+    "<OUTPUT_DIR>/fake_ace_command.py"
+  ],
+  "diff": {
+    "persisted": true,
+    "profile_id": "profile_news_research_001",
+    "proposal_ids": [
+      "proposal_native_ace_13665d6ea089"
+    ],
+    "proposal_paths": [
+      {
+        "exists": true,
+        "path": "<OUTPUT_DIR>/proposal_native_ace_13665d6ea089.json"
+      }
+    ],
+    "proposals": [
+      {
+        "confidence": 0.72,
+        "created_at_present": true,
+        "evidence_refs": [
+          {
+            "entity_id": "span_fetch_timeout_001",
+            "entity_type": "span",
+            "role": "failure"
+          }
+        ],
+        "gate_expectations": {
+          "allowed_autonomy_section": "context",
+          "notes": "Native ACE changes are imported as proposals; Kyoko owns validation, check/replay gates, and final writes.",
+          "requires_check_level": "L1_repeated",
+          "requires_human_review": false,
+          "requires_replay": true
+        },
+        "id": "proposal_native_ace_13665d6ea089",
+        "insight": "Retry transient fetch timeouts before handoff.",
+        "problem": {
+          "issue": "Fetch timeouts are treated as final failures.",
+          "root_cause": "Derived from a native ACE Skillbook diff.",
+          "severity": "medium",
+          "target": {
+            "entity_id": "profile_news_research_001",
+            "entity_type": "profile",
+            "name": "profile_news_research_001"
+          }
+        },
+        "producer": {
+          "kind": "native_ace",
+          "name": "native_ace"
+        },
+        "profile_id": "profile_news_research_001",
+        "proposed_changes": [
+          {
+            "insight": "Retry transient fetch timeouts before handoff.",
+            "issue": "Fetch timeouts are treated as final failures.",
+            "keywords": [
+              "fetch",
+              "retry"
+            ],
+            "occurrence_refs": [
+              {
+                "entity_id": "span_fetch_timeout_001",
+                "entity_type": "span",
+                "role": "failure"
+              }
+            ],
+            "operation": "create",
+            "section": "context",
+            "skill_id": "skill_proposal_native_ace_13665d6ea089_1",
+            "type": "skillbook_update"
+          },
+          {
+            "definition": {
+              "assertions": [
+                {
+                  "type": "target_status_not_failed"
+                },
+                {
+                  "type": "replay_no_failed_spans"
+                }
+              ],
+              "expect": "The replay target does not fail and the output trace has no failed spans.",
+              "given": "Replay the source evidence after the ACE-derived learning change.",
+              "operation": "create",
+              "source": "native_ace_diff"
+            },
+            "check_type": "deterministic_assertion",
+            "name": "Regression replay for ace create for context skill",
+            "side_effect_mode": "network_mocked",
+            "trust_level": "L0_generated",
+            "type": "check_spec"
+          }
+        ],
+        "schema_version": "kyoko.learning_proposal.v1",
+        "section": "context",
+        "state": "pending",
+        "summary": "ACE mutated a cloned Skillbook and Kyoko converted the create diff into a gated LearningProposal.",
+        "title": "ACE create for context skill"
+      }
+    ],
+    "unsupported_changes": []
+  },
+  "environment": {
+    "KYOKO_ACE_AFTER_PATH": "<OUTPUT_DIR>/after.skillbook.json",
+    "KYOKO_ACE_BEFORE_PATH": "<OUTPUT_DIR>/before.skillbook.json",
+    "KYOKO_ACE_COMMAND_MODE": "clone_diff",
+    "KYOKO_ACE_DB_PATH": "<DB_PATH>",
+    "KYOKO_ACE_OUTPUT_DIR": "<OUTPUT_DIR>",
+    "KYOKO_ACE_PROFILE_ID": "profile_news_research_001",
+    "KYOKO_LEARNING_PROPOSAL_SCHEMA_PATH": "docs/schemas/learning-proposal.schema.json"
+  },
+  "environment_keys": [
+    "KYOKO_ACE_AFTER_PATH",
+    "KYOKO_ACE_BEFORE_PATH",
+    "KYOKO_ACE_COMMAND_MODE",
+    "KYOKO_ACE_DB_PATH",
+    "KYOKO_ACE_OUTPUT_DIR",
+    "KYOKO_ACE_PROFILE_ID",
+    "KYOKO_LEARNING_PROPOSAL_SCHEMA_PATH"
+  ],
+  "expanded_command": [
+    "<PYTHON>",
+    "<OUTPUT_DIR>/fake_ace_command.py"
+  ],
+  "external_command_invoked": true,
+  "external_model_invoked": false,
+  "handoff_path": {
+    "exists": true,
+    "path": "<OUTPUT_DIR>/ace-command.handoff.json"
+  },
+  "live_operator_invoked": false,
+  "original_command": [
+    "<PYTHON>",
+    "<OUTPUT_DIR>/fake_ace_command.py"
+  ],
+  "output_dir": "<OUTPUT_DIR>",
+  "passed": true,
+  "prepare_only": false,
+  "prepared": true,
+  "profile_id": "profile_news_research_001",
+  "proposal_output_dir": "<OUTPUT_DIR>/proposals",
+  "provider_backed": false,
+  "report_path": {
+    "exists": true,
+    "path": "<OUTPUT_DIR>/ace-native-run-report.json"
+  },
+  "returncode": 0,
+  "shell_command": "<PYTHON> <COMMAND_PATH>",
+  "stderr_path": {
+    "exists": true,
+    "path": "<OUTPUT_DIR>/ace-command.stderr.txt"
+  },
+  "stderr_tail": "",
+  "stdout_path": {
+    "exists": true,
+    "path": "<OUTPUT_DIR>/ace-command.stdout.txt"
+  },
+  "stdout_tail": "fake native ace mutation complete\n",
+  "timeout_seconds": 120,
+  "used_temporary_output_dir": false
+}

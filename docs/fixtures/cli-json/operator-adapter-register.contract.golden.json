@@ -1,0 +1,13 @@
+{
+  "adapter_id": "fixture_operator",
+  "command": [
+    "<PYTHON>",
+    "<REPO>/tests/fixtures/operator_command.py"
+  ],
+  "enabled": true,
+  "name": "Fixture operator",
+  "operator_kind": "generic",
+  "output_dir": "<OUTPUT_DIR>",
+  "profile_id": "profile_news_research_001",
+  "timeout_seconds": 180
+}

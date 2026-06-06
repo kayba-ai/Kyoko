@@ -1,0 +1,31 @@
+{
+  "config": {
+    "kyoko-dev": {
+      "command_present": true,
+      "env": {
+        "PYTHONPATH": "<REPO>"
+      },
+      "server": {
+        "command_present": false,
+        "db_flag": "--db",
+        "db_path": "<DB_PATH>",
+        "module_args": [
+          "-m",
+          "kyoko",
+          "mcp",
+          "serve"
+        ],
+        "schema_flag": "--schema",
+        "schema_path": "<REPO>/docs/schemas/learning-proposal.schema.json"
+      }
+    },
+    "server_names": [
+      "kyoko-dev"
+    ],
+    "target": "codex"
+  },
+  "output": "<OUTPUT_DIR>/mcp.json",
+  "output_exists": true,
+  "server": "kyoko-dev",
+  "target": "codex"
+}

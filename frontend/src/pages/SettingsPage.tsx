@@ -195,7 +195,7 @@ export function SettingsPage() {
           <div className="flex max-w-3xl flex-col gap-6">
             <div className="flex items-center gap-2 rounded-lg border border-primary/25 bg-primary/10 px-3 py-2 text-sm text-primary">
               <ShieldCheck className="h-4 w-4 shrink-0" />
-              <span>Loopback-only, no auth — one user on their own machine is the trust model.</span>
+              <span>Loopback by default; non-loopback binds require a Kyoko auth token.</span>
             </div>
             <RedactionCard />
             <RetentionCard />

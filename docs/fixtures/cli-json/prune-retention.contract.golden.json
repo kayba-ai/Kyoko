@@ -1,0 +1,39 @@
+{
+  "cutoffs_present": {
+    "operator": false,
+    "replay": false,
+    "trace": true
+  },
+  "dry_run": true,
+  "profile_id": "profile_news_research_001",
+  "pruned_rows": {
+    "check_runs": [],
+    "handoffs": [
+      "handoff_research_to_writer_001"
+    ],
+    "operator_runs": [],
+    "replay_runs": [],
+    "runs": [
+      "run_research_topic_001"
+    ],
+    "spans": [
+      "span_research_root_001",
+      "span_fetch_timeout_001"
+    ],
+    "task_attempts": [
+      "attempt_research_topic_001"
+    ],
+    "tasks": [
+      "task_research_topic_001"
+    ],
+    "timeline_events": [
+      "event_fetch_timeout_001",
+      "event_handoff_001"
+    ]
+  },
+  "skipped_rows": [],
+  "summary": {
+    "pruned_rows": 8,
+    "skipped_rows": 0
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "skill_revisions": [
+    {
+      "after": {
+        "active": true,
+        "counters": {
+          "harmful": 0,
+          "helpful": 0,
+          "neutral": 0
+        },
+        "human_lock_reason": null,
+        "human_locked": false,
+        "id": "skill_proposal_context_timeout_001_1",
+        "insight": "Retry transient fetch failures once before handoff; if retry fails, mark the source as incomplete in the handoff payload.",
+        "issue": "Source fetch timeouts are treated as final failures.",
+        "keywords": [
+          "fetch",
+          "timeout",
+          "retry",
+          "handoff",
+          "evidence"
+        ],
+        "occurrences": [
+          {
+            "entity_id": "span_fetch_timeout_001",
+            "entity_type": "span",
+            "quote_ref": "blob_fetch_timeout_quote_001",
+            "role": "failure"
+          }
+        ],
+        "profile_id": "profile_news_research_001",
+        "proposal_id": "proposal_context_timeout_001",
+        "section": "context",
+        "source_run_id": "run_research_topic_001",
+        "timestamps_present": {
+          "created_at": true,
+          "updated_at": true
+        }
+      },
+      "before_present": false,
+      "operation": "create",
+      "profile_id": "profile_news_research_001",
+      "proposal_id": "proposal_context_timeout_001",
+      "revision_id": {
+        "prefix": "skill_revision_proposal_context_timeout_001_skill_proposal_context_timeout_001_1",
+        "present": true,
+        "suffix_length": 8
+      },
+      "skill_id": "skill_proposal_context_timeout_001_1",
+      "timestamps_present": {
+        "created_at": true
+      }
+    }
+  ]
+}

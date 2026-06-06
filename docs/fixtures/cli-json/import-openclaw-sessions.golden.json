@@ -1,0 +1,31 @@
+{
+  "counts": {
+    "agent_identities": 3,
+    "handoffs": 1,
+    "queues": 1,
+    "runs": 1,
+    "sources": 1,
+    "spans": 6,
+    "task_attempts": 1,
+    "tasks": 1,
+    "timeline_events": 5,
+    "workflow_nodes": 3
+  },
+  "ingested_counts": {
+    "agent_identities": 3,
+    "handoffs": 1,
+    "payload_blobs": 17,
+    "profiles": 1,
+    "queues": 1,
+    "runs": 1,
+    "sources": 1,
+    "spans": 6,
+    "task_attempts": 1,
+    "tasks": 1,
+    "timeline_events": 5,
+    "workflow_nodes": 3
+  },
+  "normalized_path": null,
+  "profile_id": "profile_cli_openclaw",
+  "source_path": "<OPENCLAW_SESSION_PATH>"
+}

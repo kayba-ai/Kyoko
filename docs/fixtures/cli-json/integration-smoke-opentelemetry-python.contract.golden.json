@@ -1,0 +1,52 @@
+{
+  "artifact_exists": {
+    "db_path": true,
+    "normalized_path": true,
+    "otlp_payload_path": true,
+    "script_path": true,
+    "stderr_path": true,
+    "stdout_path": true
+  },
+  "db_path": "<TMP>/kyoko.db",
+  "external_model_invoked": false,
+  "ingested_counts": {
+    "agent_identities": 1,
+    "handoffs": 0,
+    "profiles": 1,
+    "queues": 0,
+    "runs": 1,
+    "sources": 1,
+    "spans": 2,
+    "task_attempts": 0,
+    "tasks": 0,
+    "timeline_events": 1,
+    "workflow_nodes": 1
+  },
+  "kind": "opentelemetry_python_smoke",
+  "live_operator_invoked": false,
+  "opentelemetry_sdk_invoked": true,
+  "opentelemetry_sdk_version": "9.9.0",
+  "output_dir": "<OUTPUT_DIR>",
+  "passed": true,
+  "paths": {
+    "normalized_path": "<OUTPUT_DIR>/normalized-source-events.json",
+    "otlp_payload_path": "<OUTPUT_DIR>/otlp-payload.json",
+    "script_path": "<OUTPUT_DIR>/opentelemetry_sdk_smoke.py",
+    "stderr_path": "<OUTPUT_DIR>/opentelemetry-sdk.stderr.txt",
+    "stdout_path": "<OUTPUT_DIR>/opentelemetry-sdk.stdout.txt",
+    "workspace_root": "<OUTPUT_DIR>/workspace"
+  },
+  "profile_id": "profile_opentelemetry_sdk_smoke",
+  "python_executable": "<PYTHON>",
+  "run_count": 1,
+  "span_count": 2,
+  "status_counts": {
+    "agent_identities": 1,
+    "profiles": 1,
+    "runs": 1,
+    "sources": 1,
+    "spans": 2,
+    "timeline_events": 1,
+    "workflow_nodes": 1
+  }
+}

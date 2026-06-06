@@ -1,0 +1,96 @@
+{
+  "check_runs": [],
+  "check_specs": [
+    {
+      "definition": {
+        "assertion": "target_status_not_failed",
+        "assertions": [
+          {
+            "type": "target_status_not_failed"
+          },
+          {
+            "equals": 1,
+            "path": "attributes.retry_count",
+            "type": "replay_target_field_equals"
+          },
+          {
+            "entity_type": "handoff",
+            "equals": "complete",
+            "match": {
+              "metadata.replay_of_handoff_id": "handoff_research_to_writer_001"
+            },
+            "path": "metadata.source_status",
+            "type": "replay_entity_field_equals"
+          }
+        ],
+        "evidence_refs": [
+          {
+            "entity_id": "span_fetch_timeout_001",
+            "entity_type": "span",
+            "note": "The tool call timed out and the agent did not retry.",
+            "quote_ref": "blob_fetch_timeout_quote_001",
+            "role": "failure"
+          },
+          {
+            "entity_id": "handoff_research_to_writer_001",
+            "entity_type": "handoff",
+            "note": "The writer received the task after the failed fetch was treated as complete.",
+            "role": "context"
+          }
+        ],
+        "failure_statuses": [
+          "cancelled",
+          "errored",
+          "failed",
+          "timed_out"
+        ],
+        "operator_definition": {
+          "assertions": [
+            {
+              "type": "target_status_not_failed"
+            },
+            {
+              "equals": 1,
+              "path": "attributes.retry_count",
+              "type": "replay_target_field_equals"
+            },
+            {
+              "entity_type": "handoff",
+              "equals": "complete",
+              "match": {
+                "metadata.replay_of_handoff_id": "handoff_research_to_writer_001"
+              },
+              "path": "metadata.source_status",
+              "type": "replay_entity_field_equals"
+            }
+          ],
+          "expect": "researcher retries once and includes recovered source in handoff",
+          "given": "fetch tool times out on first call and succeeds on retry"
+        },
+        "proposal_summary": "The researcher agent treated a transient fetch timeout as a final source failure and moved forward with weak evidence.",
+        "proposal_title": "Add retry guidance for source fetch timeouts"
+      },
+      "check_type": "deterministic_assertion",
+      "human_lock_reason": null,
+      "human_locked": false,
+      "id": "check_proposal_context_timeout_001_1",
+      "name": "researcher retries fetch timeout before handoff",
+      "profile_id": "profile_news_research_001",
+      "proposal_id": "proposal_context_timeout_001",
+      "side_effect_mode": "network_mocked",
+      "status": "active",
+      "target": {
+        "entity_id": "span_fetch_timeout_001",
+        "entity_type": "span",
+        "role": "failure",
+        "source": "failure_evidence"
+      },
+      "timestamps_present": {
+        "created_at": true,
+        "updated_at": true
+      },
+      "trust_level": "L0_generated"
+    }
+  ],
+  "replay_runs": []
+}

@@ -1,0 +1,20 @@
+{
+  "check_spec_id": "check_proposal_context_timeout_001_1",
+  "mode": "dry_run",
+  "profile_id": "profile_news_research_001",
+  "proposal_id": "proposal_context_timeout_001",
+  "replay_run_id": "replay_check_proposal_context_timeout_001_1_001",
+  "result": {
+    "actual_side_effect_mode": "none",
+    "executed_agent": false,
+    "mode": "dry_run",
+    "note": "v0 dry-run replay records the replay request and verifies source evidence without re-invoking tools.",
+    "output_run_id": null,
+    "requested_side_effect_mode": "network_mocked",
+    "source_run_id": "run_research_topic_001",
+    "target_map": null
+  },
+  "side_effect_mode": "network_mocked",
+  "source_run_id": "run_research_topic_001",
+  "status": "passed"
+}

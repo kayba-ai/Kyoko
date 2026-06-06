@@ -1,0 +1,28 @@
+{
+  "payload_blobs": [
+    {
+      "blob_id_prefix": [
+        "blob",
+        "sha256"
+      ],
+      "blob_id_present": true,
+      "kind": "operator_output",
+      "media_type": "application/json",
+      "metadata": {
+        "source_path": "<TMP>/operator-output.json"
+      },
+      "path_contract": "<BLOB_PATH>",
+      "path_exists": true,
+      "preview": "[REDACTED:blob_preview]",
+      "profile_id": "profile_news_research_001",
+      "redaction_mode": "redacted",
+      "retained_until_present": true,
+      "sha256_length": 64,
+      "size_bytes": 21,
+      "timestamps_present": {
+        "created_at": true,
+        "updated_at": true
+      }
+    }
+  ]
+}

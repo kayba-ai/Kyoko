@@ -1,0 +1,40 @@
+{
+  "artifact_exists": {
+    "db_path": true,
+    "evidence_path": true,
+    "output_dir": true,
+    "prompt_path": true,
+    "raw_output_path": true
+  },
+  "artifact_paths": {
+    "db_path": "<OUTPUT_DIR>/smoke.db",
+    "evidence_path": "<OUTPUT_DIR>/evidence-bundle.json",
+    "output_dir": "<OUTPUT_DIR>",
+    "prompt_path": "<OUTPUT_DIR>/operator-instructions.md",
+    "raw_output_path": "<OUTPUT_DIR>/operator-output.txt"
+  },
+  "attempts": 1,
+  "error_prefix": "operator_issues_json_invalid",
+  "expected_failure_kind": "invalid_output",
+  "failure_kind": "invalid_output",
+  "issue_id_count": 0,
+  "last_attempt_status": "invalid_output",
+  "live_operator_invoked": true,
+  "operator": "command",
+  "operator_run_id_present": true,
+  "passed": true,
+  "persisted": false,
+  "profile_id": "profile_news_research_001",
+  "prompt_contract": {
+    "contains_failure_capture": true,
+    "contains_invalid_line": true
+  },
+  "prompt_failure_mode": "invalid-output",
+  "raw_output_contract": {
+    "contains_attempt_header": true,
+    "contains_begin_marker": true,
+    "contains_end_marker": true
+  },
+  "status": "captured",
+  "used_demo_database": true
+}

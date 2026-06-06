@@ -1,0 +1,21 @@
+{
+  "proposals": [
+    {
+      "confidence": 0.82,
+      "confidence_delta": -0.16,
+      "confidence_level": "medium",
+      "created_at": "2026-05-31T12:00:00Z",
+      "id": "proposal_context_timeout_001",
+      "issue_id": null,
+      "kyoko_confidence": 0.66,
+      "operator_confidence": 0.82,
+      "profile_id": "profile_news_research_001",
+      "section": "context",
+      "section_description": "A change to agent-facing skillbook context or context delivery.",
+      "section_label": "Context fix",
+      "state": "pending",
+      "summary": "The researcher agent treated a transient fetch timeout as a final source failure and moved forward with weak evidence.",
+      "title": "Add retry guidance for source fetch timeouts"
+    }
+  ]
+}

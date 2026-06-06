@@ -1,0 +1,37 @@
+{
+  "ingested_counts": {
+    "agent_identities": 1,
+    "handoffs": 0,
+    "profiles": 1,
+    "queues": 0,
+    "runs": 1,
+    "sources": 1,
+    "spans": 2,
+    "task_attempts": 0,
+    "tasks": 0,
+    "timeline_events": 1,
+    "workflow_nodes": 1
+  },
+  "normalized_path": "<OUTPUT_DIR>/normalized.json",
+  "normalized_path_exists": true,
+  "profile_id": "profile_otlp_news_001",
+  "run_ids": [
+    {
+      "prefix": "run",
+      "present": true,
+      "segments": 7
+    }
+  ],
+  "span_ids": [
+    {
+      "prefix": "span",
+      "present": true,
+      "segments": 7
+    },
+    {
+      "prefix": "span",
+      "present": true,
+      "segments": 7
+    }
+  ]
+}

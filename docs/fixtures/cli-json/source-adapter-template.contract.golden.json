@@ -1,0 +1,18 @@
+{
+  "artifact_exists": {
+    "output_path": true,
+    "output_path_executable": true
+  },
+  "framework": "langgraph-python",
+  "output_path": "<OUTPUT_DIR>/kyoko_source_adapter.py",
+  "profile_name": "news-research",
+  "template_contract": {
+    "contains_canonical_schema_marker": true,
+    "contains_framework": true,
+    "contains_hook_env": true,
+    "contains_output_argument": true,
+    "contains_post_url_argument": true,
+    "contains_profile_name": true
+  },
+  "wrote": true
+}

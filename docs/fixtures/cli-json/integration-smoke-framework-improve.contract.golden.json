@@ -1,0 +1,177 @@
+{
+  "artifact_exists": {
+    "db_path": true,
+    "replay_hook_path": true,
+    "replay_server_path": true,
+    "source_adapter_path": true,
+    "source_hook_path": true
+  },
+  "db_path": "<TMP>/kyoko.db",
+  "external_model_invoked": false,
+  "flags": {
+    "generated_source_adapter_invoked": true,
+    "live_operator_invoked": false,
+    "managed_replay_server_invoked": true
+  },
+  "framework": "langgraph-python",
+  "framework_package": "langgraph",
+  "framework_version": "9.9.0",
+  "improve": {
+    "analyze_present": true,
+    "autonomy": {
+      "decisions": [
+        {
+          "action": "applied",
+          "applied_context_rule_ids": [],
+          "applied_skill_ids": [
+            "issue_<ID>"
+          ],
+          "patch_transaction_ids": [],
+          "proposal_id": "proposal_mock_span_installed_langgraph_fetch_001",
+          "reason": "autonomous_auto_apply",
+          "section": "context",
+          "state_after": "applied",
+          "state_before": "pending"
+        }
+      ],
+      "policy": {
+        "allow_repo_patch": true,
+        "mode": "autonomous",
+        "recurrence_threshold": 1,
+        "regression_threshold": 2
+      },
+      "profile_id": "profile_installed_langgraph_smoke"
+    },
+    "gate1_outcome_count": 1,
+    "guard_count": 1,
+    "notes": [
+      "gate1_authored:issue_<ID>:proposal_mock_span_installed_langgraph_fetch_001:recurrence_met:1>=1"
+    ],
+    "operator": "mock",
+    "profile_id": "profile_installed_langgraph_smoke",
+    "proposal_id": "proposal_mock_span_installed_langgraph_fetch_001",
+    "proposal_id_count": 1,
+    "source_import_present": false
+  },
+  "installed_framework_flags": {
+    "generated_replay_server_invoked": true,
+    "installed_framework_invoked": true,
+    "installed_framework_replay_invoked": true,
+    "installed_framework_source_invoked": true
+  },
+  "kind": "installed_framework_improve_smoke",
+  "output_dir": "<OUTPUT_DIR>",
+  "passed": true,
+  "paths": {
+    "replay_hook_path": "<OUTPUT_DIR>/hooks/replay_hook.py",
+    "replay_server_path": "<OUTPUT_DIR>/replay/kyoko_replay_server.py",
+    "source_adapter_path": "<OUTPUT_DIR>/source/kyoko_source_adapter.py",
+    "source_hook_path": "<OUTPUT_DIR>/hooks/source_hook.py",
+    "workspace_root": "<OUTPUT_DIR>/workspace"
+  },
+  "python_executable": "<PYTHON>",
+  "replay_adapter": {
+    "adapter_id": "installed_framework_improve_langgraph_python_replay",
+    "command": [
+      "<PYTHON>",
+      "<OUTPUT_DIR>/replay/kyoko_replay_server.py",
+      "--port",
+      "<PORT>"
+    ],
+    "cwd": "<OUTPUT_DIR>",
+    "default_mode": "dry_run",
+    "default_side_effect_mode": "network_mocked",
+    "enabled": true,
+    "health_path": "/health",
+    "kind": "managed_http_server",
+    "name": "LangGraph Python workflow improve replay",
+    "output_dir": "<OUTPUT_DIR>/replay-runs",
+    "profile_id": "profile_installed_langgraph_smoke",
+    "replay_path": "/replay",
+    "server_url": "<SERVER_URL>",
+    "startup_timeout_seconds": 10,
+    "timeout_seconds": 10
+  },
+  "replay_adapter_id": "installed_framework_improve_langgraph_python_replay",
+  "replay_server_url": "<SERVER_URL>",
+  "source_smoke": {
+    "adapter_path": "<OUTPUT_DIR>/source/kyoko_source_adapter.py",
+    "artifact_exists": {
+      "db_path": true,
+      "source_events_path": true,
+      "stderr_path": true,
+      "stdout_path": true
+    },
+    "db_path": "<TMP>/kyoko.db",
+    "exit_code": 0,
+    "hook": "<OUTPUT_DIR>/hooks/source_hook.py:collect",
+    "ingested_counts": {
+      "agent_identities": 1,
+      "handoffs": 0,
+      "payload_blobs": 6,
+      "profiles": 1,
+      "queues": 0,
+      "runs": 1,
+      "sources": 1,
+      "spans": 2,
+      "task_attempts": 0,
+      "tasks": 0,
+      "timeline_events": 0,
+      "workflow_nodes": 1
+    },
+    "kind": "source_adapter",
+    "output_dir": "<OUTPUT_DIR>/source-smoke",
+    "paths": {
+      "source_events_path": "<OUTPUT_DIR>/source-smoke/source-events.json",
+      "stderr_path": "<OUTPUT_DIR>/source-smoke/source-adapter.stderr.txt",
+      "stdout_path": "<OUTPUT_DIR>/source-smoke/source-adapter.stdout.txt"
+    },
+    "profile_id": "profile_installed_langgraph_smoke",
+    "status": {
+      "counts": {
+        "agent_identities": 1,
+        "analysis_schedules": 0,
+        "autonomy_policies": 1,
+        "check_locks": 0,
+        "check_runs": 0,
+        "check_specs": 0,
+        "context_delivery_rule_revisions": 0,
+        "context_delivery_rules": 0,
+        "handoffs": 0,
+        "harness_target_locks": 0,
+        "learning_proposals": 0,
+        "operator_adapters": 0,
+        "operator_runs": 0,
+        "patch_transactions": 0,
+        "payload_blobs": 4,
+        "profiles": 1,
+        "queues": 0,
+        "replay_adapters": 0,
+        "replay_runs": 0,
+        "runs": 1,
+        "skill_revisions": 0,
+        "skills": 0,
+        "sources": 1,
+        "spans": 2,
+        "task_attempts": 0,
+        "tasks": 0,
+        "timeline_events": 0,
+        "workflow_nodes": 1
+      },
+      "db_path": "<TMP>/kyoko.db",
+      "schema_version": 34
+    }
+  },
+  "status_counts": {
+    "check_runs": 0,
+    "check_specs": 0,
+    "learning_proposals": 1,
+    "operator_runs": 2,
+    "replay_adapters": 1,
+    "replay_runs": 0,
+    "runs": 1,
+    "skills": 1,
+    "sources": 2,
+    "spans": 2
+  }
+}

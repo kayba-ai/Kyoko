@@ -1,0 +1,255 @@
+{
+  "assertion_presets": [
+    {
+      "assertions": [
+        "replay_run_status_equals",
+        "replay_no_failed_spans",
+        "replay_span_count_at_least"
+      ],
+      "description": "Check that the replay output run succeeded, has no failed spans, and has enough spans.",
+      "gateable_check_types": [
+        "deterministic_assertion",
+        "regression_replay"
+      ],
+      "name": "replay_success_shape",
+      "options": [
+        {
+          "aliases": [
+            "replay_run_status"
+          ],
+          "default": "succeeded",
+          "name": "expected_run_status",
+          "type": "string"
+        },
+        {
+          "aliases": [
+            "minimum_spans"
+          ],
+          "default": 1,
+          "minimum": 0,
+          "name": "min_spans",
+          "type": "integer"
+        }
+      ]
+    },
+    {
+      "assertions": [
+        "replay_handoff_count_at_least"
+      ],
+      "description": "Check that the replay output run contains at least one handoff.",
+      "gateable_check_types": [
+        "deterministic_assertion",
+        "regression_replay"
+      ],
+      "name": "replay_handoff_present",
+      "options": [
+        {
+          "aliases": [
+            "minimum_handoffs"
+          ],
+          "default": 1,
+          "minimum": 0,
+          "name": "min_handoffs",
+          "type": "integer"
+        }
+      ]
+    }
+  ],
+  "deterministic_assertions": [
+    {
+      "description": "Check that the baseline target is not failed, or that a replay-mapped target improves from failed to not failed.",
+      "name": "target_status_not_failed",
+      "requires_replay": false
+    },
+    {
+      "description": "Check a decoded field on the replay target mapped from the baseline evidence.",
+      "name": "replay_target_field_equals",
+      "requires_replay": true
+    },
+    {
+      "description": "Find a replay output entity and compare a decoded field.",
+      "name": "replay_entity_field_equals",
+      "requires_replay": true
+    },
+    {
+      "description": "Check the replay output run status.",
+      "name": "replay_run_status_equals",
+      "requires_replay": true
+    },
+    {
+      "description": "Check that the replay output run has no failed spans.",
+      "name": "replay_no_failed_spans",
+      "requires_replay": true
+    },
+    {
+      "description": "Check that the replay output run has at least the requested number of spans.",
+      "name": "replay_span_count_at_least",
+      "requires_replay": true
+    },
+    {
+      "description": "Check that the replay output run has at least the requested number of handoffs.",
+      "name": "replay_handoff_count_at_least",
+      "requires_replay": true
+    }
+  ],
+  "check_types": [
+    {
+      "auto_promotes_trust": [
+        "L1_repeated",
+        "L2_regression"
+      ],
+      "executable": true,
+      "gateable": true,
+      "name": "deterministic_assertion",
+      "notes": "Runs concrete assertions over stored source evidence and optional completed replay evidence.",
+      "requires_replay": false,
+      "storage": true
+    },
+    {
+      "auto_promotes_trust": [],
+      "executable": true,
+      "gateable": false,
+      "name": "judge",
+      "notes": "Executes recorded pass/fail verdicts only. Live/provider judges must use explicit judge-command capture first.",
+      "requires_replay": false,
+      "storage": true
+    },
+    {
+      "auto_promotes_trust": [
+        "L2_regression"
+      ],
+      "executable": true,
+      "gateable": true,
+      "name": "regression_replay",
+      "notes": "Requires completed bounded replay evidence and fail-before/pass-after proof.",
+      "requires_replay": true,
+      "storage": true
+    },
+    {
+      "auto_promotes_trust": [],
+      "executable": true,
+      "gateable": false,
+      "name": "smoke_run",
+      "notes": "Runs informational checks over an already-recorded source run or replay output run.",
+      "requires_replay": false,
+      "storage": true
+    }
+  ],
+  "executable_check_types": [
+    "deterministic_assertion",
+    "judge",
+    "regression_replay",
+    "smoke_run"
+  ],
+  "gateable_check_types": [
+    "deterministic_assertion",
+    "regression_replay"
+  ],
+  "judge": {
+    "autonomy_gate": "unsupported",
+    "backend": "recorded_judgment",
+    "external_command_invokes_model": "operator_controlled",
+    "external_command_supported": true,
+    "fail_verdicts": [
+      "does_not_meet_rubric",
+      "fail",
+      "failed",
+      "reject",
+      "rejected"
+    ],
+    "gateable": false,
+    "handoff_surfaces": [
+      "cli:judge-command",
+      "api:POST /api/judge-command",
+      "dashboard:Run judge",
+      "mcp:kyoko_run_judge_command"
+    ],
+    "invokes_model": false,
+    "pass_verdicts": [
+      "accept",
+      "accepted",
+      "meets_rubric",
+      "pass",
+      "passed"
+    ],
+    "recommended_use": [
+      "subjective_quality_review",
+      "rubric_scoring",
+      "deterministic_assertion_gap"
+    ],
+    "stdout_begin": "BEGIN_KYOKO_JUDGE_RESULT_JSON",
+    "stdout_end": "END_KYOKO_JUDGE_RESULT_JSON"
+  },
+  "replay": {
+    "live_mode_supported": false,
+    "modes": [
+      "dry_run",
+      "sandbox",
+      "live"
+    ],
+    "safe_side_effect_modes": [
+      "none",
+      "filesystem_read",
+      "sandboxed_filesystem",
+      "network_mocked"
+    ],
+    "side_effect_modes": [
+      {
+        "accepted_by_runtime": true,
+        "name": "none",
+        "safe": true
+      },
+      {
+        "accepted_by_runtime": true,
+        "name": "filesystem_read",
+        "safe": true
+      },
+      {
+        "accepted_by_runtime": true,
+        "name": "sandboxed_filesystem",
+        "safe": true
+      },
+      {
+        "accepted_by_runtime": true,
+        "name": "network_mocked",
+        "safe": true
+      },
+      {
+        "accepted_by_runtime": false,
+        "name": "live_network",
+        "safe": false
+      },
+      {
+        "accepted_by_runtime": false,
+        "name": "unknown",
+        "safe": false
+      }
+    ],
+    "unsafe_side_effect_modes": [
+      "live_network",
+      "unknown"
+    ]
+  },
+  "trust_levels": [
+    {
+      "gateable": false,
+      "name": "L0_generated",
+      "set_by": "proposal_or_generation"
+    },
+    {
+      "gateable": true,
+      "name": "L1_repeated",
+      "set_by": "automatic_repeated_deterministic_results"
+    },
+    {
+      "gateable": true,
+      "name": "L2_regression",
+      "set_by": "automatic_fail_before_pass_after_replay"
+    },
+    {
+      "gateable": true,
+      "name": "L3_human_approved",
+      "set_by": "explicit_human_approval"
+    }
+  ]
+}

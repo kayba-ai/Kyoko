@@ -1,0 +1,161 @@
+{
+  "fixture_version": "kyoko.replay_result.v1",
+  "name": "researcher-fetch-timeout-success",
+  "description": "Controlled replay result where the researcher retries a transient source fetch timeout and succeeds before handoff.",
+  "replay": {
+    "replay_run_id": "replay_check_proposal_context_timeout_001_1_001",
+    "output_run_id": "run_research_topic_replay_001",
+    "status": "passed",
+    "executed_agent": true,
+    "actual_side_effect_mode": "network_mocked",
+    "target_map": {
+      "span_fetch_timeout_001": "span_fetch_retry_success_001"
+    },
+    "note": "Replay used mocked network behavior: first fetch timeout, second fetch success."
+  },
+  "profile": {
+    "id": "profile_news_research_001",
+    "name": "News Research Workflow",
+    "root_path": "/tmp/kyoko-fixtures/news-research",
+    "status": "active",
+    "created_at": "2026-05-31T11:45:00Z",
+    "updated_at": "2026-05-31T12:10:00Z"
+  },
+  "sources": [
+    {
+      "id": "source_replay_fixture_001",
+      "profile_id": "profile_news_research_001",
+      "kind": "kyoko_sdk",
+      "display_name": "Kyoko controlled replay fixture",
+      "status": "active",
+      "adapter_version": "kyoko.replay_fixture.v0",
+      "config_json": {},
+      "capabilities_json": {
+        "runs": true,
+        "spans": true,
+        "replay": true
+      },
+      "last_seen_at": "2026-05-31T12:10:00Z"
+    }
+  ],
+  "runs": [
+    {
+      "id": "run_research_topic_replay_001",
+      "profile_id": "profile_news_research_001",
+      "source_id": "source_replay_fixture_001",
+      "external_id": "kyoko-replay-run-001",
+      "root_span_id": "span_replay_research_root_001",
+      "agent_identity_id": "agent_researcher_001",
+      "task_attempt_id": null,
+      "status": "succeeded",
+      "started_at": "2026-05-31T12:05:00Z",
+      "ended_at": "2026-05-31T12:08:00Z",
+      "input_ref": "blob_replay_run_input_001",
+      "output_ref": "blob_replay_run_output_001",
+      "summary": "Replay completed with a retry after the transient fetch timeout and handed off complete evidence.",
+      "metadata_json": {
+        "replay_of_run_id": "run_research_topic_001"
+      }
+    }
+  ],
+  "spans": [
+    {
+      "id": "span_replay_research_root_001",
+      "run_id": "run_research_topic_replay_001",
+      "source_id": "source_replay_fixture_001",
+      "external_id": "replay-root",
+      "parent_span_id": null,
+      "workflow_node_id": "node_researcher_001",
+      "agent_identity_id": "agent_researcher_001",
+      "kind": "agent",
+      "name": "research topic replay",
+      "status": "succeeded",
+      "started_at": "2026-05-31T12:05:00Z",
+      "ended_at": "2026-05-31T12:08:00Z",
+      "input_ref": "blob_replay_run_input_001",
+      "output_ref": "blob_replay_run_output_001",
+      "usage_json": {},
+      "attributes_json": {
+        "replay_of_run_id": "run_research_topic_001"
+      },
+      "raw_ref": "blob_replay_raw_span_root_001"
+    },
+    {
+      "id": "span_fetch_retry_success_001",
+      "run_id": "run_research_topic_replay_001",
+      "source_id": "source_replay_fixture_001",
+      "external_id": "tool-fetch-source-a-retry",
+      "parent_span_id": "span_replay_research_root_001",
+      "workflow_node_id": "node_researcher_001",
+      "agent_identity_id": "agent_researcher_001",
+      "kind": "tool",
+      "name": "fetch_source",
+      "status": "succeeded",
+      "started_at": "2026-05-31T12:06:00Z",
+      "ended_at": "2026-05-31T12:06:45Z",
+      "input_ref": "blob_fetch_retry_input_001",
+      "output_ref": "blob_fetch_retry_output_001",
+      "usage_json": {},
+      "attributes_json": {
+        "replay_of_span_id": "span_fetch_timeout_001",
+        "first_attempt": "timeout",
+        "retry_count": 1,
+        "source_status": "complete"
+      },
+      "raw_ref": "blob_replay_raw_span_fetch_001"
+    }
+  ],
+  "handoffs": [
+    {
+      "id": "handoff_replay_research_to_writer_001",
+      "profile_id": "profile_news_research_001",
+      "source_id": "source_replay_fixture_001",
+      "from_agent_identity_id": "agent_researcher_001",
+      "to_agent_identity_id": "agent_writer_001",
+      "from_workflow_node_id": "node_researcher_001",
+      "to_workflow_node_id": "node_writer_001",
+      "from_task_id": "task_research_topic_001",
+      "to_task_id": null,
+      "run_id": "run_research_topic_replay_001",
+      "span_id": null,
+      "kind": "agent_handoff",
+      "reason_ref": "blob_replay_handoff_reason_001",
+      "payload_ref": "blob_replay_handoff_payload_001",
+      "created_at": "2026-05-31T12:08:00Z",
+      "metadata_json": {
+        "source_status": "complete",
+        "replay_of_handoff_id": "handoff_research_to_writer_001"
+      }
+    }
+  ],
+  "timeline_events": [
+    {
+      "id": "event_replay_fetch_retry_success_001",
+      "profile_id": "profile_news_research_001",
+      "source_id": "source_replay_fixture_001",
+      "entity_type": "span",
+      "entity_id": "span_fetch_retry_success_001",
+      "kind": "tool_retry_succeeded",
+      "at": "2026-05-31T12:06:45Z",
+      "agent_identity_id": "agent_researcher_001",
+      "payload_ref": "blob_fetch_retry_output_001",
+      "metadata_json": {
+        "replay_of_span_id": "span_fetch_timeout_001"
+      }
+    },
+    {
+      "id": "event_replay_handoff_complete_001",
+      "profile_id": "profile_news_research_001",
+      "source_id": "source_replay_fixture_001",
+      "entity_type": "handoff",
+      "entity_id": "handoff_replay_research_to_writer_001",
+      "kind": "handoff_created",
+      "at": "2026-05-31T12:08:00Z",
+      "agent_identity_id": "agent_researcher_001",
+      "payload_ref": "blob_replay_handoff_payload_001",
+      "metadata_json": {
+        "source_status": "complete"
+      }
+    }
+  ]
+}

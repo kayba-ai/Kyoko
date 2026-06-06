@@ -1,0 +1,93 @@
+{
+  "autonomy": {
+    "by_action": {},
+    "decisions": 0,
+    "events": 0
+  },
+  "before_after": {
+    "latest_failed_run_id": null,
+    "latest_passed_replay_run_id": null,
+    "latest_replay_output_run_id": null,
+    "verified_replay_improvement": false
+  },
+  "cards": [
+    {
+      "detail": "1 context, 0 harness",
+      "id": "issues",
+      "label": "Issues",
+      "value": 1
+    },
+    {
+      "detail": "pending 1",
+      "id": "proposal_status",
+      "label": "Proposal Status",
+      "value": 1
+    },
+    {
+      "detail": "0 specs, latest none",
+      "id": "checks",
+      "label": "Check Pass/Fail",
+      "value": "0/0"
+    },
+    {
+      "detail": "0 runs, latest none",
+      "id": "replay",
+      "label": "Replay Result",
+      "value": "0/0"
+    },
+    {
+      "detail": "no actions yet",
+      "id": "autonomy",
+      "label": "Autonomy Actions",
+      "value": 0
+    },
+    {
+      "detail": "no failed run -> no passed replay",
+      "id": "before_after",
+      "label": "Before/After",
+      "value": "pending"
+    }
+  ],
+  "checks": {
+    "by_status": {},
+    "failed": 0,
+    "latest_status": "none",
+    "passed": 0,
+    "runs": 0,
+    "specs": 0
+  },
+  "issues": {
+    "active": 1,
+    "by_section": {
+      "context": 1
+    },
+    "by_state": {
+      "pending": 1
+    },
+    "total": 1
+  },
+  "profile_id": "profile_news_research_001",
+  "profile_name": "News Research Workflow",
+  "replay": {
+    "by_status": {},
+    "failed": 0,
+    "latest_passed": null,
+    "latest_status": "none",
+    "passed": 0,
+    "total": 0
+  },
+  "runs": {
+    "failed": 0,
+    "failed_spans": 1,
+    "latest": {
+      "ended_at": "2026-05-31T11:50:00Z",
+      "id": "run_research_topic_001",
+      "started_at": "2026-05-31T11:46:00Z",
+      "status": "succeeded",
+      "summary": "Research completed but one source fetch timed out and was not retried."
+    },
+    "latest_failed": null,
+    "total": 1
+  },
+  "scope": "profile"
+}

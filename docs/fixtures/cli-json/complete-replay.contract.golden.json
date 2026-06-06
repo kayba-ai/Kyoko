@@ -1,0 +1,32 @@
+{
+  "check_spec_id": "check_proposal_context_timeout_001_1",
+  "ingested_counts": {
+    "agent_identities": 0,
+    "handoffs": 1,
+    "profiles": 1,
+    "queues": 0,
+    "runs": 1,
+    "sources": 1,
+    "spans": 2,
+    "task_attempts": 0,
+    "tasks": 0,
+    "timeline_events": 2,
+    "workflow_nodes": 0
+  },
+  "output_run_id": "run_research_topic_replay_001",
+  "profile_id": "profile_news_research_001",
+  "replay_run_id": "replay_check_proposal_context_timeout_001_1_001",
+  "result": {
+    "actual_side_effect_mode": "network_mocked",
+    "executed_agent": true,
+    "mode": "dry_run",
+    "note": "Replay used mocked network behavior: first fetch timeout, second fetch success.",
+    "output_run_id": "run_research_topic_replay_001",
+    "requested_side_effect_mode": "network_mocked",
+    "source_run_id": "run_research_topic_001",
+    "target_map": {
+      "span_fetch_timeout_001": "span_fetch_retry_success_001"
+    }
+  },
+  "status": "passed"
+}

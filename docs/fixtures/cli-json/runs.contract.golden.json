@@ -1,0 +1,27 @@
+{
+  "runs": [
+    {
+      "agent_identity_id": "agent_researcher_001",
+      "agent_kind": "hermes_profile",
+      "agent_name": "researcher",
+      "external_id": "hermes-run-001",
+      "failed_span_count": 1,
+      "handoff_count": 1,
+      "id": "run_research_topic_001",
+      "input_ref": "blob_run_input_001",
+      "metadata": {},
+      "output_ref": "blob_run_output_001",
+      "profile_id": "profile_news_research_001",
+      "root_span_id": "span_research_root_001",
+      "source_id": "source_hermes_001",
+      "span_count": 2,
+      "status": "succeeded",
+      "summary": "Research completed but one source fetch timed out and was not retried.",
+      "task_attempt_id": "attempt_research_topic_001",
+      "timestamps_present": {
+        "ended_at": true,
+        "started_at": true
+      }
+    }
+  ]
+}

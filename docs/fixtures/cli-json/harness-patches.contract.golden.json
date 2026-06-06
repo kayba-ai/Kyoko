@@ -1,0 +1,32 @@
+{
+  "patch_transactions": [
+    {
+      "command_plan": [],
+      "diff_ref": null,
+      "id": "patch_proposal_harness_generated_check_001_1",
+      "patch_kind": "generated_file",
+      "profile_id": "profile_news_research_001",
+      "proposal_id": "proposal_harness_generated_check_001",
+      "rollback": {
+        "available": false,
+        "preimages": [],
+        "reason": "prepared_only_no_repo_write",
+        "required": true,
+        "timestamps_present": {
+          "applied_at": false,
+          "rolled_back_at": false
+        },
+        "workspace_root_present": false
+      },
+      "side_effect_mode": "sandboxed_filesystem",
+      "status": "ready",
+      "target_paths": [
+        "checks/generated_timeout_check.py"
+      ],
+      "timestamps_present": {
+        "created_at": true,
+        "updated_at": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "registered": [
+    {
+      "adapter_id": "codex",
+      "command": [
+        "codex",
+        "exec",
+        "--sandbox",
+        "read-only",
+        "--skip-git-repo-check",
+        "--ephemeral",
+        "--color",
+        "never",
+        "-"
+      ],
+      "enabled": true,
+      "name": "Codex",
+      "operator_kind": "codex",
+      "output_dir": "<OUTPUT_DIR>",
+      "profile_id": "profile_news_research_001",
+      "timeout_seconds": 300
+    },
+    {
+      "adapter_id": "hermes",
+      "command": [
+        "hermes",
+        "-z",
+        "{prompt}"
+      ],
+      "enabled": true,
+      "name": "Hermes",
+      "operator_kind": "hermes",
+      "output_dir": "<OUTPUT_DIR>",
+      "profile_id": "profile_news_research_001",
+      "timeout_seconds": 300
+    }
+  ],
+  "skipped": [
+    {
+      "adapter_id": "claude",
+      "command": "claude",
+      "reason": "command_not_found"
+    },
+    {
+      "adapter_id": "openclaw",
+      "command": "openclaw",
+      "reason": "command_not_found"
+    }
+  ]
+}

@@ -1,0 +1,122 @@
+{
+  "adapter_id": null,
+  "check_run": {
+    "check_run_id": "checkrun_check_proposal_context_timeout_001_1_001",
+    "promoted_trust_level": "L2_regression",
+    "result": {
+      "assertion": "target_status_not_failed",
+      "assertion_counts": {
+        "failed": 0,
+        "passed": 3,
+        "total": 3
+      },
+      "assertions": [
+        {
+          "comparison": "fail_before_pass_after",
+          "observed_status": "failed",
+          "passed": true,
+          "reason": "replay_target_status_is_acceptable",
+          "replay_observed_status": "succeeded",
+          "type": "target_status_not_failed"
+        },
+        {
+          "actual": 1,
+          "entity": {
+            "id": "span_fetch_retry_success_001"
+          },
+          "expected": 1,
+          "passed": true,
+          "path": "attributes.retry_count",
+          "reason": "field_equals",
+          "type": "replay_target_field_equals"
+        },
+        {
+          "actual": "complete",
+          "entity": {
+            "id": "handoff_replay_research_to_writer_001"
+          },
+          "expected": "complete",
+          "passed": true,
+          "path": "metadata.source_status",
+          "reason": "field_equals",
+          "type": "replay_entity_field_equals"
+        }
+      ],
+      "baseline_status": "failed",
+      "comparison": "fail_before_pass_after",
+      "failure_statuses": [
+        "cancelled",
+        "errored",
+        "failed",
+        "timed_out"
+      ],
+      "observed_status": "failed",
+      "reason": "all_assertions_passed",
+      "replay_observed_status": "succeeded",
+      "replay_result": {
+        "actual_side_effect_mode": "network_mocked",
+        "executed_agent": true,
+        "mode": "dry_run",
+        "note": "Replay used mocked network behavior: first fetch timeout, second fetch success.",
+        "output_run_id": "run_research_topic_replay_001",
+        "requested_side_effect_mode": "network_mocked",
+        "source_run_id": "run_research_topic_001",
+        "target_map": {
+          "span_fetch_timeout_001": "span_fetch_retry_success_001"
+        }
+      },
+      "replay_run_id": "replay_check_proposal_context_timeout_001_1_001",
+      "replay_side_effect_mode": "network_mocked",
+      "replay_target": {
+        "baseline_entity_id": "span_fetch_timeout_001",
+        "entity_id": "span_fetch_retry_success_001",
+        "entity_type": "span",
+        "source": "replay_target_map"
+      },
+      "target": {
+        "entity_id": "span_fetch_timeout_001",
+        "entity_type": "span",
+        "role": "failure",
+        "source": "failure_evidence"
+      }
+    },
+    "status": "passed"
+  },
+  "check_spec_id": "check_proposal_context_timeout_001_1",
+  "health": {
+    "health_path": "/health",
+    "ok": true,
+    "response": {
+      "capabilities": [
+        "trace",
+        "replay"
+      ],
+      "framework": "fixture",
+      "ok": true,
+      "profile": "news-research-agent",
+      "side_effect_modes": [
+        "network_mocked",
+        "none"
+      ]
+    },
+    "server_url": "<SERVER_URL>"
+  },
+  "output_run_id": "run_research_topic_replay_001",
+  "profile_id": "profile_news_research_001",
+  "replay_path": "/replay",
+  "replay_run_id": "replay_check_proposal_context_timeout_001_1_001",
+  "result": {
+    "actual_side_effect_mode": "network_mocked",
+    "executed_agent": true,
+    "mode": "dry_run",
+    "note": "Replay used mocked network behavior: first fetch timeout, second fetch success.",
+    "output_run_id": "run_research_topic_replay_001",
+    "requested_side_effect_mode": "network_mocked",
+    "source_run_id": "run_research_topic_001",
+    "target_map": {
+      "span_fetch_timeout_001": "span_fetch_retry_success_001"
+    }
+  },
+  "server_url": "<SERVER_URL>",
+  "status": "passed"
+}

@@ -1,0 +1,16 @@
+{
+  "ingested_counts": {
+    "agent_identities": 3,
+    "handoffs": 1,
+    "profiles": 1,
+    "queues": 1,
+    "runs": 1,
+    "sources": 2,
+    "spans": 2,
+    "task_attempts": 1,
+    "tasks": 1,
+    "timeline_events": 2,
+    "workflow_nodes": 2
+  },
+  "profile_id": "profile_news_research_001"
+}

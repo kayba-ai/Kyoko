@@ -1,0 +1,42 @@
+{
+  "aggregate": {
+    "denominator": 4,
+    "numerator": 1,
+    "type": "boolean",
+    "value": 0.25
+  },
+  "corpus_resolution": {
+    "dropped": 0,
+    "over_cap": false,
+    "requested_limit": 500,
+    "total_matched": 2,
+    "unit_refs": [
+      "run_0",
+      "run_1"
+    ],
+    "unit_type": "event"
+  },
+  "detector_id": "failed_span",
+  "eval_run_id": null,
+  "events": [
+    {
+      "event_id": "run_0_llm",
+      "has_problem": false
+    },
+    {
+      "event_id": "run_0_tool",
+      "has_problem": false
+    },
+    {
+      "event_id": "run_1_llm",
+      "has_problem": false
+    },
+    {
+      "event_id": "run_1_tool",
+      "has_problem": true
+    }
+  ],
+  "persisted": false,
+  "raised_issue_id": null,
+  "status": "complete"
+}

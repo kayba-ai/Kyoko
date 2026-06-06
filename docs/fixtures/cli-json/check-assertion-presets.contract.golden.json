@@ -1,0 +1,58 @@
+{
+  "assertion_presets": [
+    {
+      "assertions": [
+        "replay_run_status_equals",
+        "replay_no_failed_spans",
+        "replay_span_count_at_least"
+      ],
+      "description": "Check that the replay output run succeeded, has no failed spans, and has enough spans.",
+      "gateable_check_types": [
+        "deterministic_assertion",
+        "regression_replay"
+      ],
+      "name": "replay_success_shape",
+      "options": [
+        {
+          "aliases": [
+            "replay_run_status"
+          ],
+          "default": "succeeded",
+          "name": "expected_run_status",
+          "type": "string"
+        },
+        {
+          "aliases": [
+            "minimum_spans"
+          ],
+          "default": 1,
+          "minimum": 0,
+          "name": "min_spans",
+          "type": "integer"
+        }
+      ]
+    },
+    {
+      "assertions": [
+        "replay_handoff_count_at_least"
+      ],
+      "description": "Check that the replay output run contains at least one handoff.",
+      "gateable_check_types": [
+        "deterministic_assertion",
+        "regression_replay"
+      ],
+      "name": "replay_handoff_present",
+      "options": [
+        {
+          "aliases": [
+            "minimum_handoffs"
+          ],
+          "default": 1,
+          "minimum": 0,
+          "name": "min_handoffs",
+          "type": "integer"
+        }
+      ]
+    }
+  ]
+}

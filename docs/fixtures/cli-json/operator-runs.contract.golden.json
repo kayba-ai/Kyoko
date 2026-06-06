@@ -1,0 +1,49 @@
+{
+  "operator_runs": [
+    {
+      "adapter_id": "fixture_operator",
+      "attempt_count": 1,
+      "error": null,
+      "failure_kind": null,
+      "id_present": true,
+      "last_attempt_status": "succeeded",
+      "max_retries": 0,
+      "metadata": {
+        "attempt_results": [
+          {
+            "attempt": 1,
+            "error": null,
+            "prompt_path": "<OUTPUT_DIR>/operator-instructions.md",
+            "returncode": 0,
+            "status": "succeeded",
+            "stderr_chars": 0,
+            "stdout_chars_positive": true
+          }
+        ],
+        "attempts": 1,
+        "command": [
+          "<PYTHON>",
+          "<REPO>/tests/fixtures/operator_command.py"
+        ],
+        "max_retries": 0,
+        "schema_path": "<REPO>/docs/schemas/issue.schema.json"
+      },
+      "operator_kind": "generic",
+      "operator_label": "fixture_operator",
+      "path_refs": {
+        "evidence_ref": "<OUTPUT_DIR>/evidence-bundle.json",
+        "prompt_ref": "<OUTPUT_DIR>/operator-instructions.md",
+        "raw_output_ref": "<OUTPUT_DIR>/operator-output.txt"
+      },
+      "profile_id": "profile_news_research_001",
+      "proposal_id": null,
+      "status": "succeeded",
+      "timestamps_present": {
+        "created_at": true,
+        "ended_at": true,
+        "started_at": true,
+        "updated_at": true
+      }
+    }
+  ]
+}

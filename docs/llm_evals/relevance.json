@@ -1,0 +1,30 @@
+{
+  "schema_version": "kyoko.llm_eval.v1",
+  "id": "relevance",
+  "name": "Relevance",
+  "version": 1,
+  "partner": null,
+  "unit": "llm_span",
+  "output": {
+    "type": "numeric",
+    "range": [
+      0,
+      1
+    ]
+  },
+  "direction": "higher_is_better",
+  "prompt": "Evaluate the relevance of the generation on a continuous scale from 0 to 1. A generation can be considered relevant (Score: 1) if it enhances or clarifies the response, adding value to the user's comprehension of the topic in question. Relevance is determined by the extent to which the provided information addresses the specific question asked, staying focused on the subject without straying into unrelated areas or providing extraneous details.\n\nExample:\nQuery: Can eating carrots improve your vision?\nGeneration: Yes, eating carrots significantly improves your vision, especially at night. This is why people who eat lots of carrots never need glasses. Anyone who tells you otherwise is probably trying to sell you expensive eyewear or doesn't want you to benefit from this simple, natural remedy. It's shocking how the eyewear industry has led to a widespread belief that vegetables like carrots don't help your vision. People are so gullible to fall for these money-making schemes.\nScore: 0.1\nReasoning: Only the first part of the first sentence clearly answers the question and thus, is relevant. The rest of the text is not relevant to answer the query.\n\nInput:\nQuery: {{query}}\nGeneration: {{generation}}\n\nThink step by step.",
+  "vars": [
+    "generation",
+    "query"
+  ],
+  "bindings": {
+    "generation": "unit.output_text",
+    "query": "unit.user_query"
+  },
+  "severity_bands": {
+    "low": 0.2,
+    "medium": 0.5,
+    "high": 0.8
+  }
+}

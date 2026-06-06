@@ -1,0 +1,520 @@
+{
+  "counts": {
+    "check_runs": 1,
+    "replay_runs": 1,
+    "timeline_events": 4
+  },
+  "check_runs": [
+    {
+      "artifact_refs": [],
+      "check_spec_id": "check_proposal_context_timeout_001_1",
+      "id": "checkrun_check_proposal_context_timeout_001_1_001",
+      "profile_id": "profile_news_research_001",
+      "proposal_id": "proposal_context_timeout_001",
+      "replay_run_id": "replay_check_proposal_context_timeout_001_1_001",
+      "result": {
+        "assertion": "target_status_not_failed",
+        "assertion_counts": {
+          "failed": 0,
+          "passed": 3,
+          "total": 3
+        },
+        "assertions": [
+          {
+            "comparison": "fail_before_pass_after",
+            "observed_status": "failed",
+            "passed": true,
+            "reason": "replay_target_status_is_acceptable",
+            "replay_observed_status": "succeeded",
+            "type": "target_status_not_failed"
+          },
+          {
+            "actual": 1,
+            "entity": {
+              "id": "span_fetch_retry_success_001"
+            },
+            "expected": 1,
+            "passed": true,
+            "path": "attributes.retry_count",
+            "reason": "field_equals",
+            "type": "replay_target_field_equals"
+          },
+          {
+            "actual": "complete",
+            "entity": {
+              "id": "handoff_replay_research_to_writer_001"
+            },
+            "expected": "complete",
+            "passed": true,
+            "path": "metadata.source_status",
+            "reason": "field_equals",
+            "type": "replay_entity_field_equals"
+          }
+        ],
+        "baseline_status": "failed",
+        "comparison": "fail_before_pass_after",
+        "failure_statuses": [
+          "cancelled",
+          "errored",
+          "failed",
+          "timed_out"
+        ],
+        "observed_status": "failed",
+        "reason": "all_assertions_passed",
+        "replay_observed_status": "succeeded",
+        "replay_result": {
+          "actual_side_effect_mode": "network_mocked",
+          "executed_agent": true,
+          "mode": "dry_run",
+          "note": "Replay used mocked network behavior: first fetch timeout, second fetch success.",
+          "output_run_id": "run_research_topic_replay_001",
+          "requested_side_effect_mode": "network_mocked",
+          "source_run_id": "run_research_topic_001",
+          "target_map": {
+            "span_fetch_timeout_001": "span_fetch_retry_success_001"
+          }
+        },
+        "replay_run_id": "replay_check_proposal_context_timeout_001_1_001",
+        "replay_side_effect_mode": "network_mocked",
+        "replay_target": {
+          "baseline_entity_id": "span_fetch_timeout_001",
+          "entity_id": "span_fetch_retry_success_001",
+          "entity_type": "span",
+          "source": "replay_target_map"
+        },
+        "target": {
+          "entity_id": "span_fetch_timeout_001",
+          "entity_type": "span",
+          "role": "failure",
+          "source": "failure_evidence"
+        }
+      },
+      "status": "passed",
+      "timestamps_present": {
+        "created_at": true,
+        "ended_at": true,
+        "started_at": true,
+        "updated_at": true
+      }
+    }
+  ],
+  "check_spec": {
+    "definition": {
+      "assertion": "target_status_not_failed",
+      "assertions": [
+        {
+          "type": "target_status_not_failed"
+        },
+        {
+          "equals": 1,
+          "path": "attributes.retry_count",
+          "type": "replay_target_field_equals"
+        },
+        {
+          "entity_type": "handoff",
+          "equals": "complete",
+          "match": {
+            "metadata.replay_of_handoff_id": "handoff_research_to_writer_001"
+          },
+          "path": "metadata.source_status",
+          "type": "replay_entity_field_equals"
+        }
+      ],
+      "evidence_refs": [
+        {
+          "entity_id": "span_fetch_timeout_001",
+          "entity_type": "span",
+          "note": "The tool call timed out and the agent did not retry.",
+          "quote_ref": "blob_fetch_timeout_quote_001",
+          "role": "failure"
+        },
+        {
+          "entity_id": "handoff_research_to_writer_001",
+          "entity_type": "handoff",
+          "note": "The writer received the task after the failed fetch was treated as complete.",
+          "role": "context"
+        }
+      ],
+      "failure_statuses": [
+        "cancelled",
+        "errored",
+        "failed",
+        "timed_out"
+      ],
+      "operator_definition": {
+        "assertions": [
+          {
+            "type": "target_status_not_failed"
+          },
+          {
+            "equals": 1,
+            "path": "attributes.retry_count",
+            "type": "replay_target_field_equals"
+          },
+          {
+            "entity_type": "handoff",
+            "equals": "complete",
+            "match": {
+              "metadata.replay_of_handoff_id": "handoff_research_to_writer_001"
+            },
+            "path": "metadata.source_status",
+            "type": "replay_entity_field_equals"
+          }
+        ],
+        "expect": "researcher retries once and includes recovered source in handoff",
+        "given": "fetch tool times out on first call and succeeds on retry"
+      },
+      "proposal_summary": "The researcher agent treated a transient fetch timeout as a final source failure and moved forward with weak evidence.",
+      "proposal_title": "Add retry guidance for source fetch timeouts"
+    },
+    "check_type": "deterministic_assertion",
+    "human_lock_reason": null,
+    "human_locked": false,
+    "id": "check_proposal_context_timeout_001_1",
+    "name": "researcher retries fetch timeout before handoff",
+    "profile_id": "profile_news_research_001",
+    "proposal_id": "proposal_context_timeout_001",
+    "side_effect_mode": "network_mocked",
+    "status": "active",
+    "target": {
+      "entity_id": "span_fetch_timeout_001",
+      "entity_type": "span",
+      "role": "failure",
+      "source": "failure_evidence"
+    },
+    "timestamps_present": {
+      "created_at": true,
+      "updated_at": true
+    },
+    "trust_level": "L2_regression"
+  },
+  "latest_check_run": {
+    "artifact_refs": [],
+    "check_spec_id": "check_proposal_context_timeout_001_1",
+    "id": "checkrun_check_proposal_context_timeout_001_1_001",
+    "profile_id": "profile_news_research_001",
+    "proposal_id": "proposal_context_timeout_001",
+    "replay_run_id": "replay_check_proposal_context_timeout_001_1_001",
+    "result": {
+      "assertion": "target_status_not_failed",
+      "assertion_counts": {
+        "failed": 0,
+        "passed": 3,
+        "total": 3
+      },
+      "assertions": [
+        {
+          "comparison": "fail_before_pass_after",
+          "observed_status": "failed",
+          "passed": true,
+          "reason": "replay_target_status_is_acceptable",
+          "replay_observed_status": "succeeded",
+          "type": "target_status_not_failed"
+        },
+        {
+          "actual": 1,
+          "entity": {
+            "id": "span_fetch_retry_success_001"
+          },
+          "expected": 1,
+          "passed": true,
+          "path": "attributes.retry_count",
+          "reason": "field_equals",
+          "type": "replay_target_field_equals"
+        },
+        {
+          "actual": "complete",
+          "entity": {
+            "id": "handoff_replay_research_to_writer_001"
+          },
+          "expected": "complete",
+          "passed": true,
+          "path": "metadata.source_status",
+          "reason": "field_equals",
+          "type": "replay_entity_field_equals"
+        }
+      ],
+      "baseline_status": "failed",
+      "comparison": "fail_before_pass_after",
+      "failure_statuses": [
+        "cancelled",
+        "errored",
+        "failed",
+        "timed_out"
+      ],
+      "observed_status": "failed",
+      "reason": "all_assertions_passed",
+      "replay_observed_status": "succeeded",
+      "replay_result": {
+        "actual_side_effect_mode": "network_mocked",
+        "executed_agent": true,
+        "mode": "dry_run",
+        "note": "Replay used mocked network behavior: first fetch timeout, second fetch success.",
+        "output_run_id": "run_research_topic_replay_001",
+        "requested_side_effect_mode": "network_mocked",
+        "source_run_id": "run_research_topic_001",
+        "target_map": {
+          "span_fetch_timeout_001": "span_fetch_retry_success_001"
+        }
+      },
+      "replay_run_id": "replay_check_proposal_context_timeout_001_1_001",
+      "replay_side_effect_mode": "network_mocked",
+      "replay_target": {
+        "baseline_entity_id": "span_fetch_timeout_001",
+        "entity_id": "span_fetch_retry_success_001",
+        "entity_type": "span",
+        "source": "replay_target_map"
+      },
+      "target": {
+        "entity_id": "span_fetch_timeout_001",
+        "entity_type": "span",
+        "role": "failure",
+        "source": "failure_evidence"
+      }
+    },
+    "status": "passed",
+    "timestamps_present": {
+      "created_at": true,
+      "ended_at": true,
+      "started_at": true,
+      "updated_at": true
+    }
+  },
+  "latest_replay_run": {
+    "artifact_refs": [],
+    "check_spec_id": "check_proposal_context_timeout_001_1",
+    "id": "replay_check_proposal_context_timeout_001_1_001",
+    "input_ref": "run_research_topic_001",
+    "mode": "dry_run",
+    "output_ref": "run_research_topic_replay_001",
+    "profile_id": "profile_news_research_001",
+    "proposal_id": "proposal_context_timeout_001",
+    "result": {
+      "actual_side_effect_mode": "network_mocked",
+      "executed_agent": true,
+      "mode": "dry_run",
+      "note": "Replay used mocked network behavior: first fetch timeout, second fetch success.",
+      "output_run_id": "run_research_topic_replay_001",
+      "requested_side_effect_mode": "network_mocked",
+      "source_run_id": "run_research_topic_001",
+      "target_map": {
+        "span_fetch_timeout_001": "span_fetch_retry_success_001"
+      }
+    },
+    "side_effect_mode": "network_mocked",
+    "source_run_id": "run_research_topic_001",
+    "status": "passed",
+    "task_attempt_id": "attempt_research_topic_001",
+    "timestamps_present": {
+      "created_at": true,
+      "ended_at": true,
+      "started_at": true,
+      "updated_at": true
+    }
+  },
+  "proposal": {
+    "confidence": 0.82,
+    "gate_expectations": {
+      "allowed_autonomy_section": "context",
+      "notes": "Generated check must be repeated before autonomous context apply.",
+      "requires_check_level": "L1_repeated",
+      "requires_human_review": false,
+      "requires_replay": true
+    },
+    "id": "proposal_context_timeout_001",
+    "problem_severity": "medium",
+    "profile_id": "profile_news_research_001",
+    "proposed_change_types": [
+      "skillbook_update",
+      "check_spec"
+    ],
+    "section": "context",
+    "state": "pending",
+    "summary": "The researcher agent treated a transient fetch timeout as a final source failure and moved forward with weak evidence.",
+    "title": "Add retry guidance for source fetch timeouts",
+    "validation_errors": []
+  },
+  "replay_runs": [
+    {
+      "artifact_refs": [],
+      "check_spec_id": "check_proposal_context_timeout_001_1",
+      "id": "replay_check_proposal_context_timeout_001_1_001",
+      "input_ref": "run_research_topic_001",
+      "mode": "dry_run",
+      "output_ref": "run_research_topic_replay_001",
+      "profile_id": "profile_news_research_001",
+      "proposal_id": "proposal_context_timeout_001",
+      "result": {
+        "actual_side_effect_mode": "network_mocked",
+        "executed_agent": true,
+        "mode": "dry_run",
+        "note": "Replay used mocked network behavior: first fetch timeout, second fetch success.",
+        "output_run_id": "run_research_topic_replay_001",
+        "requested_side_effect_mode": "network_mocked",
+        "source_run_id": "run_research_topic_001",
+        "target_map": {
+          "span_fetch_timeout_001": "span_fetch_retry_success_001"
+        }
+      },
+      "side_effect_mode": "network_mocked",
+      "source_run_id": "run_research_topic_001",
+      "status": "passed",
+      "task_attempt_id": "attempt_research_topic_001",
+      "timestamps_present": {
+        "created_at": true,
+        "ended_at": true,
+        "started_at": true,
+        "updated_at": true
+      }
+    }
+  ],
+  "source_run": {
+    "agent_identity_id": "agent_researcher_001",
+    "id": "run_research_topic_001",
+    "profile_id": "profile_news_research_001",
+    "source_id": "source_hermes_001",
+    "status": "succeeded",
+    "summary": "Research completed but one source fetch timed out and was not retried.",
+    "task_attempt_id": "attempt_research_topic_001"
+  },
+  "summary": {
+    "check_runs": 1,
+    "failed_check_runs": 0,
+    "latest_assertion_counts": {
+      "failed": 0,
+      "passed": 3,
+      "total": 3
+    },
+    "latest_assertions": [
+      {
+        "actual": null,
+        "comparison": "fail_before_pass_after",
+        "entity": null,
+        "expected": null,
+        "index": 1,
+        "observed_status": "failed",
+        "passed": true,
+        "path": null,
+        "preset": null,
+        "reason": "replay_target_status_is_acceptable",
+        "replay_observed_status": "succeeded",
+        "supported_presets": null,
+        "type": "target_status_not_failed"
+      },
+      {
+        "actual": 1,
+        "comparison": null,
+        "entity": {
+          "id": "span_fetch_retry_success_001"
+        },
+        "expected": 1,
+        "index": 2,
+        "observed_status": null,
+        "passed": true,
+        "path": "attributes.retry_count",
+        "preset": null,
+        "reason": "field_equals",
+        "replay_observed_status": null,
+        "supported_presets": null,
+        "type": "replay_target_field_equals"
+      },
+      {
+        "actual": "complete",
+        "comparison": null,
+        "entity": {
+          "id": "handoff_replay_research_to_writer_001"
+        },
+        "expected": "complete",
+        "index": 3,
+        "observed_status": null,
+        "passed": true,
+        "path": "metadata.source_status",
+        "preset": null,
+        "reason": "field_equals",
+        "replay_observed_status": null,
+        "supported_presets": null,
+        "type": "replay_entity_field_equals"
+      }
+    ],
+    "latest_comparison": "fail_before_pass_after",
+    "latest_replay_status": "passed",
+    "latest_status": "passed",
+    "passed_check_runs": 1,
+    "passed_replay_runs": 1,
+    "replay_runs": 1,
+    "side_effect_mode": "network_mocked",
+    "trust_level": "L2_regression"
+  },
+  "target": {
+    "found": true,
+    "ref": {
+      "entity_id": "span_fetch_timeout_001",
+      "entity_type": "span",
+      "role": "failure",
+      "source": "failure_evidence"
+    },
+    "resolved": {
+      "agent_identity_id": "agent_researcher_001",
+      "attributes": {
+        "error_type": "timeout",
+        "retry_count": 0
+      },
+      "id": "span_fetch_timeout_001",
+      "kind": "tool",
+      "name": "fetch_source",
+      "run_id": "run_research_topic_001",
+      "status": "failed"
+    }
+  },
+  "timeline_events": [
+    {
+      "agent_identity_id": null,
+      "entity_id": "checkrun_check_proposal_context_timeout_001_1_001",
+      "entity_type": "check_run",
+      "kind": "check_run_passed",
+      "metadata": {
+        "check_spec_id": "check_proposal_context_timeout_001_1",
+        "promoted_trust_level": "L2_regression",
+        "replay_run_id": "replay_check_proposal_context_timeout_001_1_001"
+      },
+      "profile_id": "profile_news_research_001",
+      "source_id": "source_kyoko_profile_news_research_001"
+    },
+    {
+      "agent_identity_id": null,
+      "entity_id": "check_proposal_context_timeout_001_1",
+      "entity_type": "check_spec",
+      "kind": "check_spec_created",
+      "metadata": {
+        "proposal_id": "proposal_context_timeout_001",
+        "trust_level": "L0_generated"
+      },
+      "profile_id": "profile_news_research_001",
+      "source_id": "source_kyoko_profile_news_research_001"
+    },
+    {
+      "agent_identity_id": null,
+      "entity_id": "replay_check_proposal_context_timeout_001_1_001",
+      "entity_type": "replay_run",
+      "kind": "replay_run_completed",
+      "metadata": {
+        "check_spec_id": "check_proposal_context_timeout_001_1",
+        "mode": "dry_run"
+      },
+      "profile_id": "profile_news_research_001",
+      "source_id": "source_kyoko_profile_news_research_001"
+    },
+    {
+      "agent_identity_id": null,
+      "entity_id": "replay_check_proposal_context_timeout_001_1_001",
+      "entity_type": "replay_run",
+      "kind": "replay_run_fixture_completed",
+      "metadata": {
+        "check_spec_id": "check_proposal_context_timeout_001_1",
+        "output_run_id": "run_research_topic_replay_001"
+      },
+      "profile_id": "profile_news_research_001",
+      "source_id": "source_kyoko_profile_news_research_001"
+    }
+  ]
+}

@@ -1,0 +1,101 @@
+{
+  "artifact_exists": {
+    "db_path": true,
+    "source_adapter_path": true,
+    "source_hook_path": true
+  },
+  "db_path": "<TMP>/kyoko.db",
+  "external_model_invoked": false,
+  "flags": {
+    "generated_source_adapter_invoked": true,
+    "installed_framework_invoked": true,
+    "live_operator_invoked": false
+  },
+  "framework": "langgraph-python",
+  "framework_package": "langgraph",
+  "framework_version": "9.9.0",
+  "kind": "installed_framework_source_smoke",
+  "output_dir": "<OUTPUT_DIR>",
+  "passed": true,
+  "paths": {
+    "source_adapter_path": "<OUTPUT_DIR>/source/kyoko_source_adapter.py",
+    "source_hook_path": "<OUTPUT_DIR>/hooks/source_hook.py",
+    "workspace_root": "<OUTPUT_DIR>/workspace"
+  },
+  "python_executable": "<PYTHON>",
+  "source_smoke": {
+    "adapter_path": "<OUTPUT_DIR>/source/kyoko_source_adapter.py",
+    "artifact_exists": {
+      "db_path": true,
+      "source_events_path": true,
+      "stderr_path": true,
+      "stdout_path": true
+    },
+    "db_path": "<TMP>/kyoko.db",
+    "exit_code": 0,
+    "hook": "<OUTPUT_DIR>/hooks/source_hook.py:collect",
+    "ingested_counts": {
+      "agent_identities": 1,
+      "handoffs": 0,
+      "payload_blobs": 6,
+      "profiles": 1,
+      "queues": 0,
+      "runs": 1,
+      "sources": 1,
+      "spans": 2,
+      "task_attempts": 0,
+      "tasks": 0,
+      "timeline_events": 0,
+      "workflow_nodes": 1
+    },
+    "kind": "source_adapter",
+    "output_dir": "<OUTPUT_DIR>/source-smoke",
+    "paths": {
+      "source_events_path": "<OUTPUT_DIR>/source-smoke/source-events.json",
+      "stderr_path": "<OUTPUT_DIR>/source-smoke/source-adapter.stderr.txt",
+      "stdout_path": "<OUTPUT_DIR>/source-smoke/source-adapter.stdout.txt"
+    },
+    "profile_id": "profile_installed_langgraph_smoke",
+    "status": {
+      "counts": {
+        "agent_identities": 1,
+        "analysis_schedules": 0,
+        "autonomy_policies": 1,
+        "check_locks": 0,
+        "check_runs": 0,
+        "check_specs": 0,
+        "context_delivery_rule_revisions": 0,
+        "context_delivery_rules": 0,
+        "handoffs": 0,
+        "harness_target_locks": 0,
+        "learning_proposals": 0,
+        "operator_adapters": 0,
+        "operator_runs": 0,
+        "patch_transactions": 0,
+        "payload_blobs": 4,
+        "profiles": 1,
+        "queues": 0,
+        "replay_adapters": 0,
+        "replay_runs": 0,
+        "runs": 1,
+        "skill_revisions": 0,
+        "skills": 0,
+        "sources": 1,
+        "spans": 2,
+        "task_attempts": 0,
+        "tasks": 0,
+        "timeline_events": 0,
+        "workflow_nodes": 1
+      },
+      "db_path": "<TMP>/kyoko.db",
+      "schema_version": 34
+    }
+  },
+  "status_counts": {
+    "agent_identities": 1,
+    "runs": 1,
+    "sources": 1,
+    "spans": 2,
+    "workflow_nodes": 1
+  }
+}

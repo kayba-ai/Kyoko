@@ -1,0 +1,12 @@
+{
+  "blob_id_prefix": [
+    "blob",
+    "sha256"
+  ],
+  "blob_id_present": true,
+  "created": true,
+  "path_contract": "<BLOB_PATH>",
+  "path_exists": true,
+  "sha256_length": 64,
+  "size_bytes": 21
+}

@@ -1,0 +1,160 @@
+{
+  "command_path": "<REPO>/kyoko/ace_legacy_smoke_command.py",
+  "db_path": "<DB_PATH>",
+  "external_command_invoked": true,
+  "external_model_invoked": false,
+  "installed_ace_package_invoked": true,
+  "kind": "legacy_ace_offline_adapter_smoke",
+  "live_operator_invoked": false,
+  "native_run": {
+    "after_path": {
+      "exists": true,
+      "path": "<OUTPUT_DIR>/after.skillbook.json"
+    },
+    "before_path": {
+      "exists": true,
+      "path": "<OUTPUT_DIR>/before.skillbook.json"
+    },
+    "canonical_mutation": false,
+    "command": [
+      "<PYTHON>",
+      "<REPO>/kyoko/ace_legacy_smoke_command.py"
+    ],
+    "command_path_matches": true,
+    "db_path": "<DB_PATH>",
+    "diff": {
+      "persisted": true,
+      "profile_id": "profile_news_research_001",
+      "proposal_ids": [
+        "proposal_native_ace_0104b82d6694"
+      ],
+      "proposal_paths": [
+        {
+          "exists": true,
+          "path": "<OUTPUT_DIR>/proposal_native_ace_0104b82d6694.json"
+        }
+      ],
+      "proposals": [
+        {
+          "confidence": 0.72,
+          "created_at_present": true,
+          "evidence_refs": [
+            {
+              "entity_id": "span_fetch_timeout_001",
+              "entity_type": "span",
+              "role": "failure"
+            },
+            {
+              "entity_id": "run_research_topic_001",
+              "entity_type": "run",
+              "role": "failure"
+            }
+          ],
+          "gate_expectations": {
+            "allowed_autonomy_section": "context",
+            "notes": "Native ACE changes are imported as proposals; Kyoko owns validation, check/replay gates, and final writes.",
+            "requires_check_level": "L1_repeated",
+            "requires_human_review": false,
+            "requires_replay": true
+          },
+          "id": "proposal_native_ace_0104b82d6694",
+          "insight": "Retry transient fetch timeouts once with the same request before treating the task as a final failure or handing it off.",
+          "problem": {
+            "issue": "Fetch timeouts are treated as final failures.",
+            "root_cause": "Derived from a native ACE Skillbook diff.",
+            "severity": "medium",
+            "target": {
+              "entity_id": "profile_news_research_001",
+              "entity_type": "profile",
+              "name": "profile_news_research_001"
+            }
+          },
+          "producer": {
+            "kind": "native_ace",
+            "name": "legacy_ace_offline_adapter"
+          },
+          "profile_id": "profile_news_research_001",
+          "proposed_changes": [
+            {
+              "insight": "Retry transient fetch timeouts once with the same request before treating the task as a final failure or handing it off.",
+              "issue": "Fetch timeouts are treated as final failures.",
+              "keywords": [
+                "fetch",
+                "timeout",
+                "retry",
+                "native-ace"
+              ],
+              "occurrence_refs": [
+                {
+                  "entity_id": "span_fetch_timeout_001",
+                  "entity_type": "span",
+                  "role": "failure"
+                },
+                {
+                  "entity_id": "run_research_topic_001",
+                  "entity_type": "run",
+                  "role": "failure"
+                }
+              ],
+              "operation": "create",
+              "section": "context",
+              "skill_id": "context_legacy_ace_offline_00001",
+              "type": "skillbook_update"
+            },
+            {
+              "definition": {
+                "assertions": [
+                  {
+                    "type": "target_status_not_failed"
+                  },
+                  {
+                    "type": "replay_no_failed_spans"
+                  }
+                ],
+                "expect": "The replay target does not fail and the output trace has no failed spans.",
+                "given": "Replay the source evidence after the ACE-derived learning change.",
+                "operation": "create",
+                "source": "native_ace_diff"
+              },
+              "check_type": "deterministic_assertion",
+              "name": "Regression replay for ace create for context skill",
+              "side_effect_mode": "network_mocked",
+              "trust_level": "L0_generated",
+              "type": "check_spec"
+            }
+          ],
+          "schema_version": "kyoko.learning_proposal.v1",
+          "section": "context",
+          "state": "pending",
+          "summary": "ACE mutated a cloned Skillbook and Kyoko converted the create diff into a gated LearningProposal.",
+          "title": "ACE create for context skill"
+        }
+      ],
+      "unsupported_changes": []
+    },
+    "external_command_invoked": true,
+    "live_operator_invoked": false,
+    "output_dir": "<OUTPUT_DIR>",
+    "passed": true,
+    "profile_id": "profile_news_research_001",
+    "proposal_output_dir": "<OUTPUT_DIR>/proposals",
+    "returncode": 0,
+    "stderr_path": {
+      "exists": true,
+      "path": "<OUTPUT_DIR>/ace-command.stderr.txt"
+    },
+    "stderr_tail": "",
+    "stdout_path": {
+      "exists": true,
+      "path": "<OUTPUT_DIR>/ace-command.stdout.txt"
+    },
+    "stdout_tail_contains_command_kind": true,
+    "timeout_seconds": 60,
+    "used_temporary_output_dir": false
+  },
+  "output_dir": "<OUTPUT_DIR>",
+  "passed": true,
+  "profile_id": "profile_news_research_001",
+  "provider_backed": false,
+  "source_fixture_path": "<REPO>/kyoko/assets/source-events/hermes-news-research-minimal.json"
+}

@@ -1,0 +1,98 @@
+{
+  "candidates": [
+    {
+      "exists": false,
+      "id": "hermes_default",
+      "import_command_args": [
+        "python3",
+        "-m",
+        "kyoko",
+        "import-hermes-kanban",
+        "--db",
+        "<DB_PATH>",
+        "<HOME>/.hermes/kanban.db",
+        "--board",
+        "default",
+        "--profile-id",
+        "profile_discovery_contract",
+        "--profile-name",
+        "Discovery Contract",
+        "--root-path",
+        "<ROOT_PATH>",
+        "--json"
+      ],
+      "kind": "hermes_kanban",
+      "label": "Hermes Kanban (default)",
+      "metadata": {
+        "board": "default",
+        "default_path": true
+      },
+      "path": "<HOME>/.hermes/kanban.db",
+      "status": "missing"
+    },
+    {
+      "exists": true,
+      "id": "hermes_news",
+      "import_command_args": [
+        "python3",
+        "-m",
+        "kyoko",
+        "import-hermes-kanban",
+        "--db",
+        "<DB_PATH>",
+        "<HOME>/.hermes/kanban/boards/news/kanban.db",
+        "--board",
+        "news",
+        "--profile-id",
+        "profile_discovery_contract",
+        "--profile-name",
+        "Discovery Contract",
+        "--root-path",
+        "<ROOT_PATH>",
+        "--json"
+      ],
+      "kind": "hermes_kanban",
+      "label": "Hermes Kanban (news)",
+      "metadata": {
+        "board": "news",
+        "default_path": false
+      },
+      "path": "<HOME>/.hermes/kanban/boards/news/kanban.db",
+      "status": "ready"
+    },
+    {
+      "exists": true,
+      "id": "openclaw_main",
+      "import_command_args": [
+        "python3",
+        "-m",
+        "kyoko",
+        "import-openclaw-sessions",
+        "--db",
+        "<DB_PATH>",
+        "<HOME>/.openclaw/agents/main/sessions",
+        "--agent-id",
+        "main",
+        "--profile-id",
+        "profile_discovery_contract",
+        "--profile-name",
+        "Discovery Contract",
+        "--root-path",
+        "<ROOT_PATH>",
+        "--json"
+      ],
+      "kind": "openclaw_sessions",
+      "label": "OpenClaw sessions (main)",
+      "metadata": {
+        "agent_id": "main",
+        "session_count": 1,
+        "sessions_json": "<HOME>/.openclaw/agents/main/sessions/sessions.json",
+        "transcript_count": 1
+      },
+      "path": "<HOME>/.openclaw/agents/main/sessions",
+      "status": "ready"
+    }
+  ],
+  "db_path": "<DB_PATH>",
+  "home": "<HOME>"
+}

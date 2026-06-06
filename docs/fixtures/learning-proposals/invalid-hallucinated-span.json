@@ -1,0 +1,59 @@
+{
+  "schema_version": "kyoko.learning_proposal.v1",
+  "id": "proposal_invalid_hallucinated_span_001",
+  "profile_id": "profile_news_research_001",
+  "producer": {
+    "kind": "operator_agent",
+    "name": "codex",
+    "agent_identity_id": "agent_operator_codex_001",
+    "session_id": "codex_session_bad_001"
+  },
+  "state": "pending",
+  "section": "context",
+  "title": "Invalid proposal that cites missing evidence",
+  "summary": "This fixture is schema-valid but must fail semantic validation because the span ID does not exist in the fixture source data.",
+  "confidence": 0.91,
+  "evidence_refs": [
+    {
+      "entity_type": "span",
+      "entity_id": "span_does_not_exist_999",
+      "role": "failure",
+      "note": "Hallucinated span ID."
+    }
+  ],
+  "problem": {
+    "issue": "The operator cited evidence that does not exist.",
+    "severity": "high",
+    "target": {
+      "entity_type": "agent_identity",
+      "entity_id": "agent_researcher_001",
+      "name": "researcher"
+    }
+  },
+  "insight": "Reject proposals that cite missing evidence before they reach check or autonomy gates.",
+  "proposed_changes": [
+    {
+      "type": "skillbook_update",
+      "operation": "create",
+      "section": "context",
+      "issue": "Missing evidence was cited.",
+      "insight": "Semantic validation must reject hallucinated evidence IDs.",
+      "keywords": ["validation", "evidence"],
+      "occurrence_refs": [
+        {
+          "entity_type": "span",
+          "entity_id": "span_does_not_exist_999",
+          "role": "failure"
+        }
+      ]
+    }
+  ],
+  "gate_expectations": {
+    "requires_human_review": true,
+    "requires_check_level": "L1_repeated",
+    "requires_replay": false,
+    "allowed_autonomy_section": "none",
+    "notes": "Expected semantic validation error: evidence_ref_not_found."
+  },
+  "created_at": "2026-05-31T12:05:00Z"
+}

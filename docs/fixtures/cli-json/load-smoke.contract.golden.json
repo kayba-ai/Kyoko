@@ -1,0 +1,264 @@
+{
+  "db_path": "<DB_PATH>",
+  "duration_ms_positive": true,
+  "errors": [],
+  "latency_ms": {
+    "count": 14.0,
+    "max_nonnegative": true,
+    "min_nonnegative": true,
+    "ordered": true,
+    "p50_nonnegative": true,
+    "p95_nonnegative": true
+  },
+  "operation_latency_ms": {
+    "checks": {
+      "count": 1.0,
+      "max_nonnegative": true,
+      "min_nonnegative": true,
+      "ordered": true,
+      "p50_nonnegative": true,
+      "p95_nonnegative": true
+    },
+    "context": {
+      "count": 1.0,
+      "max_nonnegative": true,
+      "min_nonnegative": true,
+      "ordered": true,
+      "p50_nonnegative": true,
+      "p95_nonnegative": true
+    },
+    "context_rules": {
+      "count": 1.0,
+      "max_nonnegative": true,
+      "min_nonnegative": true,
+      "ordered": true,
+      "p50_nonnegative": true,
+      "p95_nonnegative": true
+    },
+    "evidence_summary": {
+      "count": 1.0,
+      "max_nonnegative": true,
+      "min_nonnegative": true,
+      "ordered": true,
+      "p50_nonnegative": true,
+      "p95_nonnegative": true
+    },
+    "harness_locks": {
+      "count": 1.0,
+      "max_nonnegative": true,
+      "min_nonnegative": true,
+      "ordered": true,
+      "p50_nonnegative": true,
+      "p95_nonnegative": true
+    },
+    "policy": {
+      "count": 1.0,
+      "max_nonnegative": true,
+      "min_nonnegative": true,
+      "ordered": true,
+      "p50_nonnegative": true,
+      "p95_nonnegative": true
+    },
+    "proposals": {
+      "count": 1.0,
+      "max_nonnegative": true,
+      "min_nonnegative": true,
+      "ordered": true,
+      "p50_nonnegative": true,
+      "p95_nonnegative": true
+    },
+    "redaction_policy": {
+      "count": 1.0,
+      "max_nonnegative": true,
+      "min_nonnegative": true,
+      "ordered": true,
+      "p50_nonnegative": true,
+      "p95_nonnegative": true
+    },
+    "retention_dry_run": {
+      "count": 1.0,
+      "max_nonnegative": true,
+      "min_nonnegative": true,
+      "ordered": true,
+      "p50_nonnegative": true,
+      "p95_nonnegative": true
+    },
+    "run_detail": {
+      "count": 1.0,
+      "max_nonnegative": true,
+      "min_nonnegative": true,
+      "ordered": true,
+      "p50_nonnegative": true,
+      "p95_nonnegative": true
+    },
+    "runs": {
+      "count": 1.0,
+      "max_nonnegative": true,
+      "min_nonnegative": true,
+      "ordered": true,
+      "p50_nonnegative": true,
+      "p95_nonnegative": true
+    },
+    "skills": {
+      "count": 1.0,
+      "max_nonnegative": true,
+      "min_nonnegative": true,
+      "ordered": true,
+      "p50_nonnegative": true,
+      "p95_nonnegative": true
+    },
+    "status": {
+      "count": 1.0,
+      "max_nonnegative": true,
+      "min_nonnegative": true,
+      "ordered": true,
+      "p50_nonnegative": true,
+      "p95_nonnegative": true
+    },
+    "storage_report": {
+      "count": 1.0,
+      "max_nonnegative": true,
+      "min_nonnegative": true,
+      "ordered": true,
+      "p50_nonnegative": true,
+      "p95_nonnegative": true
+    }
+  },
+  "parameters": {
+    "checkpoint_mode": "TRUNCATE",
+    "expired_blob_count": 1,
+    "max_p95_ms": null,
+    "read_iterations": 1,
+    "read_workers": 1,
+    "run_count": 4,
+    "sample_run_id": "run_load_0003",
+    "seeded_counts": {
+      "agent_identities": 2,
+      "handoffs": 1,
+      "profiles": 1,
+      "queues": 1,
+      "runs": 4,
+      "sources": 1,
+      "spans": 8,
+      "task_attempts": 4,
+      "tasks": 4,
+      "timeline_events": 5,
+      "workflow_nodes": 2
+    },
+    "spans_per_run": 2
+  },
+  "passed": true,
+  "profile_id": "profile_load_smoke",
+  "retention_dry_run": {
+    "cutoff": null,
+    "dry_run": true,
+    "pruned_blobs": [
+      {
+        "blob_id_prefix": [
+          "blob",
+          "sha256"
+        ],
+        "blob_id_present": true,
+        "path_contract": "<BLOB_PATH>",
+        "path_exists": true,
+        "reason": "expired",
+        "size_bytes": 20
+      }
+    ],
+    "pruned_bytes": 20
+  },
+  "seeded": true,
+  "status": {
+    "counts": {
+      "agent_identities": 2,
+      "analysis_schedules": 0,
+      "autonomy_policies": 1,
+      "check_locks": 0,
+      "check_runs": 0,
+      "check_specs": 0,
+      "context_delivery_rule_revisions": 0,
+      "context_delivery_rules": 0,
+      "handoffs": 1,
+      "harness_target_locks": 0,
+      "learning_proposals": 0,
+      "operator_adapters": 0,
+      "operator_runs": 0,
+      "patch_transactions": 0,
+      "payload_blobs": 1,
+      "profiles": 1,
+      "queues": 1,
+      "replay_adapters": 0,
+      "replay_runs": 0,
+      "runs": 4,
+      "skill_revisions": 0,
+      "skills": 0,
+      "sources": 1,
+      "spans": 8,
+      "task_attempts": 4,
+      "tasks": 4,
+      "timeline_events": 5,
+      "workflow_nodes": 2
+    },
+    "db_path": "<DB_PATH>",
+    "initialized": true,
+    "migration_versions": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      33,
+      34
+    ],
+    "schema_version": 34
+  },
+  "storage": {
+    "blob_root": "<BLOB_ROOT>",
+    "db_path": "<DB_PATH>",
+    "db_size_bytes_positive": true,
+    "missing_blobs": [],
+    "orphan_files": [],
+    "registered_blob_bytes": 20,
+    "registered_blobs": 1,
+    "wal_size_bytes_nonnegative": true
+  },
+  "temporary": false,
+  "total_read_operations": 14,
+  "wal_checkpoint": {
+    "busy": 0,
+    "checkpointed_frames_nonnegative": true,
+    "db_path": "<DB_PATH>",
+    "log_frames_nonnegative": true,
+    "mode": "TRUNCATE",
+    "wal_path": "<TMP>/kyoko.db-wal",
+    "wal_size_after_nonnegative": true,
+    "wal_size_before_nonnegative": true
+  }
+}

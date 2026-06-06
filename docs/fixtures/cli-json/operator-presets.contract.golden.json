@@ -1,0 +1,68 @@
+{
+  "operator_presets": [
+    {
+      "adapter_id": "codex",
+      "command": [
+        "codex",
+        "exec",
+        "--sandbox",
+        "read-only",
+        "--skip-git-repo-check",
+        "--ephemeral",
+        "--color",
+        "never",
+        "-"
+      ],
+      "name": "Codex",
+      "note": "Uses local Codex auth/subscription, reads the Kyoko prompt from stdin, and runs in read-only mode.",
+      "operator_kind": "codex"
+    },
+    {
+      "adapter_id": "claude",
+      "command": [
+        "claude",
+        "--print",
+        "--input-format",
+        "text",
+        "--output-format",
+        "text",
+        "--permission-mode",
+        "dontAsk",
+        "--allowedTools",
+        "Read",
+        "--no-session-persistence"
+      ],
+      "name": "Claude Code",
+      "note": "Uses local Claude Code auth/subscription, reads the Kyoko prompt from stdin, and only allows the Read tool.",
+      "operator_kind": "claude"
+    },
+    {
+      "adapter_id": "hermes",
+      "command": [
+        "hermes",
+        "-z",
+        "{prompt}"
+      ],
+      "name": "Hermes",
+      "note": "Uses local Hermes auth/subscription and passes the inline Kyoko prompt through one-shot mode.",
+      "operator_kind": "hermes"
+    },
+    {
+      "adapter_id": "openclaw",
+      "command": [
+        "openclaw",
+        "agent",
+        "--agent",
+        "main",
+        "--local",
+        "--message",
+        "{prompt}",
+        "--timeout",
+        "120"
+      ],
+      "name": "OpenClaw",
+      "note": "Uses local OpenClaw mode with the main agent and passes the inline Kyoko prompt as the message.",
+      "operator_kind": "openclaw"
+    }
+  ]
+}

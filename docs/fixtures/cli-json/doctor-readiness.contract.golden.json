@@ -1,0 +1,373 @@
+{
+  "bundled_assets": [
+    "source-events/hermes-news-research-minimal.json",
+    "learning-proposals/hermes-one-shot-proposal.json",
+    "learning-proposals/invalid-hallucinated-span.json",
+    "learning-proposals/openclaw-local-operator-proposal.json",
+    "learning-proposals/valid-context-proposal.json",
+    "learning-proposals/valid-harness-generated-file-proposal.json",
+    "learning-proposals/valid-harness-proposal.json",
+    "replay-results/researcher-fetch-timeout-success.json",
+    "schemas/learning-proposal.schema.json"
+  ],
+  "checks": [
+    {
+      "detail_keys": [
+        "executable",
+        "required"
+      ],
+      "id": "python",
+      "status": "pass"
+    },
+    {
+      "detail_keys": [
+        "db_path",
+        "temporary"
+      ],
+      "id": "sqlite",
+      "status": "pass"
+    },
+    {
+      "detail_keys": [
+        "package"
+      ],
+      "id": "jsonschema",
+      "status": "pass"
+    },
+    {
+      "detail_keys": [
+        "assets"
+      ],
+      "id": "bundled_assets",
+      "status": "pass"
+    },
+    {
+      "detail_keys": [
+        "module"
+      ],
+      "id": "fixture_replay",
+      "status": "pass"
+    },
+    {
+      "detail_keys": [
+        "module"
+      ],
+      "id": "fixture_replay_server",
+      "status": "pass"
+    },
+    {
+      "detail_keys": [
+        "module_version",
+        "name",
+        "source",
+        "version"
+      ],
+      "id": "package_metadata",
+      "status": "pass"
+    },
+    {
+      "detail_keys": [
+        "commands"
+      ],
+      "id": "operator_commands",
+      "status": "pass"
+    },
+    {
+      "detail_keys": [
+        "bootstrap_required_targets",
+        "build_backend_install_commands",
+        "build_backend_reasons",
+        "matrix_command",
+        "missing_targets",
+        "ready_matrix_command",
+        "ready_targets",
+        "targets",
+        "unready_targets"
+      ],
+      "id": "release_python_targets",
+      "status": "pass"
+    },
+    {
+      "detail_keys": [
+        "clients",
+        "matrix_command"
+      ],
+      "id": "mcp_clients",
+      "status": "pass"
+    },
+    {
+      "detail_keys": [
+        "host",
+        "port"
+      ],
+      "id": "serve_port",
+      "status": "pass"
+    }
+  ],
+  "ok": true,
+  "readiness": {
+    "blocking_checks": [],
+    "external_evidence_warnings": [],
+    "local_runtime_ready": true,
+    "local_v0_ready": false,
+    "pending_external_evidence_commands": [
+      "operator_smoke_live_installed_presets",
+      "operator_smoke_live_expected_failure_installed_presets",
+      "judge_smoke_live_provider_backed",
+      "mcp_install_smoke_matrix"
+    ],
+    "pending_safe_smoke_checks": [
+      "demo_smoke",
+      "operator_smoke_prepare",
+      "judge_smoke_prepare",
+      "ace_native_prepare",
+      "integration_smoke",
+      "improve_smoke",
+      "mcp_install_smoke"
+    ],
+    "safe_smokes_complete": false,
+    "satisfied_external_evidence_commands": [],
+    "warning_checks": []
+  },
+  "release_python_targets": {
+    "bootstrap_required_targets": [
+      "3.13"
+    ],
+    "build_backend_install_commands": {},
+    "build_backend_reasons": {
+      "3.12": null,
+      "3.13": "python_build_backend_unavailable:setuptools.build_meta"
+    },
+    "missing_targets": [],
+    "ready_matrix_command": "python3 -m kyoko release-smoke --python-target 3.12 --python-target 3.13 --artifact both --json",
+    "ready_targets": [
+      "3.12",
+      "3.13"
+    ],
+    "unready_targets": {}
+  },
+  "suggested_commands": [
+    {
+      "cli_args": [
+        "python3",
+        "-m",
+        "kyoko",
+        "doctor",
+        "--safe-smokes",
+        "--json"
+      ],
+      "intent": "doctor_safe_smokes",
+      "mutating": false,
+      "requires": []
+    },
+    {
+      "cli_args": [
+        "python3",
+        "-m",
+        "kyoko",
+        "doctor",
+        "--smoke-demo",
+        "--json"
+      ],
+      "intent": "doctor_smoke_demo",
+      "mutating": false,
+      "requires": []
+    },
+    {
+      "cli_args": [
+        "python3",
+        "-m",
+        "kyoko",
+        "doctor",
+        "--operator-smoke-prepare",
+        "--json"
+      ],
+      "intent": "doctor_operator_smoke_prepare",
+      "mutating": false,
+      "requires": []
+    },
+    {
+      "cli_args": [
+        "python3",
+        "-m",
+        "kyoko",
+        "doctor",
+        "--judge-smoke-prepare",
+        "--json"
+      ],
+      "intent": "doctor_judge_smoke_prepare",
+      "mutating": false,
+      "requires": []
+    },
+    {
+      "cli_args": [
+        "python3",
+        "-m",
+        "kyoko",
+        "doctor",
+        "--ace-native-prepare",
+        "--json"
+      ],
+      "intent": "doctor_ace_native_prepare",
+      "mutating": false,
+      "requires": []
+    },
+    {
+      "cli_args": [
+        "python3",
+        "-m",
+        "kyoko",
+        "doctor",
+        "--integration-smoke",
+        "--json"
+      ],
+      "intent": "doctor_integration_smoke",
+      "mutating": false,
+      "requires": []
+    },
+    {
+      "cli_args": [
+        "python3",
+        "-m",
+        "kyoko",
+        "doctor",
+        "--improve-smoke",
+        "--json"
+      ],
+      "intent": "doctor_improve_smoke",
+      "mutating": false,
+      "requires": []
+    },
+    {
+      "cli_args": [
+        "python3",
+        "-m",
+        "kyoko",
+        "doctor",
+        "--opentelemetry-smoke",
+        "--json"
+      ],
+      "intent": "doctor_opentelemetry_smoke",
+      "mutating": false,
+      "requires": [
+        "Python environment with opentelemetry-sdk installed",
+        "no live model provider is invoked"
+      ]
+    },
+    {
+      "cli_args": [
+        "python3",
+        "-m",
+        "kyoko",
+        "doctor",
+        "--ace-native-smoke",
+        "--json"
+      ],
+      "intent": "doctor_ace_native_smoke",
+      "mutating": false,
+      "requires": [
+        "installed ace-framework package exposing the Skillbook v2 API",
+        "no live model provider is invoked"
+      ]
+    },
+    {
+      "cli_args": [
+        "python3",
+        "-m",
+        "kyoko",
+        "doctor",
+        "--dashboard-smoke",
+        "--json"
+      ],
+      "intent": "doctor_dashboard_smoke",
+      "mutating": false,
+      "requires": [
+        "Python Playwright, or Node.js with @playwright/test already installed",
+        "use --dashboard-smoke-install-browser-deps to install isolated browser test dependencies under --smoke-output-dir",
+        "no live model provider is invoked"
+      ]
+    },
+    {
+      "cli_args": [
+        "python3",
+        "-m",
+        "kyoko",
+        "operator-smoke",
+        "--all-presets",
+        "--output-dir",
+        ".kyoko/smoke/operator-live",
+        "--json"
+      ],
+      "intent": "operator_smoke_live_installed_presets",
+      "mutating": true,
+      "requires": [
+        "installed/authenticated operator CLI: claude, codex",
+        "invokes live operator model/subscription",
+        "writes smoke artifacts under .kyoko/smoke/operator-live"
+      ]
+    },
+    {
+      "cli_args": [
+        "python3",
+        "-m",
+        "kyoko",
+        "operator-smoke",
+        "--all-presets",
+        "--expect-failure",
+        "--output-dir",
+        ".kyoko/smoke/operator-failure-live",
+        "--json"
+      ],
+      "intent": "operator_smoke_live_expected_failure_installed_presets",
+      "mutating": true,
+      "requires": [
+        "installed/authenticated operator CLI: claude, codex",
+        "invokes live operator model/subscription",
+        "writes smoke artifacts under .kyoko/smoke/operator-failure-live",
+        "passes only when the expected failure kind is captured"
+      ]
+    },
+    {
+      "cli_args": [
+        "python3",
+        "-m",
+        "kyoko",
+        "judge-smoke",
+        "--command",
+        "python /path/to/provider-judge.py",
+        "--provider-backed",
+        "--output-dir",
+        ".kyoko/smoke/judge-provider-live",
+        "--json"
+      ],
+      "intent": "judge_smoke_live_provider_backed",
+      "mutating": true,
+      "requires": [
+        "user-supplied provider/model-backed judge command",
+        "invokes the configured judge provider/model",
+        "writes smoke artifacts under .kyoko/smoke/judge-provider-live"
+      ]
+    },
+    {
+      "cli_args": [
+        "python3",
+        "-m",
+        "kyoko",
+        "mcp",
+        "install-smoke",
+        "--all-targets",
+        "--json"
+      ],
+      "intent": "mcp_install_smoke_matrix",
+      "mutating": false,
+      "requires": [
+        "installed Codex or Claude CLI for non-skipped targets"
+      ]
+    }
+  ],
+  "summary": {
+    "failed": 0,
+    "passed": 11,
+    "warnings": 0
+  }
+}

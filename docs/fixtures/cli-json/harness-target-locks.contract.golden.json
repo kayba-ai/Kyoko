@@ -1,0 +1,14 @@
+{
+  "harness_target_locks": [
+    {
+      "human_locked": true,
+      "profile_id": "profile_news_research_001",
+      "reason": "manual owner review",
+      "target_path": "checks/generated_timeout_check.py",
+      "timestamps_present": {
+        "created_at": true,
+        "updated_at": true
+      }
+    }
+  ]
+}

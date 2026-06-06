@@ -1,0 +1,99 @@
+{
+  "after_initialized_from_before": true,
+  "after_path": {
+    "exists": true,
+    "path": "<OUTPUT_DIR>/after.skillbook.json"
+  },
+  "before_path": {
+    "exists": true,
+    "path": "<OUTPUT_DIR>/before.skillbook.json"
+  },
+  "before_schema_version": "2",
+  "before_skill_count": 0,
+  "canonical_mutation": false,
+  "command": [
+    "<PYTHON>",
+    "--after",
+    "<OUTPUT_DIR>/after.skillbook.json",
+    "--db",
+    "<DB_PATH>",
+    "--profile",
+    "profile_news_research_001",
+    "--schema",
+    "docs/schemas/learning-proposal.schema.json"
+  ],
+  "diff": null,
+  "environment": {
+    "KYOKO_ACE_AFTER_PATH": "<OUTPUT_DIR>/after.skillbook.json",
+    "KYOKO_ACE_BEFORE_PATH": "<OUTPUT_DIR>/before.skillbook.json",
+    "KYOKO_ACE_COMMAND_MODE": "clone_diff",
+    "KYOKO_ACE_DB_PATH": "<DB_PATH>",
+    "KYOKO_ACE_OUTPUT_DIR": "<OUTPUT_DIR>",
+    "KYOKO_ACE_PROFILE_ID": "profile_news_research_001",
+    "KYOKO_LEARNING_PROPOSAL_SCHEMA_PATH": "docs/schemas/learning-proposal.schema.json"
+  },
+  "environment_keys": [
+    "KYOKO_ACE_AFTER_PATH",
+    "KYOKO_ACE_BEFORE_PATH",
+    "KYOKO_ACE_COMMAND_MODE",
+    "KYOKO_ACE_DB_PATH",
+    "KYOKO_ACE_OUTPUT_DIR",
+    "KYOKO_ACE_PROFILE_ID",
+    "KYOKO_LEARNING_PROPOSAL_SCHEMA_PATH"
+  ],
+  "expanded_command": [
+    "<PYTHON>",
+    "--after",
+    "<OUTPUT_DIR>/after.skillbook.json",
+    "--db",
+    "<DB_PATH>",
+    "--profile",
+    "profile_news_research_001",
+    "--schema",
+    "docs/schemas/learning-proposal.schema.json"
+  ],
+  "external_command_invoked": false,
+  "external_model_invoked": false,
+  "handoff_path": {
+    "exists": true,
+    "path": "<OUTPUT_DIR>/ace-command.handoff.json"
+  },
+  "include_inactive": false,
+  "live_operator_invoked": false,
+  "original_command": [
+    "<PYTHON>",
+    "--after",
+    "{after_path}",
+    "--db",
+    "{db_path}",
+    "--profile",
+    "{profile_id}",
+    "--schema",
+    "{schema_path}"
+  ],
+  "output_dir": "<OUTPUT_DIR>",
+  "passed": true,
+  "prepare_only": true,
+  "prepared": true,
+  "profile_id": "profile_news_research_001",
+  "proposal_output_dir": {
+    "exists": true,
+    "path": "<OUTPUT_DIR>/proposals"
+  },
+  "provider_backed": false,
+  "returncode": null,
+  "schema_path": "docs/schemas/learning-proposal.schema.json",
+  "shell_command_contains_output_dir": true,
+  "stderr_path": {
+    "exists": true,
+    "path": "<OUTPUT_DIR>/ace-command.stderr.txt"
+  },
+  "stderr_tail": "",
+  "stdout_path": {
+    "exists": true,
+    "path": "<OUTPUT_DIR>/ace-command.stdout.txt"
+  },
+  "stdout_tail": "",
+  "timeout_seconds": 120,
+  "used_temporary_output_dir": false
+}

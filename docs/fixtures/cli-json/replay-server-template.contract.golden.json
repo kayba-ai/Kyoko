@@ -1,0 +1,18 @@
+{
+  "artifact_exists": {
+    "output_path": true,
+    "output_path_executable": true
+  },
+  "framework": "langgraph-python",
+  "output_path": "<OUTPUT_DIR>/kyoko_replay_server.py",
+  "profile_name": "news-research",
+  "template_contract": {
+    "contains_framework": true,
+    "contains_health_handler": true,
+    "contains_profile_name": true,
+    "contains_replay_handler": true,
+    "contains_replay_hook_env": true,
+    "contains_result_schema": true
+  },
+  "wrote": true
+}
