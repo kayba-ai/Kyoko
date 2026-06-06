@@ -49,28 +49,17 @@ function ConfidenceRow({ label, value }: { label: string; value: number | null |
 function ProposalDetail({
   id,
   version,
-  onApplied,
+  applying,
+  applyError,
+  onApply,
 }: {
   id: string;
   version: number;
-  onApplied: () => void;
+  applying: boolean;
+  applyError: string | null;
+  onApply: () => void;
 }) {
   const { data, error, loading } = useApi<Record<string, unknown>>(() => api.proposalDetail(id), [id, version]);
-  const [applying, setApplying] = useState(false);
-  const [applyError, setApplyError] = useState<Error | null>(null);
-
-  async function apply() {
-    setApplying(true);
-    setApplyError(null);
-    try {
-      await api.applyProposal(id);
-      onApplied();
-    } catch (e) {
-      setApplyError(e instanceof Error ? e : new Error(String(e)));
-    } finally {
-      setApplying(false);
-    }
-  }
 
   if (loading)
     return (
@@ -121,14 +110,14 @@ function ProposalDetail({
                 Approving writes this change through the autonomy gate.
               </span>
             </div>
-            <Button variant="default" disabled={applying} onClick={apply}>
+            <Button variant="default" disabled={applying} onClick={onApply}>
               {applying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCheck className="h-3.5 w-3.5" />}
               Approve &amp; apply
             </Button>
           </div>
           {applyError && (
             <span className="text-xs text-danger" role="alert">
-              {applyError.message}
+              {applyError}
             </span>
           )}
         </div>
@@ -187,9 +176,27 @@ export function ProposalsPage() {
     }
   }, [linkedId, data, selected]);
 
-  function onApplied() {
-    setVersion((v) => v + 1);
-    reload();
+  // Gate #2 apply lives at the page level so each proposal in the list (the review queue)
+  // gets its own button, plus the detail's. Tracks the in-flight id and per-id error.
+  const [applyingId, setApplyingId] = useState<string | null>(null);
+  const [applyErrors, setApplyErrors] = useState<Record<string, string>>({});
+
+  async function apply(id: string) {
+    setApplyingId(id);
+    setApplyErrors((m) => {
+      const next = { ...m };
+      delete next[id];
+      return next;
+    });
+    try {
+      await api.applyProposal(id);
+      setVersion((v) => v + 1);
+      reload();
+    } catch (e) {
+      setApplyErrors((m) => ({ ...m, [id]: e instanceof Error ? e.message : String(e) }));
+    } finally {
+      setApplyingId(null);
+    }
   }
 
   function select(id: string) {
@@ -233,15 +240,23 @@ export function ProposalsPage() {
                 const sectionLabel = p.section_label ?? p.section;
                 const conf = pct(p.confidence);
                 const active = p.id === selected;
+                const pending = p.state === "pending";
+                const applyError = applyErrors[p.id];
                 return (
-                  <button
+                  <div
                     key={p.id}
                     onClick={() => select(p.id)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        select(p.id);
+                      }
+                    }}
                     className={cn(
-                      "w-full rounded-lg border p-3 text-left transition-colors",
-                      active
-                        ? "border-primary/40 bg-accent"
-                        : "border-transparent hover:bg-accent",
+                      "w-full cursor-pointer rounded-lg border p-3 text-left transition-colors",
+                      active ? "border-primary/40 bg-accent" : "border-transparent hover:bg-accent",
                     )}
                   >
                     <div className="mb-1.5 truncate text-sm font-medium text-foreground">{p.title}</div>
@@ -262,13 +277,45 @@ export function ProposalsPage() {
                       )}
                       <span className="ml-auto text-xs text-muted-foreground">{ago(p.created_at)}</span>
                     </div>
-                  </button>
+                    {pending && (
+                      <div className="mt-2.5">
+                        <Button
+                          variant="default"
+                          size="sm"
+                          className="w-full"
+                          disabled={applyingId === p.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            apply(p.id);
+                          }}
+                        >
+                          {applyingId === p.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <CheckCheck className="h-3.5 w-3.5" />
+                          )}
+                          Approve &amp; apply
+                        </Button>
+                        {applyError && (
+                          <span className="mt-1 block text-label text-danger" role="alert">
+                            {applyError}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>
             <div className="min-w-0 flex-1 overflow-y-auto p-6">
               {selected ? (
-                <ProposalDetail id={selected} version={version} onApplied={onApplied} />
+                <ProposalDetail
+                  id={selected}
+                  version={version}
+                  applying={applyingId === selected}
+                  applyError={applyErrors[selected] ?? null}
+                  onApply={() => apply(selected)}
+                />
               ) : (
                 <Empty title="Select a proposal" />
               )}
