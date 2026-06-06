@@ -290,6 +290,7 @@ def _surface_issues(
             title=str(issue.get("title") or "Surfaced agent failure"),
             body=issue.get("body") if isinstance(issue.get("body"), str) else None,
             section=section if section in ("context", "harness") else None,
+            category=issue.get("category") if isinstance(issue.get("category"), str) else None,
             severity=issue.get("severity") if isinstance(issue.get("severity"), str) else None,
             status=status,
             evidence_refs=evidence_refs,

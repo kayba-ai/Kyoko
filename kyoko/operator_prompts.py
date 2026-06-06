@@ -361,6 +361,7 @@ def build_diagnosis_prompt(
             "- Each item's `root_cause` is the diagnosis; do not include any fix, patch, or skill text.",
             "- `update`/`merge` may only target an OPEN issue id listed above — never an active skill id.",
             "- Set `section` to `context` when a prompt/skillbook fix would address it, or `harness` when it needs a check, test, replay adapter, tool wrapper, or repository patch.",
+            "- Set `category` to a short free-text domain/topic for the failure (e.g. `refund-policy`, `escalation`, `booking-change`) — this is the agent's task domain, NOT `context`/`harness`. Reuse the exact `category` of an existing open issue above when the failure is in the same domain so related issues group together; only coin a new label for a genuinely new domain.",
             "- If evidence is insufficient for a concrete failure, return an empty array `[]`.",
             "",
             "## Evidence Privacy And Audit",
@@ -490,6 +491,7 @@ def _issue_skeleton() -> dict[str, Any]:
         "op": "add",
         "title": "Short evidence-backed failure title",
         "section": "context",
+        "category": "free-text-domain-e.g.-refund-policy-escalation-booking-change",
         "root_cause": "Evidence-backed diagnosis of why the agent failed.",
         "severity": "medium",
         "evidence_refs": [
@@ -515,6 +517,7 @@ def _issue_update_skeleton() -> dict[str, Any]:
         "target_id": "issue_id_of_an_existing_open_issue_above",
         "title": "Refined failure title (or keep the existing one)",
         "section": "context",
+        "category": "free-text-domain-or-keep-the-existing-one",
         "root_cause": "Sharper, evidence-backed diagnosis that supersedes the prior one.",
         "evidence_refs": [
             {
@@ -560,9 +563,10 @@ def _skillbook_context_lines(
 
         issues = list_issues(db_path=db_path, profile_id=profile_id)
         open_issue_lines = [
-            "- `{id}` [{status}] recurrence={rec} {title}".format(
+            "- `{id}` [{status}] category=`{category}` recurrence={rec} {title}".format(
                 id=issue.get("id"),
                 status=issue.get("status"),
+                category=issue.get("category") or "—",
                 rec=issue.get("recurrence_count"),
                 title=issue.get("title"),
             )
