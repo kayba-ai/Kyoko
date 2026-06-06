@@ -1,14 +1,14 @@
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import {
   AlertTriangle,
   ArrowRight,
   CheckCircle2,
+  CircleDot,
   FlaskConical,
   GitPullRequestArrow,
   LayoutDashboard,
-  RotateCcw,
-  ShieldCheck,
+  ScanSearch,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Issue, IssueSeverity } from "@/lib/types";
@@ -124,8 +124,10 @@ function CategoryBar({ bucket, max }: { bucket: CategoryBucket; max: number }) {
   );
 }
 
-/** A compact, linkable outcome tile for the improvement-loop status strip. */
-function LoopCard({
+/** One stage of the optimisation pipeline: Analyse → Issues → Proposals → Evals.
+ *  Each tile links to its page and shows the live count at that stage. */
+function FlowStage({
+  step,
   to,
   icon,
   label,
@@ -133,6 +135,7 @@ function LoopCard({
   detail,
   tone = "neutral",
 }: {
+  step: number;
   to: string;
   icon: ReactNode;
   label: string;
@@ -143,16 +146,20 @@ function LoopCard({
   return (
     <Link
       to={to}
-      className="group rounded-xl border border-border bg-card p-4 shadow-xs transition-colors hover:bg-accent"
+      className="group flex flex-1 flex-col rounded-xl border border-border bg-card p-4 shadow-xs transition-colors hover:border-primary/40 hover:bg-accent"
     >
       <div className="flex items-center justify-between">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary [&>svg]:h-4 [&>svg]:w-4">
-          {icon}
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary [&>svg]:h-4 [&>svg]:w-4">
+            {icon}
+          </div>
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {step}. {label}
+          </span>
         </div>
-        <ArrowRight className="h-4 w-4 text-muted-foreground/50 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
+        <ArrowRight className="h-4 w-4 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
       </div>
       <div className={cn("mt-3 text-2xl font-semibold tabular-nums", TONE_TEXT[tone])}>{value}</div>
-      <div className="mt-0.5 text-sm font-medium text-foreground">{label}</div>
       <div className="truncate text-xs text-muted-foreground">{detail}</div>
     </Link>
   );
@@ -171,16 +178,20 @@ export function OverviewPage() {
 
   const m = (metrics.data ?? {}) as Record<string, unknown>;
   const runs = (m.runs ?? {}) as Record<string, unknown>;
-  const checks = (m.checks ?? {}) as Record<string, unknown>;
-  const replay = (m.replay ?? {}) as Record<string, unknown>;
-  const proposals = (m.issues ?? {}) as Record<string, unknown>; // learning_proposals counts
-  const autonomy = (m.autonomy ?? {}) as Record<string, unknown>;
-  const beforeAfter = (m.before_after ?? {}) as Record<string, unknown>;
+  const evals = (m.evals ?? {}) as Record<string, unknown>;
+  const proposalCounts = (m.issues ?? {}) as Record<string, unknown>; // learning_proposals counts
 
   const totalRuns = num(runs.total);
-  const failedRuns = num(runs.failed);
-  const failedSpans = num(runs.failed_spans);
-  const failRate = totalRuns > 0 ? (failedRuns / totalRuns) * 100 : null;
+
+  // Failure is dictated by the eval/measurement plane, never by a status flag on
+  // a trace — traces carry no verdict. The rate is failing evaluated runs over all
+  // evaluated runs; null (→ "not measured yet") until evals have actually run.
+  const evaluatedRuns = num(evals.evaluated_runs);
+  const failedRuns = num(evals.failed_runs);
+  const measureRuns = num(evals.measure_runs);
+  const evalDefinitions = num(evals.definitions);
+  const hasEvals = evaluatedRuns > 0;
+  const failRate = hasEvals ? (failedRuns / evaluatedRuns) * 100 : null;
   const tone = rateTone(failRate);
 
   const issues = (openIssues.data ?? []).filter(isUnresolvedIssue);
@@ -200,17 +211,53 @@ export function OverviewPage() {
     )
     .slice(0, 6);
 
-  const checkPassed = num(checks.passed);
-  const checkFailed = num(checks.failed);
-  const checkTotal = checkPassed + checkFailed;
-  const checkRate = checkTotal > 0 ? (checkPassed / checkTotal) * 100 : null;
+  const pendingProposals = num(proposalCounts.active);
 
-  const replayPassed = num(replay.passed);
-  const replayTotal = num(replay.total);
-  const verified = Boolean(beforeAfter.verified_replay_improvement);
-
-  const pendingProposals = num(proposals.active);
-  const autonomyDecisions = num(autonomy.decisions);
+  const stages: {
+    step: number;
+    to: string;
+    icon: ReactNode;
+    label: string;
+    value: string;
+    detail: string;
+    tone?: "neutral" | "ok" | "warn" | "danger";
+  }[] = [
+    {
+      step: 1,
+      to: "/analysis",
+      icon: <ScanSearch />,
+      label: "Analyse",
+      value: totalRuns.toLocaleString(),
+      detail: totalRuns > 0 ? "traces to analyse" : "no traces yet",
+    },
+    {
+      step: 2,
+      to: "/issues",
+      icon: <CircleDot />,
+      label: "Issues",
+      value: issues.length.toLocaleString(),
+      detail: issues.length > 0 ? "open to review" : "none open",
+      tone: issues.length > 0 ? "warn" : "neutral",
+    },
+    {
+      step: 3,
+      to: "/proposals",
+      icon: <GitPullRequestArrow />,
+      label: "Proposals",
+      value: pendingProposals.toLocaleString(),
+      detail: pendingProposals > 0 ? "pending approval" : "none pending",
+      tone: pendingProposals > 0 ? "warn" : "neutral",
+    },
+    {
+      step: 4,
+      to: "/detectors",
+      icon: <FlaskConical />,
+      label: "Evals",
+      value: hasEvals ? evaluatedRuns.toLocaleString() : measureRuns > 0 ? measureRuns.toLocaleString() : "—",
+      detail: hasEvals ? "runs scored" : `${evalDefinitions} configured · none run`,
+      tone: hasEvals ? (failedRuns > 0 ? "warn" : "ok") : "neutral",
+    },
+  ];
 
   const nothingYet = totalRuns === 0 && issues.length === 0 && !metrics.data;
 
@@ -218,7 +265,7 @@ export function OverviewPage() {
     <div className="flex h-full flex-col">
       <PageHeader
         title="Overview"
-        description="How often the agent fails and where the failures are concentrated."
+        description="How often the agent fails — measured by evals, not trace flags — and where failures concentrate."
         icon={<LayoutDashboard className="h-5 w-5" />}
       />
       <div className="flex-1 overflow-y-auto p-6">
@@ -236,72 +283,86 @@ export function OverviewPage() {
           />
         ) : (
           <div className="flex flex-col gap-6">
-            {/* Where the improvement loop stands — outcome-framed, each links onward. */}
+            {/* The optimisation pipeline: Analyse → Issues → Proposals → Evals.
+                Each stage links onward and shows its live count. */}
             <div>
-              <div className="mb-3 text-xs font-medium text-muted-foreground">Improvement loop</div>
-              <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-                <LoopCard
-                  to="/proposals"
-                  icon={<GitPullRequestArrow />}
-                  label="Proposals pending"
-                  value={pendingProposals.toLocaleString()}
-                  detail={pendingProposals > 0 ? "Awaiting review" : "Nothing to review"}
-                  tone={pendingProposals > 0 ? "warn" : "neutral"}
-                />
-                <LoopCard
-                  to="/checks"
-                  icon={<FlaskConical />}
-                  label="Check pass rate"
-                  value={fmtPercent(checkRate)}
-                  detail={checkTotal > 0 ? `${checkPassed} passed · ${checkFailed} failed` : "No checks run"}
-                  tone={checkRate === null ? "neutral" : checkRate >= 100 ? "ok" : "warn"}
-                />
-                <LoopCard
-                  to="/checks"
-                  icon={<RotateCcw />}
-                  label="Verified improvement"
-                  value={verified ? "Yes" : "Pending"}
-                  detail={replayTotal > 0 ? `${replayPassed} of ${replayTotal} replays passed` : "No replays yet"}
-                  tone={verified ? "ok" : "neutral"}
-                />
-                <LoopCard
-                  to="/autonomy"
-                  icon={<ShieldCheck />}
-                  label="Autonomy actions"
-                  value={autonomyDecisions.toLocaleString()}
-                  detail={autonomyDecisions > 0 ? "Gated decisions made" : "No actions yet"}
-                />
+              <div className="mb-3 text-xs font-medium text-muted-foreground">Optimisation pipeline</div>
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch">
+                {stages.map((s, i) => (
+                  <Fragment key={s.label}>
+                    <FlowStage
+                      step={s.step}
+                      to={s.to}
+                      icon={s.icon}
+                      label={s.label}
+                      value={s.value}
+                      detail={s.detail}
+                      tone={s.tone}
+                    />
+                    {i < stages.length - 1 && (
+                      <div className="flex items-center justify-center text-muted-foreground/40">
+                        <ArrowRight className="hidden h-5 w-5 lg:block" />
+                      </div>
+                    )}
+                  </Fragment>
+                ))}
               </div>
             </div>
 
-            {/* Hero: failure rate gets the prominence. */}
+            {/* Hero: the eval-driven failure rate gets the prominence. */}
             <Card>
               <CardBody className="flex flex-col gap-6 p-6 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex items-start gap-4">
                   <div
                     className={cn(
                       "flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl",
-                      tone === "danger"
-                        ? "bg-danger/10 text-danger"
-                        : tone === "warn"
-                          ? "bg-warn/10 text-warn"
-                          : "bg-ok/10 text-ok",
+                      !hasEvals
+                        ? "bg-muted text-muted-foreground"
+                        : tone === "danger"
+                          ? "bg-danger/10 text-danger"
+                          : tone === "warn"
+                            ? "bg-warn/10 text-warn"
+                            : "bg-ok/10 text-ok",
                     )}
                   >
-                    {tone === "ok" ? <CheckCircle2 className="h-6 w-6" /> : <AlertTriangle className="h-6 w-6" />}
+                    {!hasEvals ? (
+                      <FlaskConical className="h-6 w-6" />
+                    ) : tone === "ok" ? (
+                      <CheckCircle2 className="h-6 w-6" />
+                    ) : (
+                      <AlertTriangle className="h-6 w-6" />
+                    )}
                   </div>
                   <div>
-                    <div className="text-sm text-muted-foreground">Run failure rate</div>
-                    <div className={cn("text-5xl font-semibold tabular-nums tracking-tight", TONE_TEXT[tone])}>
-                      {fmtPercent(failRate)}
+                    <div className="text-sm text-muted-foreground">
+                      Run failure rate <span className="text-muted-foreground/60">· by evals</span>
                     </div>
-                    <div className="mt-1 text-sm text-muted-foreground">
-                      {failedRuns.toLocaleString()} of {totalRuns.toLocaleString()} runs failed
-                    </div>
+                    {hasEvals ? (
+                      <>
+                        <div className={cn("text-5xl font-semibold tabular-nums tracking-tight", TONE_TEXT[tone])}>
+                          {fmtPercent(failRate)}
+                        </div>
+                        <div className="mt-1 text-sm text-muted-foreground">
+                          {failedRuns.toLocaleString()} of {evaluatedRuns.toLocaleString()} evaluated runs failed their
+                          evals
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="text-3xl font-semibold tracking-tight text-foreground">Not measured yet</div>
+                        <div className="mt-1 max-w-md text-sm text-muted-foreground">
+                          A trace isn't a pass or fail on its own — run evaluations to measure how often the agent
+                          fails.{" "}
+                          <Link to="/detectors" className="font-medium text-primary hover:underline">
+                            Run evals →
+                          </Link>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-6 border-t border-border/70 pt-4 lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0">
-                  <MiniStat label="Failed spans" value={failedSpans.toLocaleString()} tone={failedSpans > 0 ? "danger" : "neutral"} />
+                  <MiniStat label="Evaluated runs" value={evaluatedRuns.toLocaleString()} />
                   <MiniStat label="Open issues" value={issues.length.toLocaleString()} tone={issues.length > 0 ? "warn" : "neutral"} />
                   <MiniStat label="High severity" value={highCount.toLocaleString()} tone={highCount > 0 ? "danger" : "neutral"} />
                 </div>

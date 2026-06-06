@@ -36,6 +36,7 @@ def get_dashboard_metrics(*, db_path: Path, profile_id: Optional[str] = None) ->
         issues = _issue_metrics(connection, selected_profile_id)
         checks = _check_metrics(connection, selected_profile_id)
         replay = _replay_metrics(connection, selected_profile_id)
+        evals = _eval_metrics(connection, selected_profile_id)
         autonomy = _autonomy_metrics(connection, selected_profile_id)
         before_after = {
             "latest_failed_run_id": runs["latest_failed"]["id"] if runs["latest_failed"] else None,
@@ -94,6 +95,7 @@ def get_dashboard_metrics(*, db_path: Path, profile_id: Optional[str] = None) ->
         "issues": issues,
         "checks": checks,
         "replay": replay,
+        "evals": evals,
         "autonomy": autonomy,
         "before_after": before_after,
     }
@@ -108,6 +110,15 @@ def _empty_metrics() -> dict[str, Any]:
         "runs": {"total": 0, "failed": 0, "failed_spans": 0, "latest": None, "latest_failed": None},
         "issues": {"total": 0, "active": 0, "by_state": {}, "by_section": {}},
         "checks": {"specs": 0, "runs": 0, "passed": 0, "failed": 0, "latest_status": "none"},
+        "evals": {
+            "definitions": 0,
+            "measure_runs": 0,
+            "scored_results": 0,
+            "notable_results": 0,
+            "evaluated_runs": 0,
+            "failed_runs": 0,
+            "failure_rate": None,
+        },
         "replay": {
             "total": 0,
             "passed": 0,
@@ -212,6 +223,90 @@ def _issue_metrics(connection: Any, profile_id: str) -> dict[str, Any]:
         "by_state": by_state,
         "by_section": by_section,
     }
+
+
+def _eval_metrics(connection: Any, profile_id: str) -> dict[str, Any]:
+    """Eval-driven run outcomes. A run's success/failure is dictated by the
+    measurement plane (judges/detectors), NOT by any status flag on the trace —
+    traces carry no verdict. The run failure rate is the fraction of evaluated
+    run-level units that tripped at least one eval's notable polarity.
+    """
+
+    rows = connection.execute(
+        """
+        SELECT r.unit_ref AS unit_ref, d.direction AS direction,
+               r.score_bool AS score_bool, r.score_numeric AS score_numeric,
+               d.severity_bands_json AS bands
+        FROM eval_measure_results r
+        JOIN eval_measure_runs mr ON mr.id = r.eval_run_id
+        JOIN eval_definitions d ON d.id = mr.eval_definition_id
+        WHERE r.profile_id = ?
+          AND r.unit_type = 'run'
+          AND r.status = 'scored'
+        """,
+        (profile_id,),
+    ).fetchall()
+
+    evaluated: set[str] = set()
+    failed: set[str] = set()
+    notable_results = 0
+    for row in rows:
+        unit_ref = str(row["unit_ref"])
+        evaluated.add(unit_ref)
+        if _is_notable(
+            str(row["direction"] or ""),
+            None if row["score_bool"] is None else bool(row["score_bool"]),
+            row["score_numeric"],
+            _json_loads(row["bands"], None),
+        ):
+            failed.add(unit_ref)
+            notable_results += 1
+
+    evaluated_runs = len(evaluated)
+    failed_runs = len(failed)
+    return {
+        "definitions": _count(connection, "eval_definitions", profile_id),
+        "measure_runs": _count(connection, "eval_measure_runs", profile_id),
+        "scored_results": len(rows),
+        "notable_results": notable_results,
+        "evaluated_runs": evaluated_runs,
+        "failed_runs": failed_runs,
+        "failure_rate": (failed_runs / evaluated_runs) if evaluated_runs else None,
+    }
+
+
+def _is_notable(
+    direction: str,
+    score_bool: Optional[bool],
+    score_numeric: Any,
+    bands: Optional[dict[str, Any]],
+) -> bool:
+    """Whether a single measure result counts as a failure, given its definition's
+    direction. Booleans use their notable polarity; numerics map to a direction-
+    oriented problem level and trip at the definition's (or default) low band."""
+
+    if score_bool is not None:
+        if direction == "true_is_notable":
+            return score_bool
+        if direction == "false_is_notable":
+            return not score_bool
+        if direction == "lower_is_better":
+            return score_bool
+        if direction == "higher_is_better":
+            return not score_bool
+        return False
+    if isinstance(score_numeric, (int, float)):
+        value = float(score_numeric)
+        if direction == "higher_is_better":
+            problem = 1.0 - value
+        else:
+            problem = value
+        threshold = bands.get("low", 0.2) if isinstance(bands, dict) else 0.2
+        try:
+            return problem >= float(threshold)
+        except (TypeError, ValueError):
+            return problem >= 0.2
+    return False
 
 
 def _check_metrics(connection: Any, profile_id: str) -> dict[str, Any]:
