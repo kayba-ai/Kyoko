@@ -7,6 +7,7 @@ import {
   CheckCheck,
   CircleDot,
   FileSearch,
+  Info,
   Lightbulb,
   Loader2,
   Lock,
@@ -572,7 +573,6 @@ function IssueDetail({
   ].filter((g) => g.items.length > 0);
 
   const hasSources = sourceGroups.length > 0 || linkedProposals.length > 0;
-  const hasMore = !!issue.body || hasSources;
 
   // Only show the status banner when it carries information the on-screen action
   // buttons don't already convey. A plain "needs review" issue says everything
@@ -633,6 +633,14 @@ function IssueDetail({
       {/* How close a recurring problem is to an automatic fix. */}
       {ACCEPTABLE_STATUSES.has(issue.status) && <RecurrenceProgress issue={issue} />}
 
+      {/* What happened — a plain-language summary of the symptom and impact, to
+          orient the reviewer before the diagnosis. */}
+      {issue.body && (
+        <Section label="What happened" icon={<Info className="h-3.5 w-3.5" />}>
+          <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{issue.body}</p>
+        </Section>
+      )}
+
       {/* Why it happens — diagnosis in plain language. */}
       {issue.root_cause && (
         <Section label="Why it happens" icon={<Stethoscope className="h-3.5 w-3.5" />}>
@@ -674,14 +682,9 @@ function IssueDetail({
       </Section>
 
       {/* Secondary detail lives behind a click so the first glance stays clean. */}
-      {hasMore && (
-        <Disclosure summary="Full description & affected parts">
+      {hasSources && (
+        <Disclosure summary="Affected parts">
           <div className="space-y-5">
-            {issue.body && (
-              <Section label="Full description">
-                <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{issue.body}</p>
-              </Section>
-            )}
             {hasSources && (
               <Section label="Sources">
                 <div className="space-y-3">
