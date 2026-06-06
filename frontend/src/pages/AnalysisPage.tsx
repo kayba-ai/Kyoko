@@ -1,13 +1,19 @@
 import * as React from "react";
 import { Link } from "react-router-dom";
 import {
+  ArrowRight,
   CalendarClock,
+  Check,
+  Circle,
+  Clock,
   Loader2,
+  Minus,
   Play,
   Plus,
   Sparkles,
   Trash2,
   Wrench,
+  X,
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import type {
@@ -15,10 +21,12 @@ import type {
   AnalyzerKind,
   AnalysisRun,
   AnalysisRunEvent,
+  AnalysisRunPhase,
   AnalysisRunScope,
   AnalysisSchedule,
 } from "@/lib/types";
 import { ago } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { useApi } from "@/hooks/useApi";
 import { useLiveEvent } from "@/hooks/useLiveBus";
 import { Badge, statusTone, type BadgeProps } from "@/components/ui/badge";
@@ -70,6 +78,177 @@ function errMessage(e: unknown): string {
 
 // ---- Run analysis now -------------------------------------------------------
 
+const TERMINAL_RUN_PHASES = new Set(["succeeded", "failed", "skipped"]);
+
+type ActiveRun = {
+  jobId: string;
+  analyzer: AnalyzerKind;
+  scope: AnalysisRunScope;
+  startedAtMs: number;
+};
+
+type StepState = "pending" | "active" | "done" | "failed" | "skipped";
+
+function fmtElapsed(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const m = Math.floor(s / 60);
+  const rem = s % 60;
+  return `${m}:${String(rem).padStart(2, "0")}`;
+}
+
+// Derive the three pipeline nodes (Import → Analyze → Result) from the latest
+// phase + the set of phases seen. Import only "happens" for importing analyzers;
+// otherwise it shows as skipped once we move past it.
+function computeSteps(
+  status: AnalysisRunPhase,
+  seen: Set<AnalysisRunPhase>,
+): { import: StepState; analyze: StepState; result: StepState } {
+  const term = TERMINAL_RUN_PHASES.has(status);
+  const importState: StepState =
+    status === "importing"
+      ? "active"
+      : seen.has("importing")
+        ? "done"
+        : status === "analyzing" || term
+          ? "skipped"
+          : "pending";
+  const analyzeState: StepState =
+    status === "analyzing" || status === "running" ? "active" : term ? "done" : "pending";
+  const resultState: StepState =
+    status === "failed" ? "failed" : status === "succeeded" || status === "skipped" ? "done" : "pending";
+  return { import: importState, analyze: analyzeState, result: resultState };
+}
+
+function StepNode({ state, label }: { state: StepState; label: string }) {
+  const ring =
+    state === "active"
+      ? "border-warn bg-warn/10 text-warn"
+      : state === "done"
+        ? "border-ok bg-ok/10 text-ok"
+        : state === "failed"
+          ? "border-danger bg-danger/10 text-danger"
+          : "border-border bg-muted text-muted-foreground/60";
+  return (
+    <div className="flex min-w-0 flex-col items-center gap-1.5">
+      <div className={cn("flex h-8 w-8 items-center justify-center rounded-full border", ring)}>
+        {state === "active" ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : state === "done" ? (
+          <Check className="h-4 w-4" />
+        ) : state === "failed" ? (
+          <X className="h-4 w-4" />
+        ) : state === "skipped" ? (
+          <Minus className="h-4 w-4" />
+        ) : (
+          <Circle className="h-2.5 w-2.5 fill-current" />
+        )}
+      </div>
+      <span
+        className={cn(
+          "text-xs",
+          state === "pending" || state === "skipped" ? "text-muted-foreground/60" : "font-medium text-foreground",
+        )}
+      >
+        {label}
+      </span>
+    </div>
+  );
+}
+
+function Connector({ filled }: { filled: boolean }) {
+  return (
+    <div className="mb-5 h-0.5 flex-1 rounded-full bg-border">
+      <div className={cn("h-full rounded-full transition-all", filled ? "w-full bg-ok" : "w-0")} />
+    </div>
+  );
+}
+
+function RunProgress({
+  run,
+  phase,
+  seen,
+  running,
+  nowMs,
+}: {
+  run: ActiveRun;
+  phase: AnalysisRunEvent | null;
+  seen: Set<AnalysisRunPhase>;
+  running: boolean;
+  nowMs: number;
+}) {
+  const status: AnalysisRunPhase = phase?.status ?? "running";
+  const steps = computeSteps(status, seen);
+  const proposals = phase?.proposal_ids ?? [];
+  const elapsed = fmtElapsed(nowMs - run.startedAtMs);
+
+  return (
+    <div className="rounded-xl border border-border bg-muted/30 p-4">
+      <div className="mb-4 flex items-center gap-2.5">
+        {running ? (
+          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-warn" />
+        ) : status === "failed" ? (
+          <X className="h-4 w-4 shrink-0 text-danger" />
+        ) : (
+          <Check className="h-4 w-4 shrink-0 text-ok" />
+        )}
+        <span className="text-sm font-medium text-foreground">
+          {running ? "Analyzing with" : status === "failed" ? "Analysis failed —" : "Analysis complete —"}{" "}
+          {ANALYZER_LABELS[run.analyzer]}
+        </span>
+        <Badge tone={phaseTone(status)} className="ml-1">
+          {status}
+        </Badge>
+        <span className="ml-auto flex items-center gap-1.5 font-mono text-xs tabular-nums text-muted-foreground">
+          <Clock className="h-3.5 w-3.5" />
+          {elapsed}
+        </span>
+      </div>
+
+      <div className="flex items-start">
+        <StepNode state={steps.import} label="Import" />
+        <Connector filled={steps.import === "done" || steps.import === "skipped"} />
+        <StepNode state={steps.analyze} label="Analyze" />
+        <Connector filled={steps.analyze === "done"} />
+        <StepNode state={steps.result} label="Result" />
+      </div>
+
+      <div className="mt-4 border-t border-border/60 pt-3 text-sm">
+        {status === "failed" ? (
+          <span className="text-danger">{phase?.error ?? "The analyzer reported an error."}</span>
+        ) : status === "skipped" ? (
+          <span className="text-muted-foreground">Skipped{phase?.reason ? ` — ${phase.reason}` : ""}.</span>
+        ) : status === "succeeded" ? (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            {proposals.length > 0 ? (
+              <>
+                <span className="text-foreground">
+                  Surfaced {proposals.length} proposal{proposals.length === 1 ? "" : "s"}.
+                </span>
+                <Link
+                  to="/proposals"
+                  className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+                >
+                  Review {proposals.length === 1 ? "it" : "them"} <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              </>
+            ) : (
+              <span className="text-muted-foreground">
+                No new proposals — nothing crossed gate&nbsp;#1 from this run.
+              </span>
+            )}
+          </div>
+        ) : (
+          <span className="text-muted-foreground">
+            {status === "importing"
+              ? "Importing fresh traces…"
+              : "Working through your traces — this can take a moment."}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function RunAnalysisCard({
   analyzers,
   onBootstrapped,
@@ -84,23 +263,42 @@ function RunAnalysisCard({
   );
   const [scope, setScope] = React.useState<AnalysisRunScope>("all");
   const [aceCommand, setAceCommand] = React.useState("ace run");
-  const [busy, setBusy] = React.useState(false);
+  const [submitting, setSubmitting] = React.useState(false);
   const [bootstrapping, setBootstrapping] = React.useState<AnalyzerKind | null>(null);
   const [error, setError] = React.useState<string | null>(null);
-  const [jobId, setJobId] = React.useState<string | null>(null);
+  const [activeRun, setActiveRun] = React.useState<ActiveRun | null>(null);
   const [phase, setPhase] = React.useState<AnalysisRunEvent | null>(null);
+  const [seen, setSeen] = React.useState<Set<AnalysisRunPhase>>(() => new Set());
+  const [nowMs, setNowMs] = React.useState(() => Date.now());
 
-  // Live progress for the job we just launched.
+  // A launched job is "running" until it emits a terminal phase. (Until the very
+  // first event arrives, an active run with no terminal phase is still running.)
+  const jobRunning =
+    activeRun !== null && !(phase !== null && TERMINAL_RUN_PHASES.has(phase.status));
+  const running = submitting || jobRunning;
+
+  // Live progress for the job we just launched (handler ref is kept current).
   useLiveEvent("analysis_run", (ev: AnalysisRunEvent) => {
-    if (jobId && ev.job_id === jobId) setPhase(ev);
+    if (activeRun && ev.job_id === activeRun.jobId) {
+      setPhase(ev);
+      setSeen((prev) => (prev.has(ev.status) ? prev : new Set(prev).add(ev.status)));
+    }
   });
+
+  // Tick the elapsed timer once a second while a job is in flight.
+  React.useEffect(() => {
+    if (!running) return;
+    setNowMs(Date.now());
+    const id = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [running]);
 
   const selected = analyzers.find((a) => a.analyzer === analyzer) ?? null;
   const needsBootstrap = Boolean(selected && selected.installed && !selected.adapter_registered);
   const canRun =
     Boolean(selected && selected.installed) &&
     !needsBootstrap &&
-    !busy &&
+    !running &&
     (analyzer !== "ace" || aceCommand.trim().length > 0);
 
   const analyzerOptions = analyzers.map((a) => ({
@@ -126,10 +324,11 @@ function RunAnalysisCard({
   }
 
   async function run() {
-    setBusy(true);
+    setSubmitting(true);
     setError(null);
     setPhase(null);
-    setJobId(null);
+    setSeen(new Set());
+    setActiveRun(null);
     try {
       const body = {
         analyzer,
@@ -139,12 +338,12 @@ function RunAnalysisCard({
           : {}),
       };
       const res = await api.runAnalysis(body);
-      setJobId(res.job_id);
+      setActiveRun({ jobId: res.job_id, analyzer, scope, startedAtMs: Date.now() });
       onLaunched();
     } catch (e) {
       setError(errMessage(e));
     } finally {
-      setBusy(false);
+      setSubmitting(false);
     }
   }
 
@@ -167,6 +366,7 @@ function RunAnalysisCard({
                 }}
                 options={analyzerOptions}
                 className="w-full"
+                disabled={running}
               />
             </div>
           </div>
@@ -177,6 +377,7 @@ function RunAnalysisCard({
               onChange={(v) => setScope(v as AnalysisRunScope)}
               options={SCOPE_OPTIONS}
               className="w-full"
+              disabled={running}
             />
           </div>
         </div>
@@ -191,6 +392,7 @@ function RunAnalysisCard({
               onChange={(e) => setAceCommand(e.target.value)}
               placeholder="ace run --something"
               className="font-mono"
+              disabled={running}
             />
             <p className="text-xs text-muted-foreground/70">
               Required for ACE. Space-separated; runs as the analyzer command.
@@ -233,21 +435,8 @@ function RunAnalysisCard({
           </div>
         )}
 
-        {jobId && phase && (
-          <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 py-2 text-xs">
-            <Badge tone={phaseTone(phase.status)}>{phase.status}</Badge>
-            <span className="text-muted-foreground">
-              {ANALYZER_LABELS[(phase.analyzer as AnalyzerKind) ?? analyzer] ?? phase.analyzer}
-              {phase.proposal_ids && phase.proposal_ids.length > 0
-                ? ` · ${phase.proposal_ids.length} proposal${phase.proposal_ids.length === 1 ? "" : "s"}`
-                : ""}
-              {phase.reason ? ` · ${phase.reason}` : ""}
-              {phase.error ? ` · ${phase.error}` : ""}
-            </span>
-            <span className="ml-auto font-mono text-muted-foreground/70">
-              {ago(phase.at)}
-            </span>
-          </div>
+        {activeRun && (
+          <RunProgress run={activeRun} phase={phase} seen={seen} running={jobRunning} nowMs={nowMs} />
         )}
 
         <div className="flex items-center justify-between gap-3 pt-1">
@@ -255,12 +444,12 @@ function RunAnalysisCard({
             Proposed changes still pass the check/replay gate and your autonomy policy.
           </p>
           <Button onClick={run} disabled={!canRun}>
-            {busy ? (
+            {running ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
             ) : (
               <Play className="h-3.5 w-3.5" />
             )}
-            Run analysis
+            {running ? "Running…" : activeRun ? "Run again" : "Run analysis"}
           </Button>
         </div>
       </CardBody>
