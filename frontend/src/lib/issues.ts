@@ -15,9 +15,12 @@ export function issueBucket(status: string): IssueBucket {
   return "open";
 }
 
-// "Still open" = a tracked failure that has not yet cleared gate #1 (no fix
-// authored), been resolved, or been dismissed — i.e. the active problem surface.
-// This is the set the Overview groups into failure categories.
-export function isOpenIssue(issue: Issue): boolean {
-  return issueBucket(issue.status) === "open";
+// "Unresolved" = a tracked failure that has NOT reached a resolved end-state
+// (applied/resolved/guarded) and was not dismissed. Accepted/proposed issues —
+// where a fix is authored but not yet applied and verified — are NOT resolved,
+// so they stay on the active failure surface until the fix actually lands. This
+// is the set the Overview surfaces and groups into failure categories.
+export function isUnresolvedIssue(issue: Issue): boolean {
+  const b = issueBucket(issue.status);
+  return b !== "resolved" && b !== "dismissed";
 }
