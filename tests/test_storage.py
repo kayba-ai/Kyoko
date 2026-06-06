@@ -205,6 +205,62 @@ class StorageTests(unittest.TestCase):
             self.assertEqual(rule["human_locked"], 1)
             self.assertIsNone(rule["human_lock_reason"])
 
+    def test_migration_relaxes_legacy_skills_insight_not_null(self) -> None:
+        # A `skills` table migrated from a pre-v32 shape kept NOT NULL on insight/section.
+        # Problem-phase entries store those NULL, so the migration must rebuild the table to
+        # relax the constraint while preserving rows (and keeping `issue` NOT NULL).
+        with TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "legacy.db"
+            initialize_database(db_path)
+            with connect(db_path) as connection:
+                connection.execute(
+                    "INSERT INTO profiles (id, name, root_path, status, created_at, updated_at) "
+                    "VALUES ('p1','p1','/tmp','active','t','t')"
+                )
+                # Reshape `skills` into the legacy shape: insight + section NOT NULL.
+                connection.execute("PRAGMA legacy_alter_table = ON")
+                connection.execute("PRAGMA foreign_keys = OFF")
+                connection.execute("ALTER TABLE skills RENAME TO _skills_pre")
+                connection.execute(
+                    "CREATE TABLE skills ("
+                    "id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, section TEXT NOT NULL, "
+                    "issue TEXT NOT NULL, insight TEXT NOT NULL, created_at TEXT NOT NULL, "
+                    "updated_at TEXT NOT NULL)"
+                )
+                connection.execute("DROP TABLE _skills_pre")
+                connection.execute(
+                    "INSERT INTO skills VALUES ('s1','p1','context','prob','fix','t','t')"
+                )
+                connection.execute("PRAGMA foreign_keys = ON")
+                connection.execute("PRAGMA legacy_alter_table = OFF")
+                connection.commit()
+                insight_notnull = next(
+                    row[3] for row in connection.execute("PRAGMA table_info(skills)") if row[1] == "insight"
+                )
+                self.assertEqual(insight_notnull, 1)  # legacy: NOT NULL
+
+            initialize_database(db_path)  # migration should relax it
+
+            with connect(db_path) as connection:
+                info = {row[1]: row[3] for row in connection.execute("PRAGMA table_info(skills)")}
+                self.assertEqual(info["insight"], 0)  # now nullable
+                self.assertEqual(info["section"], 0)  # now nullable
+                self.assertEqual(info["issue"], 1)  # still NOT NULL
+                preserved = connection.execute(
+                    "SELECT insight FROM skills WHERE id = 's1'"
+                ).fetchone()
+                self.assertEqual(preserved["insight"], "fix")  # row preserved
+                # A problem-phase entry with NULL insight now inserts cleanly.
+                connection.execute(
+                    "INSERT INTO skills (id, profile_id, issue, keywords_json, occurrences_json, "
+                    "status, created_at, updated_at) "
+                    "VALUES ('s2','p1','prob2','[]','[]','diagnosed','t','t')"
+                )
+                connection.commit()
+                self.assertEqual(
+                    connection.execute("SELECT COUNT(*) FROM skills").fetchone()[0], 2
+                )
+
     def test_ingest_materializes_inline_payloads_to_registered_blobs(self) -> None:
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
