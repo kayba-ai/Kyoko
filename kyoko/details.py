@@ -537,6 +537,67 @@ def get_issue_detail(*, db_path: Path, issue_id: str) -> dict[str, Any]:
                 }
             )
 
+        # Resolve the traces (runs) the issue touches so the dashboard can link an
+        # issue straight to where it happened. Spans carry their run_id; an evidence
+        # ref may also name a run directly. Only runs that exist in this DB are kept
+        # (a link to a missing run would dead-end).
+        span_ids: set[str] = {
+            value for value in issue.get("affected_span_ids", []) if isinstance(value, str)
+        }
+        run_ids: set[str] = set()
+        for ref in issue.get("evidence_refs", []):
+            if not isinstance(ref, dict):
+                continue
+            entity_id = ref.get("entity_id")
+            if not isinstance(entity_id, str):
+                continue
+            if ref.get("entity_type") == "span":
+                span_ids.add(entity_id)
+            elif ref.get("entity_type") == "run":
+                run_ids.add(entity_id)
+
+        span_runs: dict[str, str] = {}
+        if span_ids:
+            placeholders = ",".join("?" for _ in span_ids)
+            for row in connection.execute(
+                f"SELECT id, run_id FROM spans WHERE id IN ({placeholders})",
+                tuple(span_ids),
+            ).fetchall():
+                if row["run_id"]:
+                    span_runs[str(row["id"])] = str(row["run_id"])
+                    run_ids.add(str(row["run_id"]))
+
+        traces: dict[str, dict[str, Any]] = {}
+        for span_id, run_id in span_runs.items():
+            traces.setdefault(run_id, {"run_id": run_id, "span_ids": []})["span_ids"].append(span_id)
+        for run_id in run_ids:
+            traces.setdefault(run_id, {"run_id": run_id, "span_ids": []})
+
+        affected_traces: list[dict[str, Any]] = []
+        if traces:
+            ordered = sorted(traces)
+            placeholders = ",".join("?" for _ in ordered)
+            run_meta = {
+                str(row["id"]): row
+                for row in connection.execute(
+                    f"SELECT id, summary, started_at FROM runs WHERE id IN ({placeholders})",
+                    tuple(ordered),
+                ).fetchall()
+            }
+            for run_id in ordered:
+                meta = run_meta.get(run_id)
+                if meta is None:
+                    continue
+                entry = traces[run_id]
+                affected_traces.append(
+                    {
+                        "run_id": run_id,
+                        "span_ids": sorted(set(entry["span_ids"])),
+                        "summary": meta["summary"],
+                        "started_at": meta["started_at"],
+                    }
+                )
+
     return {
         "issue": issue,
         "section_label": section_label(issue.get("section")) if issue.get("section") else None,
@@ -545,6 +606,7 @@ def get_issue_detail(*, db_path: Path, issue_id: str) -> dict[str, Any]:
         ),
         "evidence": evidence,
         "affected": affected,
+        "affected_traces": affected_traces,
         "linked_proposals": linked_proposals,
         "summary": {
             "evidence_refs": len(evidence),

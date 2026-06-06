@@ -321,6 +321,17 @@ export interface Issue {
   updated_at: string | null;
 }
 
+// A trace (run) an issue touches, resolved from its affected/evidence spans.
+// Surfaced by the issue-detail endpoint so the dashboard can link an issue
+// straight to where it happened in the Traces explorer (/traces/:run_id, or
+// /traces/:run_id/span/:span_id for a specific span).
+export interface IssueTraceRef {
+  run_id: string;
+  span_ids: string[];
+  summary?: string | null;
+  started_at?: string | null;
+}
+
 // A guard installed by `improve` so a resolved Issue cannot silently regress.
 // Surfaced in the improve --json response (POST /api/improve `guards`).
 export interface GuardReport {

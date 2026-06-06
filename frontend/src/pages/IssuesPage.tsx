@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowRight,
+  ArrowUpRight,
   Check,
   CheckCheck,
   CircleDot,
@@ -12,6 +13,7 @@ import {
   MessageSquare,
   Repeat,
   RotateCcw,
+  Route,
   Search,
   Shield,
   ShieldCheck,
@@ -20,7 +22,7 @@ import {
   X,
 } from "lucide-react";
 import { api } from "@/lib/api";
-import type { AcceptIssueResult, AutonomyPolicy, Issue, IssueStatus, Skill } from "@/lib/types";
+import type { AcceptIssueResult, AutonomyPolicy, Issue, IssueStatus, IssueTraceRef, Skill } from "@/lib/types";
 import { ago, fmtTime, humanize } from "@/lib/format";
 import { narrateIssue, sectionPhrase, severityPhrase } from "@/lib/narrate";
 import { issueBucket } from "@/lib/issues";
@@ -403,8 +405,9 @@ function roleTone(role: string | null): NonNullable<BadgeProps["tone"]> {
 // Evidence refs are the actual proof behind an issue: each carries a plain-English
 // `note` (what was seen in that span) plus a reference to the span/entity it came
 // from. Render the note as the readable line and the reference as a quiet chip —
-// far more useful than dumping the raw JSON.
-function EvidenceList({ refs }: { refs: Record<string, unknown>[] }) {
+// and when the span resolves to a trace, make that chip a link into the Traces
+// explorer so a reviewer can jump straight to where it happened.
+function EvidenceList({ refs, spanRuns }: { refs: Record<string, unknown>[]; spanRuns: Map<string, string> }) {
   return (
     <div className="space-y-2">
       {refs.map((ref, i) => {
@@ -412,6 +415,7 @@ function EvidenceList({ refs }: { refs: Record<string, unknown>[] }) {
         const entityId = typeof ref.entity_id === "string" ? ref.entity_id : null;
         const entityType = typeof ref.entity_type === "string" ? ref.entity_type : null;
         const role = typeof ref.role === "string" ? ref.role : null;
+        const runId = entityId ? spanRuns.get(entityId) : undefined;
         return (
           <div key={i} className="rounded-lg border border-border bg-muted/40 p-3">
             {note ? (
@@ -422,17 +426,57 @@ function EvidenceList({ refs }: { refs: Record<string, unknown>[] }) {
             {(role || entityId) && (
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
                 {role && <Badge tone={roleTone(role)}>{humanize(role)}</Badge>}
-                {entityId && (
-                  <span className="inline-flex items-center gap-1 font-mono text-label text-muted-foreground">
-                    {entityType && <span className="opacity-60">{entityType}</span>}
-                    {entityId}
-                  </span>
-                )}
+                {entityId &&
+                  (runId ? (
+                    <Link
+                      to={`/traces/${encodeURIComponent(runId)}/span/${encodeURIComponent(entityId)}`}
+                      className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-1.5 py-0.5 font-mono text-label text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+                      title="Open this span in the trace"
+                    >
+                      {entityType && <span className="opacity-60">{entityType}</span>}
+                      {entityId}
+                      <ArrowUpRight className="h-3 w-3" />
+                    </Link>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 font-mono text-label text-muted-foreground">
+                      {entityType && <span className="opacity-60">{entityType}</span>}
+                      {entityId}
+                    </span>
+                  ))}
               </div>
             )}
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// The traces (runs) an issue happened in. Each links into the Traces explorer.
+function AffectedTraces({ traces }: { traces: IssueTraceRef[] }) {
+  return (
+    <div className="space-y-1.5">
+      {traces.map((t) => (
+        <Link
+          key={t.run_id}
+          to={`/traces/${encodeURIComponent(t.run_id)}`}
+          className="group flex items-center gap-3 rounded-lg border border-border bg-muted/40 px-3 py-2 transition-colors hover:border-primary/40 hover:bg-accent"
+        >
+          <Route className="h-4 w-4 shrink-0 text-muted-foreground group-hover:text-primary" />
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm text-foreground">{t.summary || t.run_id}</div>
+            <div className="flex items-center gap-2 text-label text-muted-foreground">
+              <span className="font-mono">{t.run_id}</span>
+              {t.span_ids.length > 0 && (
+                <span>
+                  · {t.span_ids.length} {t.span_ids.length === 1 ? "span" : "spans"}
+                </span>
+              )}
+            </div>
+          </div>
+          <ArrowUpRight className="h-4 w-4 shrink-0 text-muted-foreground group-hover:text-primary" />
+        </Link>
+      ))}
     </div>
   );
 }
@@ -509,6 +553,14 @@ function IssueDetail({
   const linkedProposals =
     (data.linked_proposals as { proposal: { id: string; title?: string; state?: string } }[]) ?? [];
   const evidenceRefs = Array.isArray(issue.evidence_refs) ? issue.evidence_refs : [];
+
+  // Traces (runs) the issue touches, plus a span → run lookup so evidence refs can
+  // deep-link to the exact span in the Traces explorer.
+  const affectedTraces = (data.affected_traces as IssueTraceRef[] | undefined) ?? [];
+  const spanRuns = new Map<string, string>();
+  for (const t of affectedTraces) {
+    for (const sid of t.span_ids) spanRuns.set(sid, t.run_id);
+  }
 
   const deliveredSkills = (issue.proposal_ids ?? []).flatMap((pid) => skillsByProposal.get(pid) ?? []);
 
@@ -588,11 +640,19 @@ function IssueDetail({
         </Section>
       )}
 
+      {/* Where it happened — the traces (runs) this issue was found in, each a
+          link into the Traces explorer. */}
+      {affectedTraces.length > 0 && (
+        <Section label={`Where it happened (${affectedTraces.length})`} icon={<Route className="h-3.5 w-3.5" />}>
+          <AffectedTraces traces={affectedTraces} />
+        </Section>
+      )}
+
       {/* Evidence — the proof, in readable notes rather than raw refs. Kept in
           plain view because it's the thing a reviewer actually weighs. */}
       {evidenceRefs.length > 0 && (
         <Section label={`Evidence (${evidenceRefs.length})`} icon={<FileSearch className="h-3.5 w-3.5" />}>
-          <EvidenceList refs={evidenceRefs} />
+          <EvidenceList refs={evidenceRefs} spanRuns={spanRuns} />
         </Section>
       )}
 
