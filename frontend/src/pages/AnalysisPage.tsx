@@ -2,6 +2,7 @@ import * as React from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowRight,
+  Ban,
   CalendarClock,
   Check,
   Circle,
@@ -64,6 +65,7 @@ const PHASE_TONE: Record<string, NonNullable<BadgeProps["tone"]>> = {
   skipped: "neutral",
   succeeded: "ok",
   failed: "danger",
+  cancelled: "neutral",
 };
 
 function phaseTone(status: string | null | undefined): NonNullable<BadgeProps["tone"]> {
@@ -78,7 +80,7 @@ function errMessage(e: unknown): string {
 
 // ---- Run analysis now -------------------------------------------------------
 
-const TERMINAL_RUN_PHASES = new Set(["succeeded", "failed", "skipped"]);
+const TERMINAL_RUN_PHASES = new Set(["succeeded", "failed", "skipped", "cancelled"]);
 
 type ActiveRun = {
   jobId: string;
@@ -104,6 +106,7 @@ function computeSteps(
   seen: Set<AnalysisRunPhase>,
 ): { import: StepState; analyze: StepState; result: StepState } {
   const term = TERMINAL_RUN_PHASES.has(status);
+  const cancelled = status === "cancelled";
   const importState: StepState =
     status === "importing"
       ? "active"
@@ -112,10 +115,21 @@ function computeSteps(
         : status === "analyzing" || term
           ? "skipped"
           : "pending";
-  const analyzeState: StepState =
-    status === "analyzing" || status === "running" ? "active" : term ? "done" : "pending";
+  const analyzeState: StepState = cancelled
+    ? "skipped"
+    : status === "analyzing" || status === "running"
+      ? "active"
+      : term
+        ? "done"
+        : "pending";
   const resultState: StepState =
-    status === "failed" ? "failed" : status === "succeeded" || status === "skipped" ? "done" : "pending";
+    status === "failed"
+      ? "failed"
+      : cancelled
+        ? "skipped"
+        : status === "succeeded" || status === "skipped"
+          ? "done"
+          : "pending";
   return { import: importState, analyze: analyzeState, result: resultState };
 }
 
@@ -169,17 +183,30 @@ function RunProgress({
   seen,
   running,
   nowMs,
+  onCancel,
+  cancelling,
 }: {
   run: ActiveRun;
   phase: AnalysisRunEvent | null;
   seen: Set<AnalysisRunPhase>;
   running: boolean;
   nowMs: number;
+  onCancel: () => void;
+  cancelling: boolean;
 }) {
   const status: AnalysisRunPhase = phase?.status ?? "running";
   const steps = computeSteps(status, seen);
   const proposals = phase?.proposal_ids ?? [];
   const elapsed = fmtElapsed(nowMs - run.startedAtMs);
+
+  const headline =
+    status === "failed"
+      ? "Analysis failed —"
+      : status === "cancelled"
+        ? "Analysis cancelled —"
+        : running
+          ? "Analyzing with"
+          : "Analysis complete —";
 
   return (
     <div className="rounded-xl border border-border bg-muted/30 p-4">
@@ -188,19 +215,28 @@ function RunProgress({
           <Loader2 className="h-4 w-4 shrink-0 animate-spin text-warn" />
         ) : status === "failed" ? (
           <X className="h-4 w-4 shrink-0 text-danger" />
+        ) : status === "cancelled" ? (
+          <Ban className="h-4 w-4 shrink-0 text-muted-foreground" />
         ) : (
           <Check className="h-4 w-4 shrink-0 text-ok" />
         )}
         <span className="text-sm font-medium text-foreground">
-          {running ? "Analyzing with" : status === "failed" ? "Analysis failed —" : "Analysis complete —"}{" "}
-          {ANALYZER_LABELS[run.analyzer]}
+          {headline} {ANALYZER_LABELS[run.analyzer]}
         </span>
         <Badge tone={phaseTone(status)} className="ml-1">
           {status}
         </Badge>
-        <span className="ml-auto flex items-center gap-1.5 font-mono text-xs tabular-nums text-muted-foreground">
-          <Clock className="h-3.5 w-3.5" />
-          {elapsed}
+        <span className="ml-auto flex items-center gap-3">
+          <span className="flex items-center gap-1.5 font-mono text-xs tabular-nums text-muted-foreground">
+            <Clock className="h-3.5 w-3.5" />
+            {elapsed}
+          </span>
+          {running && (
+            <Button size="sm" variant="outline" onClick={onCancel} disabled={cancelling}>
+              {cancelling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Ban className="h-3.5 w-3.5" />}
+              {cancelling ? "Cancelling…" : "Cancel"}
+            </Button>
+          )}
         </span>
       </div>
 
@@ -215,6 +251,8 @@ function RunProgress({
       <div className="mt-4 border-t border-border/60 pt-3 text-sm">
         {status === "failed" ? (
           <span className="text-danger">{phase?.error ?? "The analyzer reported an error."}</span>
+        ) : status === "cancelled" ? (
+          <span className="text-muted-foreground">Stopped before it finished — no changes were applied.</span>
         ) : status === "skipped" ? (
           <span className="text-muted-foreground">Skipped{phase?.reason ? ` — ${phase.reason}` : ""}.</span>
         ) : status === "succeeded" ? (
@@ -270,6 +308,7 @@ function RunAnalysisCard({
   const [phase, setPhase] = React.useState<AnalysisRunEvent | null>(null);
   const [seen, setSeen] = React.useState<Set<AnalysisRunPhase>>(() => new Set());
   const [nowMs, setNowMs] = React.useState(() => Date.now());
+  const [cancelling, setCancelling] = React.useState(false);
 
   // A launched job is "running" until it emits a terminal phase. (Until the very
   // first event arrives, an active run with no terminal phase is still running.)
@@ -282,8 +321,21 @@ function RunAnalysisCard({
     if (activeRun && ev.job_id === activeRun.jobId) {
       setPhase(ev);
       setSeen((prev) => (prev.has(ev.status) ? prev : new Set(prev).add(ev.status)));
+      if (TERMINAL_RUN_PHASES.has(ev.status)) setCancelling(false);
     }
   });
+
+  async function cancel() {
+    if (!activeRun) return;
+    setCancelling(true);
+    try {
+      await api.cancelAnalysis(activeRun.jobId);
+      // The job emits a terminal "cancelled" phase over SSE, which clears state.
+    } catch (e) {
+      setError(errMessage(e));
+      setCancelling(false);
+    }
+  }
 
   // Tick the elapsed timer once a second while a job is in flight.
   React.useEffect(() => {
@@ -329,6 +381,7 @@ function RunAnalysisCard({
     setPhase(null);
     setSeen(new Set());
     setActiveRun(null);
+    setCancelling(false);
     try {
       const body = {
         analyzer,
@@ -436,7 +489,15 @@ function RunAnalysisCard({
         )}
 
         {activeRun && (
-          <RunProgress run={activeRun} phase={phase} seen={seen} running={jobRunning} nowMs={nowMs} />
+          <RunProgress
+            run={activeRun}
+            phase={phase}
+            seen={seen}
+            running={jobRunning}
+            nowMs={nowMs}
+            onCancel={cancel}
+            cancelling={cancelling}
+          />
         )}
 
         <div className="flex items-center justify-between gap-3 pt-1">

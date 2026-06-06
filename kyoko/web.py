@@ -118,6 +118,7 @@ from .operator_presets import (
     bootstrap_operator_adapters,
     list_operator_presets,
 )
+from . import cancellation
 from .analysis_runner import (
     DASHBOARD_ANALYZERS,
     DEFAULT_ANALYSIS_TIMEOUT_SECONDS,
@@ -2450,6 +2451,18 @@ def make_handler(
                         {"job_id": job_id, "analyzer": job.analyzer, "status": "queued"},
                         status=HTTPStatus.ACCEPTED,
                     )
+                    return
+                if path == "/api/analysis/cancel":
+                    payload = self._read_json()
+                    job_id = payload.get("job_id")
+                    if not isinstance(job_id, str) or not job_id:
+                        self._send_json({"error": "job_id_required"}, status=HTTPStatus.BAD_REQUEST)
+                        return
+                    # In-process only: a cancel reaches the job iff it's running in
+                    # this serve process. Unknown id (already done / queued elsewhere)
+                    # is reported as cancelled=False, not an error.
+                    cancelled = cancellation.request_cancel(job_id)
+                    self._send_json({"job_id": job_id, "cancelled": cancelled})
                     return
                 if path == "/api/analysis/schedules/create":
                     payload = self._read_json()

@@ -32,6 +32,49 @@ from .proposals import (
     submit_learning_proposal_payload,
 )
 from .storage import connect, initialize_database, utc_now
+from . import cancellation
+
+
+def _run_operator_subprocess(
+    command: "list[str]",
+    *,
+    input: str,
+    env: "dict[str, str]",
+    timeout: "Optional[int]",
+) -> "subprocess.CompletedProcess[str]":
+    """Run an operator command like ``subprocess.run`` but cancellable.
+
+    Drop-in for the operator-call sites: same return shape, and still raises
+    ``FileNotFoundError`` (bad command) and ``subprocess.TimeoutExpired`` (timeout)
+    so the existing handlers are unchanged. Additionally, the live process is
+    registered with the current job's cancel token (see :mod:`kyoko.cancellation`)
+    and launched in its own session so a cancel can kill the whole process group;
+    on cancel it raises ``cancellation.CancelledError``.
+    """
+    token = cancellation.current_token()
+    proc = subprocess.Popen(
+        command,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=env,
+        start_new_session=True,
+    )
+    if token is not None:
+        token.register_proc(proc)
+    try:
+        stdout, stderr = proc.communicate(input=input, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.communicate()
+        raise
+    finally:
+        if token is not None:
+            token.unregister_proc(proc)
+    if token is not None and token.cancelled:
+        raise cancellation.CancelledError("cancelled")
+    return subprocess.CompletedProcess(command, proc.returncode, stdout, stderr)
 
 
 @dataclass(frozen=True)
@@ -371,14 +414,11 @@ def analyze_with_command_operator(
             run_id=run_id,
         )
         try:
-            completed = subprocess.run(
+            completed = _run_operator_subprocess(
                 expanded_command,
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=timeout_seconds,
                 env=attempt_env,
                 input=prompt_text,
+                timeout=timeout_seconds,
             )
         except FileNotFoundError as exc:
             last_error = f"operator_command_not_found:{expanded_command[0]}"
@@ -1090,14 +1130,11 @@ def _invoke_proposal_command(
             run_id=None,
         )
         try:
-            completed = subprocess.run(
+            completed = _run_operator_subprocess(
                 expanded_command,
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=timeout_seconds,
                 env=env,
                 input=prompt_text,
+                timeout=timeout_seconds,
             )
         except FileNotFoundError as exc:
             raise AnalyzeError(f"operator_command_not_found:{expanded_command[0]}") from exc

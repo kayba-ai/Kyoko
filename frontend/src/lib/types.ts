@@ -718,7 +718,8 @@ export type AnalysisRunPhase =
   | "analyzing"
   | "skipped"
   | "succeeded"
-  | "failed";
+  | "failed"
+  | "cancelled";
 
 export interface AnalysisRunEvent {
   job_id: string;

@@ -26,6 +26,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Optional, Sequence
 
+from . import cancellation
 from .live import EVENT_ANALYSIS, LiveBus, global_bus
 from .storage import (
     StorageError,
@@ -112,11 +113,15 @@ def execute_analysis_job(
         "scope": job.scope,
         "started_at": started_at,
     }
+    token = cancellation.begin(job.job_id)
     publish("running", base)
 
     try:
+        token.check()
         profile_id = _refresh_and_resolve_profile(db_path, job, publish, base)
+        token.check()
         since, watermark_after, new_run_count = _resolve_scope(db_path, job, profile_id)
+        token.check()
 
         if job.scope == "new" and new_run_count == 0:
             result = {
@@ -131,6 +136,7 @@ def execute_analysis_job(
             return result
 
         publish("analyzing", {**base, "since": since, "new_run_count": new_run_count})
+        token.check()
 
         if job.analyzer == "llm_judge":
             judge = _dispatch_llm_judge(db_path, job, profile_id, since, bus=bus)
@@ -166,11 +172,25 @@ def execute_analysis_job(
         _record_schedule(db_path, job, result, watermark_after)
         publish("succeeded", result)
         return result
+    except cancellation.CancelledError:
+        result = {**base, "status": "cancelled", "error": "cancelled", "ended_at": utc_now()}
+        _record_schedule(db_path, job, result, None)
+        publish("cancelled", result)
+        return result
     except Exception as exc:  # noqa: BLE001 — surface as a result, never crash the worker
+        # A cancel that killed the operator subprocess surfaces here as whatever
+        # error the dead process produced; report it as a cancellation, not a failure.
+        if token.cancelled:
+            result = {**base, "status": "cancelled", "error": "cancelled", "ended_at": utc_now()}
+            _record_schedule(db_path, job, result, None)
+            publish("cancelled", result)
+            return result
         result = {**base, "status": "failed", "error": str(exc), "ended_at": utc_now()}
         _record_schedule(db_path, job, result, None)
         publish("failed", result)
         return result
+    finally:
+        cancellation.end(job.job_id)
 
 
 def _refresh_and_resolve_profile(

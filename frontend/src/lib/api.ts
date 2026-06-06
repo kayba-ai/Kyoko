@@ -247,6 +247,10 @@ export const api = {
     getJson<{ schedules: AnalysisSchedule[] }>("/api/analysis/schedules").then((d) => d.schedules ?? []),
   runAnalysis: (body: RunAnalysisBody) =>
     postJson<RunAnalysisResult>("/api/analysis/run", body),
+  // Cancel an in-flight analysis job. `cancelled` is false if the job is unknown
+  // (already finished, or running in another process).
+  cancelAnalysis: (jobId: string) =>
+    postJson<{ job_id: string; cancelled: boolean }>("/api/analysis/cancel", { job_id: jobId }),
   bootstrapAdapters: (target: "all" | "codex" | "claude" | "openclaw" | "hermes") =>
     postJson<Record<string, unknown>>("/api/operator-adapters/bootstrap", { target }),
   createSchedule: (body: CreateScheduleBody) =>
