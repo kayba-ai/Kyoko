@@ -48,9 +48,11 @@ export function StatusBanner({ narration, actions }: { narration: Narration; act
         <div className={cn("mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full", s.iconBg)}>
           <Icon className={cn("h-5 w-5", s.icon, spin && "animate-spin")} />
         </div>
-        <div className="min-w-0 flex-1 space-y-1">
+        <div className="min-w-0 flex-1 space-y-1 self-center">
           <div className={cn("text-label font-semibold uppercase tracking-wide", s.label)}>{narration.stage}</div>
-          <p className="text-sm font-medium leading-relaxed text-foreground">{narration.headline}</p>
+          {narration.headline && (
+            <p className="text-sm font-medium leading-relaxed text-foreground">{narration.headline}</p>
+          )}
           {narration.next && <p className="text-sm leading-relaxed text-muted-foreground">{narration.next}</p>}
         </div>
         {actions && <div className="shrink-0">{actions}</div>}

@@ -16,6 +16,7 @@ import {
   Shield,
   ShieldCheck,
   Stethoscope,
+  Tag,
   X,
 } from "lucide-react";
 import { api } from "@/lib/api";
@@ -400,6 +401,52 @@ function Section({
   );
 }
 
+// Tone an evidence ref's role: a "role" naming the fault/cause reads as a problem,
+// plain context stays neutral.
+function roleTone(role: string | null): NonNullable<BadgeProps["tone"]> {
+  const r = (role ?? "").toLowerCase();
+  if (["fault", "error", "failure", "cause", "root_cause", "violation", "bug"].includes(r)) return "danger";
+  if (["risk", "warning", "concern", "symptom"].includes(r)) return "warn";
+  return "neutral";
+}
+
+// Evidence refs are the actual proof behind an issue: each carries a plain-English
+// `note` (what was seen in that span) plus a reference to the span/entity it came
+// from. Render the note as the readable line and the reference as a quiet chip —
+// far more useful than dumping the raw JSON.
+function EvidenceList({ refs }: { refs: Record<string, unknown>[] }) {
+  return (
+    <div className="space-y-2">
+      {refs.map((ref, i) => {
+        const note = typeof ref.note === "string" ? ref.note : null;
+        const entityId = typeof ref.entity_id === "string" ? ref.entity_id : null;
+        const entityType = typeof ref.entity_type === "string" ? ref.entity_type : null;
+        const role = typeof ref.role === "string" ? ref.role : null;
+        return (
+          <div key={i} className="rounded-lg border border-border bg-muted/40 p-3">
+            {note ? (
+              <p className="text-sm leading-relaxed text-foreground">{note}</p>
+            ) : (
+              <p className="text-sm text-muted-foreground/70">Referenced as evidence.</p>
+            )}
+            {(role || entityId) && (
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                {role && <Badge tone={roleTone(role)}>{humanize(role)}</Badge>}
+                {entityId && (
+                  <span className="inline-flex items-center gap-1 font-mono text-label text-muted-foreground">
+                    {entityType && <span className="opacity-60">{entityType}</span>}
+                    {entityId}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function EntityChips({ items }: { items: { entity_id: string; found: boolean }[] }) {
   return (
     <div className="flex flex-wrap gap-1.5">
@@ -482,16 +529,21 @@ function IssueDetail({
     { title: "Spans", items: affected.spans ?? [] },
   ].filter((g) => g.items.length > 0);
 
-  const hasEvidence = evidenceRefs.length > 0 || (affected.spans?.length ?? 0) > 0;
   const hasSources = sourceGroups.length > 0 || linkedProposals.length > 0;
-  const hasDetails = !!issue.body || hasEvidence || hasSources;
+  const hasMore = !!issue.body || hasSources;
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 pb-4">
       {/* The problem, in one line, with the human-readable basics underneath. */}
       <div className="space-y-2">
         <h2 className="text-2xl font-bold leading-snug tracking-tight text-foreground">{issue.title}</h2>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
+          {issue.category && (
+            <Badge tone="primary" title="Issue category">
+              <Tag className="h-3 w-3" />
+              {humanize(issue.category)}
+            </Badge>
+          )}
           {sev && (
             <span
               className={cn(
@@ -532,6 +584,14 @@ function IssueDetail({
         </Section>
       )}
 
+      {/* Evidence — the proof, in readable notes rather than raw refs. Kept in
+          plain view because it's the thing a reviewer actually weighs. */}
+      {evidenceRefs.length > 0 && (
+        <Section label={`Evidence (${evidenceRefs.length})`} icon={<FileSearch className="h-3.5 w-3.5" />}>
+          <EvidenceList refs={evidenceRefs} />
+        </Section>
+      )}
+
       {/* The skillbook entry this issue produced. */}
       {deliveredSkills.length > 0 && (
         <div className="space-y-2">
@@ -549,25 +609,13 @@ function IssueDetail({
         <CommentEditor key={issue.id} issue={issue} onSaved={onReviewed} />
       </Section>
 
-      {/* Everything technical lives behind a click so the first glance stays clean. */}
-      {hasDetails && (
-        <Disclosure summary="Evidence & affected parts" icon={<FileSearch className="h-3.5 w-3.5" />}>
+      {/* Secondary detail lives behind a click so the first glance stays clean. */}
+      {hasMore && (
+        <Disclosure summary="Full description & affected parts">
           <div className="space-y-5">
             {issue.body && (
               <Section label="Full description">
                 <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{issue.body}</p>
-              </Section>
-            )}
-            {hasEvidence && (
-              <Section label="Evidence">
-                <div className="space-y-2">
-                  {evidenceRefs.length > 0 && (
-                    <div className="rounded-lg border border-border bg-muted/40 p-3">
-                      <StructuredDetail data={evidenceRefs} />
-                    </div>
-                  )}
-                  {(affected.spans?.length ?? 0) > 0 && <EntityChips items={affected.spans ?? []} />}
-                </div>
               </Section>
             )}
             {hasSources && (
@@ -668,6 +716,12 @@ function ReviewCard({
       <div className="mb-2 line-clamp-2 text-sm font-semibold leading-snug text-foreground">{issue.title}</div>
       <div className="flex flex-wrap items-center gap-1.5">
         <StageTag narration={narration} />
+        {issue.category && (
+          <Badge tone="neutral" title="Issue category">
+            <Tag className="h-3 w-3" />
+            {humanize(issue.category)}
+          </Badge>
+        )}
         {issue.severity === "high" && <Badge tone="danger">High impact</Badge>}
         {seen > 1 && (
           <Badge tone="warn" title="Times this problem has recurred" className="tabular-nums">

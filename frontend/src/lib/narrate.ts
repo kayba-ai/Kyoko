@@ -21,11 +21,14 @@ export type StageKind =
   | "failed"; // an apply attempt didn't go through
 
 export interface Narration {
-  /** Short stage label, e.g. "Needs your review". */
+  /** Short stage label, e.g. "Needs review". */
   stage: string;
-  /** One-sentence plain-English description of the current state. */
-  headline: string;
-  /** What the human should do next, if anything. */
+  /** One-sentence description of the current state — only when it adds real
+   *  information beyond the stage label and the on-screen action. Null when the
+   *  stage + visible buttons already say everything (no filler). */
+  headline: string | null;
+  /** What the human should do next, when it isn't already obvious from a
+   *  visible control. Null otherwise. */
   next: string | null;
   tone: Tone;
   kind: StageKind;
@@ -60,30 +63,22 @@ export function severityPhrase(severity: string | null | undefined): string | nu
   }
 }
 
-function seenSentence(count: number | null | undefined): string {
-  const n = count ?? 1;
-  if (n <= 1) return "";
-  return ` It has come up ${n} times.`;
-}
-
 /**
- * Narrate an issue's current state. `hasFix` lets the caller signal that a
- * drafted proposal already exists (the issue carries proposal_ids), which
- * distinguishes "still drafting" from "ready to approve".
+ * Narrate an issue's current state. The copy is deliberately sparse: when the
+ * stage label and the on-screen buttons already convey the situation (a problem
+ * waiting for Accept/Reject), there is no headline or next-step prose to read.
+ * Prose appears only where it carries information a button can't — a fix being
+ * drafted in the background, where to go next, or why autonomy escalated.
  */
 export function narrateIssue(issue: Issue): Narration {
   const where = sectionPhrase(issue.section);
-  const seen = seenSentence(issue.recurrence_count);
   const hasFix = (issue.proposal_ids?.length ?? 0) > 0;
 
   if (issue.autonomy_blocked) {
     return {
       stage: "Needs your attention",
-      headline:
-        "Kyoko tried to fix this on its own, but the problem kept coming back — so it has handed the decision to you.",
-      next: issue.autonomy_blocked_reason
-        ? `Reason: ${issue.autonomy_blocked_reason}`
-        : "Review the problem and decide how to proceed.",
+      headline: "Kyoko's automatic fixes didn't stick — the problem kept recurring.",
+      next: issue.autonomy_blocked_reason ?? null,
       tone: "danger",
       kind: "escalated",
     };
@@ -91,18 +86,12 @@ export function narrateIssue(issue: Issue): Narration {
 
   switch (issue.status) {
     case "dismissed":
-      return {
-        stage: "Dismissed",
-        headline: "You set this problem aside, so Kyoko won't act on it.",
-        next: "Reopen it if you'd like Kyoko to take another look.",
-        tone: "neutral",
-        kind: "dismissed",
-      };
+      return { stage: "Dismissed", headline: null, next: null, tone: "neutral", kind: "dismissed" };
 
     case "guarded":
       return {
         stage: "Fixed & watched",
-        headline: `The fix is live in ${where}, and a guard now watches in case the problem comes back.`,
+        headline: `The fix is live in ${where}; a guard now watches for it coming back.`,
         next: null,
         tone: "ok",
         kind: "guarded",
@@ -118,19 +107,13 @@ export function narrateIssue(issue: Issue): Narration {
       };
 
     case "resolved":
-      return {
-        stage: "Resolved",
-        headline: "This problem has been resolved.",
-        next: null,
-        tone: "ok",
-        kind: "resolved",
-      };
+      return { stage: "Resolved", headline: null, next: null, tone: "ok", kind: "resolved" };
 
     case "proposed":
       return {
-        stage: "Fix ready to approve",
-        headline: "Kyoko has drafted a fix for this problem.",
-        next: "Review and approve it on the Proposals tab.",
+        stage: "Fix ready",
+        headline: "Kyoko drafted a fix — review and approve it on the Proposals tab.",
+        next: null,
         tone: "primary",
         kind: "ready",
       };
@@ -138,40 +121,26 @@ export function narrateIssue(issue: Issue): Narration {
     case "accepted":
       if (hasFix) {
         return {
-          stage: "Fix ready to approve",
-          headline: "You accepted this problem and Kyoko has drafted a fix.",
-          next: "Review and approve it on the Proposals tab.",
+          stage: "Fix ready",
+          headline: "Kyoko drafted a fix — review and approve it on the Proposals tab.",
+          next: null,
           tone: "primary",
           kind: "ready",
         };
       }
       return {
         stage: "Drafting a fix",
-        headline: "You accepted this problem. Kyoko is drafting a fix right now.",
-        next: "This can take a minute — the fix will appear on the Proposals tab when it's ready.",
+        headline: "Kyoko is drafting a fix in the background; it'll appear on the Proposals tab when ready.",
+        next: null,
         tone: "primary",
         kind: "drafting",
       };
 
     case "diagnosed":
-      return {
-        stage: "Ready to review",
-        headline: `Kyoko found this problem in your agent's traces and worked out why it happens.${seen}`,
-        next: "Accept it to have Kyoko draft a fix, or reject it.",
-        tone: "warn",
-        kind: "review",
-      };
-
     case "prioritized":
     case "open":
     default:
-      return {
-        stage: "Needs your review",
-        headline: `Kyoko found this problem in your agent's traces.${seen}`,
-        next: "Accept it to have Kyoko draft a fix, or reject it.",
-        tone: "warn",
-        kind: "review",
-      };
+      return { stage: "Needs review", headline: null, next: null, tone: "warn", kind: "review" };
   }
 }
 
@@ -182,9 +151,9 @@ export function narrateProposal(p: { state: string | null | undefined; section: 
   switch ((p.state ?? "").toLowerCase()) {
     case "pending":
       return {
-        stage: "Waiting for your approval",
+        stage: "Waiting for approval",
         headline: `Kyoko drafted this change to ${where} to fix the problem.`,
-        next: "Approve it to apply the change, or leave it as a suggestion for now.",
+        next: null,
         tone: "primary",
         kind: "ready",
       };
