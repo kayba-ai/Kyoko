@@ -79,6 +79,7 @@ class AnalysisJob:
     profile_id: Optional[str] = None
     output_dir: Optional[Path] = None
     llm_eval_ids: Optional[Sequence[str]] = None  # llm_judge: which templates (None = all active)
+    issue_id: Optional[str] = None  # targeted gate-#1 authoring for one accepted issue
     job_id: str = field(default_factory=lambda: f"analysis_{uuid.uuid4().hex[:12]}")
 
 
@@ -99,6 +100,10 @@ def execute_analysis_job(
         "mock", "command", "generic", "adapter", "llm_judge",
     }:
         raise AnalysisRunError(f"unsupported_analyzer:{job.analyzer}")
+    # An issue-propose job is a targeted gate-#1 authoring run for one accepted issue; it
+    # bypasses corpus scope resolution entirely (no run enumeration, no watermark).
+    if job.issue_id:
+        return _execute_issue_propose_job(db_path, job, bus=bus)
     if job.scope not in {"all", "new", "run"}:
         raise AnalysisRunError(f"unsupported_scope:{job.scope}")
     if job.scope == "run" and not job.run_id:
@@ -187,6 +192,81 @@ def execute_analysis_job(
             return result
         result = {**base, "status": "failed", "error": str(exc), "ended_at": utc_now()}
         _record_schedule(db_path, job, result, None)
+        publish("failed", result)
+        return result
+    finally:
+        cancellation.end(job.job_id)
+
+
+def _execute_issue_propose_job(
+    db_path: Path,
+    job: AnalysisJob,
+    *,
+    bus: Optional[LiveBus] = None,
+) -> dict[str, Any]:
+    """Targeted gate-#1 authoring: human-accept one issue and author a proposal for it via
+    the job's operator (the dashboard "approve issue" path). Never raises for an authoring
+    failure — it is reported in the returned ``status``/``error`` like any other job."""
+
+    from .improve import author_proposal_for_issue
+
+    publish = _publisher(bus)
+    started_at = utc_now()
+    base = {
+        "job_id": job.job_id,
+        "schedule_id": None,
+        "analyzer": job.analyzer,
+        "scope": "issue",
+        "issue_id": job.issue_id,
+        "started_at": started_at,
+    }
+    token = cancellation.begin(job.job_id)
+    publish("running", base)
+
+    # Resolve the operator the same way _dispatch does (mock | command | adapter/named).
+    if job.analyzer == "mock":
+        operator, operator_adapter, operator_command = "mock", None, None
+    elif job.analyzer == "command":
+        operator, operator_adapter, operator_command = "command", None, job.operator_command
+    else:  # codex | claude | openclaw | hermes | generic | adapter
+        operator, operator_adapter, operator_command = "adapter", (job.adapter_id or job.analyzer), None
+
+    try:
+        token.check()
+        publish("analyzing", base)
+        report = author_proposal_for_issue(
+            db_path=db_path,
+            issue_id=str(job.issue_id),
+            operator=operator,
+            operator_adapter=operator_adapter,
+            operator_command=operator_command,
+            operator_timeout_seconds=job.timeout_seconds,
+            operator_max_retries=job.max_retries,
+            output_dir=job.output_dir,
+            profile_id=job.profile_id,
+            run_autonomy_after=job.run_autonomy,
+        )
+        result = {
+            **base,
+            "status": "succeeded",
+            "profile_id": report.profile_id,
+            "proposal_ids": list(report.proposal_ids),
+            "operator_run_id": report.analyze.operator_run_id if report.analyze is not None else None,
+            "autonomy": report.autonomy.to_json() if report.autonomy is not None else None,
+            "ended_at": utc_now(),
+        }
+        publish("succeeded", result)
+        return result
+    except cancellation.CancelledError:
+        result = {**base, "status": "cancelled", "error": "cancelled", "ended_at": utc_now()}
+        publish("cancelled", result)
+        return result
+    except Exception as exc:  # noqa: BLE001 — surface as a result, never crash the worker
+        if token.cancelled:
+            result = {**base, "status": "cancelled", "error": "cancelled", "ended_at": utc_now()}
+            publish("cancelled", result)
+            return result
+        result = {**base, "status": "failed", "error": str(exc), "ended_at": utc_now()}
         publish("failed", result)
         return result
     finally:

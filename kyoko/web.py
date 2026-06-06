@@ -1336,17 +1336,47 @@ def make_handler(
                             {"error": "id_required"}, status=HTTPStatus.BAD_REQUEST
                         )
                         return
-                    operator = _optional_str(payload.get("operator")) or "mock"
-                    if operator != "mock":
-                        # Loopback-only synchronous handler: only the deterministic mock
-                        # author is supported in-process (command operators shell out).
+                    # Operator selection: an explicit "mock" forces the in-process
+                    # deterministic author; otherwise default to the first enabled real
+                    # operator adapter (authored on the background runner so the multi-minute
+                    # shell-out never blocks this loopback handler). With no real adapter
+                    # registered (fresh DB), fall back to synchronous mock so accept still works.
+                    requested = _optional_str(payload.get("operator"))
+                    adapter_id = _first_enabled_operator_adapter_id(resolved_db_path)
+                    use_real = requested != "mock" and adapter_id is not None
+                    if requested and requested not in {"mock", adapter_id}:
                         self._send_json(
-                            {"error": f"unsupported_operator:{operator}"},
+                            {"error": f"unsupported_operator:{requested}"},
                             status=HTTPStatus.BAD_REQUEST,
                         )
                         return
                     try:
                         issue = accept_issue(db_path=resolved_db_path, issue_id=issue_id)
+                    except (IssueError, AnalyzeError) as exc:
+                        self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                        return
+                    if use_real:
+                        # Enqueue a targeted gate-#1 authoring job; the proposal arrives over
+                        # the `analysis_run` SSE channel when the operator finishes.
+                        job = AnalysisJob(
+                            analyzer=str(adapter_id),
+                            adapter_id=str(adapter_id),
+                            issue_id=issue_id,
+                            profile_id=_optional_str(issue.get("profile_id")),
+                        )
+                        job_id = selected_analysis_runner.submit(job)
+                        self._send_json(
+                            {
+                                "issue": issue,
+                                "propose": None,
+                                "job_id": job_id,
+                                "operator": adapter_id,
+                                "status": "authoring",
+                            },
+                            status=HTTPStatus.ACCEPTED,
+                        )
+                        return
+                    try:
                         output_dir = (
                             resolved_db_path.parent
                             / ".kyoko"
@@ -1363,7 +1393,13 @@ def make_handler(
                         self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
                         return
                     self._send_json(
-                        {"issue": issue, "propose": propose_report.to_json()}
+                        {
+                            "issue": issue,
+                            "propose": propose_report.to_json(),
+                            "job_id": None,
+                            "operator": "mock",
+                            "status": "proposed",
+                        }
                     )
                     return
                 # ---- eval (Python detector) measurement plane ----
@@ -2951,6 +2987,15 @@ def _analyzer_availability(db_path: Path) -> dict[str, Any]:
             }
         )
     return {"analyzers": analyzers, "schedulable": list(SCHEDULABLE_ANALYZERS)}
+
+
+def _first_enabled_operator_adapter_id(db_path: Path) -> Optional[str]:
+    """The id of the first enabled operator adapter (the default real author for the
+    "approve issue" path), or None when only the in-process mock author is available."""
+    for adapter in list_operator_adapters(db_path):
+        if int(adapter.get("enabled", 0)) == 1:
+            return str(adapter["id"])
+    return None
 
 
 def _analysis_job_from_payload(payload: dict[str, Any]) -> AnalysisJob:

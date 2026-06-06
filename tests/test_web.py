@@ -143,6 +143,47 @@ class WebTests(unittest.TestCase):
         self.assertIn("npm run build", page)
         self.assertIn("loopback-only", page)
 
+    def test_issues_accept_authors_mock_proposal_without_adapter(self) -> None:
+        # No real operator adapter registered: accept authors synchronously via the
+        # in-process mock author and returns the proposal inline.
+        from tests.test_issue_authoring import _mock_issue, _surface
+
+        with TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "kyoko.db"
+            ingest_source_fixture(db_path, FIXTURE)
+            surfaced = _surface(db_path, _mock_issue(db_path, Path(tmpdir) / "out"))
+            with RunningServer(db_path) as server:
+                res = server.post_json("/api/issues/accept", {"id": surfaced["id"]})
+            self.assertEqual(res["status"], "proposed")
+            self.assertIsNone(res["job_id"])
+            self.assertEqual(res["operator"], "mock")
+            self.assertTrue(res["propose"]["proposal_id"])
+
+    def test_issues_accept_enqueues_real_operator_when_adapter_registered(self) -> None:
+        # An enabled operator adapter is the default real author: accept flips the issue
+        # and enqueues a background authoring job, returning a job_id (the proposal arrives
+        # over SSE). The mock author is NOT used.
+        from tests.test_issue_authoring import _mock_issue, _surface
+
+        with TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "kyoko.db"
+            ingest_source_fixture(db_path, FIXTURE)
+            surfaced = _surface(db_path, _mock_issue(db_path, Path(tmpdir) / "out"))
+            register_operator_adapter(
+                db_path=db_path,
+                adapter_id="codex",
+                name="Codex",
+                command=["true"],
+                operator_kind="codex",
+                profile_id="profile_news_research_001",
+            )
+            with RunningServer(db_path) as server:
+                res = server.post_json("/api/issues/accept", {"id": surfaced["id"]})
+            self.assertEqual(res["status"], "authoring")
+            self.assertEqual(res["operator"], "codex")
+            self.assertTrue(res["job_id"])
+            self.assertIsNone(res["propose"])
+
     def test_dashboard_and_api_return_runtime_data(self) -> None:
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"

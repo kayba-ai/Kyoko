@@ -23,6 +23,7 @@ import { api } from "@/lib/api";
 import type { AcceptIssueResult, AutonomyPolicy, Issue, IssueStatus, Skill } from "@/lib/types";
 import { ago, fmtTime, humanize } from "@/lib/format";
 import { useApi } from "@/hooks/useApi";
+import { useLiveEvent } from "@/hooks/useLiveBus";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
@@ -137,9 +138,20 @@ function ReviewActions({
   const [error, setError] = useState<Error | null>(null);
   const [accepted, setAccepted] = useState<AcceptIssueResult | null>(null);
   const [applied, setApplied] = useState(false);
+  // A real operator authors the proposal on the background runner, which can take minutes;
+  // hold this until the issue re-fetches with a proposal (driven by the analysis_run SSE
+  // event at the page level), then surface the authored proposal as usual.
+  const [authoring, setAuthoring] = useState<string | null>(null);
 
-  const canAccept = ACCEPTABLE_STATUSES.has(issue.status);
   const proposalId = firstProposalId(issue, accepted);
+
+  // The operator finished: a proposal now exists on the re-fetched issue → drop the
+  // "Authoring…" state so "Approve & apply" lights up.
+  useEffect(() => {
+    if (authoring && (issue.proposal_ids?.length ?? 0) > 0) setAuthoring(null);
+  }, [authoring, issue.proposal_ids]);
+
+  const canAccept = !authoring && ACCEPTABLE_STATUSES.has(issue.status);
   const canApply = !applied && APPLYABLE_STATUSES.has(issue.status) && !!proposalId;
   const busy = pending !== null;
 
@@ -148,7 +160,13 @@ function ReviewActions({
     setError(null);
     try {
       const res = await api.acceptIssue(issue.id);
-      setAccepted(res);
+      if (res.status === "authoring") {
+        // Async path: a real operator is authoring. The proposal arrives via SSE; show a
+        // pending label until the re-fetched issue carries it.
+        setAuthoring(res.operator ?? "operator");
+      } else {
+        setAccepted(res);
+      }
       onReviewed();
     } catch (e) {
       setError(e instanceof Error ? e : new Error(String(e)));
@@ -226,6 +244,12 @@ function ReviewActions({
               </Button>
             )}
           </>
+        )}
+        {authoring && (
+          <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Authoring proposal… ({authoring})
+          </span>
         )}
       </div>
       {accepted && (
@@ -818,6 +842,16 @@ export function IssuesPage() {
     setVersion((v) => v + 1);
     reload();
   }
+
+  // A background "approve issue" authoring job (real operator) finishes asynchronously and
+  // streams its terminal status over the analysis_run channel; reload so the newly authored
+  // proposal shows up and "Approve & apply" lights up on the affected issue.
+  useLiveEvent("analysis_run", (ev: { status?: string }) => {
+    const status = (ev?.status ?? "").toLowerCase();
+    if (status === "succeeded" || status === "failed" || status === "cancelled") {
+      onReviewed();
+    }
+  });
 
   const tabs = STATUS_FILTERS.map((f) => ({ value: f.value, label: `${f.label} (${counts[f.value]})` }));
 

@@ -274,6 +274,63 @@ def run_improvement_loop(
     )
 
 
+def author_proposal_for_issue(
+    *,
+    db_path: Path,
+    issue_id: str,
+    operator: str = "mock",
+    operator_command: Optional[Sequence[str]] = None,
+    operator_adapter: Optional[str] = None,
+    operator_timeout_seconds: int = 120,
+    operator_max_retries: int = 0,
+    output_dir: Optional[Path] = None,
+    schema_path: Optional[Path] = None,
+    profile_id: Optional[str] = None,
+    run_autonomy_after: bool = True,
+) -> ImproveReport:
+    """Gate #1 for a single, already-surfaced issue: human-accept it and author a proposal
+    with the given operator, then run gate #2 over that one proposal.
+
+    This is the targeted path the dashboard "approve issue" button drives — it authors a fix
+    for *this* issue via a real operator (no corpus re-diagnosis). The synchronous mock
+    author runs in-process; a real operator (``operator='adapter'``) shells out, so the
+    caller is expected to run this on a background worker, not an HTTP handler."""
+
+    initialize_database(db_path)
+    selected_output_dir = (
+        output_dir or (_default_output_dir(db_path) / "issue-propose" / issue_id)
+    )
+    selected_output_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        # Idempotent gate-#1 human-accept (refuses only a dismissed issue).
+        accept_issue(db_path=db_path, issue_id=issue_id)
+        propose_report = _propose_for_each(
+            db_path=db_path,
+            output_dir=selected_output_dir,
+            issue_id=issue_id,
+            operator=operator,
+            operator_command=operator_command,
+            operator_adapter=operator_adapter,
+            operator_timeout_seconds=operator_timeout_seconds,
+            operator_max_retries=operator_max_retries,
+            schema_path=schema_path,
+            profile_id=profile_id,
+        )
+    except (AnalyzeError, IssueError, OperatorAdapterError) as exc:
+        raise ImproveError(str(exc)) from exc
+
+    # Gate #2 over the single authored proposal: HITL applies nothing (awaits a human
+    # approve/apply); autonomous auto-applies + mints a guard. Reuses the direct-proposal
+    # path of the loop so there is exactly one gate-#2 implementation.
+    return run_improvement_loop(
+        db_path=db_path,
+        proposal_id=propose_report.proposal_id,
+        profile_id=profile_id,
+        run_autonomy_after=run_autonomy_after,
+    )
+
+
 def _gate1_candidate_issue_ids(db_path: Path, profile_id: Optional[str]) -> tuple[str, ...]:
     """Issues still eligible to author a fix from (pre-proposed, non-dismissed states)."""
     if profile_id is None:

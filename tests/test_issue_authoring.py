@@ -201,5 +201,53 @@ class ProposeForIssueTests(unittest.TestCase):
             self.assertEqual(stored[report.proposal_id]["issue_id"], surfaced["id"])
 
 
+class AuthorProposalForIssueTests(unittest.TestCase):
+    """The targeted gate-#1 path the dashboard "approve issue" button drives:
+    accept one already-surfaced issue and author a proposal for it (no re-diagnosis)."""
+
+    def test_author_proposal_for_issue_accepts_and_authors(self) -> None:
+        from kyoko.improve import author_proposal_for_issue
+
+        with TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "kyoko.db"
+            _seed(db_path)
+            mi = _mock_issue(db_path, Path(tmp) / "out")
+            surfaced = _surface(db_path, mi)
+
+            report = author_proposal_for_issue(
+                db_path=db_path,
+                issue_id=surfaced["id"],
+                operator="mock",
+                run_autonomy_after=False,
+            )
+            self.assertEqual(len(report.proposal_ids), 1)
+            issue_after = get_issue(db_path=db_path, issue_id=surfaced["id"])
+            self.assertEqual(issue_after["status"], "proposed")
+            self.assertIn(report.proposal_ids[0], issue_after["proposal_ids"])
+
+    def test_issue_propose_job_authors_via_runner(self) -> None:
+        from kyoko.analysis_runner import AnalysisJob, execute_analysis_job
+
+        with TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "kyoko.db"
+            _seed(db_path)
+            mi = _mock_issue(db_path, Path(tmp) / "out")
+            surfaced = _surface(db_path, mi)
+
+            job = AnalysisJob(
+                analyzer="mock",
+                issue_id=surfaced["id"],
+                profile_id=PROFILE,
+                run_autonomy=False,
+            )
+            result = execute_analysis_job(db_path, job)
+            self.assertEqual(result["status"], "succeeded")
+            self.assertEqual(result["scope"], "issue")
+            self.assertEqual(result["issue_id"], surfaced["id"])
+            self.assertEqual(len(result["proposal_ids"]), 1)
+            issue_after = get_issue(db_path=db_path, issue_id=surfaced["id"])
+            self.assertEqual(issue_after["status"], "proposed")
+
+
 if __name__ == "__main__":
     unittest.main()

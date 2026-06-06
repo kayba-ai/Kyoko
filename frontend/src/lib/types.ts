@@ -331,12 +331,20 @@ export interface GuardReport {
   affected_span_names: string[];
 }
 
-// Result of accepting an issue at gate #1 (POST /api/issues/accept). `propose` is
-// the authored proposal context (null when authoring was skipped — e.g. the
-// section's autonomy mode is `off`, so the issue stays diagnosed/awaiting).
+// Result of accepting an issue at gate #1 (POST /api/issues/accept).
+//
+// Two shapes, by `status`:
+//  - "proposed":  the in-process mock author ran synchronously; `propose` carries the
+//                 authored proposal context (`proposal_id`), `job_id` is null.
+//  - "authoring": a real operator (e.g. codex) is authoring the proposal on the background
+//                 runner; `propose` is null and `job_id` identifies the run. The proposal
+//                 arrives later over the `analysis_run` SSE channel — refetch on completion.
 export interface AcceptIssueResult {
   issue: Issue;
   propose: { proposal_id?: string | null; [k: string]: unknown } | null;
+  job_id?: string | null;
+  operator?: string;
+  status?: "proposed" | "authoring";
 }
 
 // Issue-centric analysis report (POST /api/analyze). Analysis surfaces Issues
