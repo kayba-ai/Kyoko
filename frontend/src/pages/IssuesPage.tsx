@@ -23,6 +23,7 @@ import { api } from "@/lib/api";
 import type { AcceptIssueResult, AutonomyPolicy, Issue, IssueStatus, Skill } from "@/lib/types";
 import { ago, fmtTime, humanize } from "@/lib/format";
 import { narrateIssue, sectionPhrase, severityPhrase } from "@/lib/narrate";
+import { issueBucket } from "@/lib/issues";
 import { useApi } from "@/hooks/useApi";
 import { useLiveEvent } from "@/hooks/useLiveBus";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
@@ -56,17 +57,6 @@ const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
 // Statuses where the issue is still in the triage/diagnosis stage and can be
 // accepted at gate #1. "accepted" and beyond are already past the gate.
 const ACCEPTABLE_STATUSES = new Set<string>(["open", "prioritized", "diagnosed"]);
-
-// Bucket any lifecycle status into the four review-queue filters. Gate #1 splits
-// the queue: pre-accept (triage) → Pending; accepted/proposed (gate #1 done, a fix
-// is being authored / awaiting gate-#2 approval on Proposals) → Accepted; the
-// applied/resolved end-states → Resolved; dismissed → Rejected.
-function bucket(status: string): "open" | "accepted" | "resolved" | "dismissed" {
-  if (status === "resolved" || status === "applied" || status === "guarded") return "resolved";
-  if (status === "accepted" || status === "proposed") return "accepted";
-  if (status === "dismissed") return "dismissed";
-  return "open";
-}
 
 function matchesQuery(issue: Issue, q: string): boolean {
   if (!q) return true;
@@ -803,7 +793,7 @@ export function IssuesPage() {
 
   const counts = useMemo(() => {
     const c = { open: 0, accepted: 0, resolved: 0, dismissed: 0, all: issues.length };
-    for (const i of issues) c[bucket(i.status)] += 1;
+    for (const i of issues) c[issueBucket(i.status)] += 1;
     return c;
   }, [issues]);
 
@@ -811,7 +801,7 @@ export function IssuesPage() {
   // Status + text filtered, but BEFORE the category facet — this is the set the
   // category chips are derived from, so every available category stays selectable.
   const statusScoped = useMemo(
-    () => issues.filter((i) => (statusFilter === "all" || bucket(i.status) === statusFilter) && matchesQuery(i, q)),
+    () => issues.filter((i) => (statusFilter === "all" || issueBucket(i.status) === statusFilter) && matchesQuery(i, q)),
     [issues, statusFilter, q],
   );
   // Distinct free-text categories present in the current view, with counts, sorted.

@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Issue, IssueSeverity } from "@/lib/types";
+import { isOpenIssue } from "@/lib/issues";
 import { useApi } from "@/hooks/useApi";
 import { ago, fmtPercent, humanize } from "@/lib/format";
 import { Card, CardBody } from "@/components/ui/card";
@@ -159,7 +160,10 @@ function LoopCard({
 
 export function OverviewPage() {
   const metrics = useApi(() => api.dashboardMetrics(), []);
-  const openIssues = useApi(() => api.issues({ status: "open" }), []);
+  // Fetch the full issue set and derive "still open" client-side via the shared
+  // bucket logic — matches the Issues page's Pending tab (open/prioritized/
+  // diagnosed). The literal status="open" filter missed diagnosed issues.
+  const openIssues = useApi(() => api.issues(), []);
 
   const loading = (metrics.loading && !metrics.data) || (openIssues.loading && !openIssues.data);
   const error = metrics.error ?? openIssues.error;
@@ -178,7 +182,7 @@ export function OverviewPage() {
   const failRate = totalRuns > 0 ? (failedRuns / totalRuns) * 100 : null;
   const tone = rateTone(failRate);
 
-  const issues = openIssues.data ?? [];
+  const issues = (openIssues.data ?? []).filter(isOpenIssue);
   const highCount = issues.filter((i) => i.severity === "high").length;
   const mediumCount = issues.filter((i) => i.severity === "medium").length;
   const lowCount = issues.length - highCount - mediumCount;
