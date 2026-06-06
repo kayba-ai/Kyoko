@@ -68,6 +68,30 @@ function bucket(status: string): "open" | "accepted" | "resolved" | "dismissed" 
   return "open";
 }
 
+// The category dimension is always rendered — a real category gets a primary
+// chip, an unset one a muted "Uncategorized" so the slot never silently vanishes
+// (which reads as a bug). `prominent` colors it for the detail header; the list
+// keeps it quiet next to the stage chip.
+function CategoryBadge({
+  category,
+  prominent = false,
+}: {
+  category: string | null | undefined;
+  prominent?: boolean;
+}) {
+  const has = !!category;
+  return (
+    <Badge
+      tone={has && prominent ? "primary" : "neutral"}
+      title="Issue category"
+      className={cn(!has && "opacity-70")}
+    >
+      <Tag className="h-3 w-3" />
+      {has ? humanize(category) : "Uncategorized"}
+    </Badge>
+  );
+}
+
 function matchesQuery(issue: Issue, q: string): boolean {
   if (!q) return true;
   const haystack = [issue.title, issue.body, issue.section, issue.id, issue.category, issue.severity]
@@ -538,12 +562,7 @@ function IssueDetail({
       <div className="space-y-2">
         <h2 className="text-2xl font-bold leading-snug tracking-tight text-foreground">{issue.title}</h2>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
-          {issue.category && (
-            <Badge tone="primary" title="Issue category">
-              <Tag className="h-3 w-3" />
-              {humanize(issue.category)}
-            </Badge>
-          )}
+          <CategoryBadge category={issue.category} prominent />
           {sev && (
             <span
               className={cn(
@@ -716,12 +735,7 @@ function ReviewCard({
       <div className="mb-2 line-clamp-2 text-sm font-semibold leading-snug text-foreground">{issue.title}</div>
       <div className="flex flex-wrap items-center gap-1.5">
         <StageTag narration={narration} />
-        {issue.category && (
-          <Badge tone="neutral" title="Issue category">
-            <Tag className="h-3 w-3" />
-            {humanize(issue.category)}
-          </Badge>
-        )}
+        <CategoryBadge category={issue.category} />
         {issue.severity === "high" && <Badge tone="danger">High impact</Badge>}
         {seen > 1 && (
           <Badge tone="warn" title="Times this problem has recurred" className="tabular-nums">
