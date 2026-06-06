@@ -16,21 +16,23 @@ import {
   Shield,
   ShieldCheck,
   Stethoscope,
-  Undo2,
   X,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import type { AcceptIssueResult, AutonomyPolicy, Issue, IssueStatus, Skill } from "@/lib/types";
 import { ago, fmtTime, humanize } from "@/lib/format";
+import { narrateIssue, sectionPhrase, severityPhrase } from "@/lib/narrate";
 import { useApi } from "@/hooks/useApi";
 import { useLiveEvent } from "@/hooks/useLiveBus";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
+import { Disclosure } from "@/components/ui/disclosure";
 import { Input, Textarea } from "@/components/ui/input";
 import { Tabs } from "@/components/ui/tabs";
 import { Spinner, Empty, ErrorNote } from "@/components/ui/misc";
 import { PageHeader } from "@/components/ui/page-header";
+import { StatusBanner, StageTag } from "@/components/StatusBanner";
 import { StructuredDetail } from "@/components/RecordView";
 import { cn } from "@/lib/utils";
 
@@ -63,46 +65,6 @@ function bucket(status: string): "open" | "accepted" | "resolved" | "dismissed" 
   if (status === "accepted" || status === "proposed") return "accepted";
   if (status === "dismissed") return "dismissed";
   return "open";
-}
-
-// Review-queue decision bucket badge mirroring the filters above.
-function decision(status: string): { label: string; tone: NonNullable<BadgeProps["tone"]> } {
-  if (status === "resolved" || status === "applied" || status === "guarded")
-    return { label: "Resolved", tone: "ok" };
-  if (status === "accepted" || status === "proposed") return { label: "Accepted", tone: "primary" };
-  if (status === "dismissed") return { label: "Rejected", tone: "danger" };
-  return { label: "Pending", tone: "warn" };
-}
-
-// Precise lifecycle badge for every status in the Issue spine. Returns null for
-// plain "open" (the decision badge already reads "Pending" there).
-function lifecycle(status: string): { label: string; tone: NonNullable<BadgeProps["tone"]> } | null {
-  switch (status) {
-    case "prioritized":
-      return { label: "Prioritized", tone: "warn" };
-    case "diagnosed":
-      return { label: "Diagnosed", tone: "warn" };
-    case "accepted":
-      return { label: "Accepted (gate #1)", tone: "primary" };
-    case "proposed":
-      return { label: "Proposed", tone: "primary" };
-    case "applied":
-      return { label: "Applied", tone: "ok" };
-    case "resolved":
-      return { label: "Resolved", tone: "ok" };
-    case "guarded":
-      return { label: "Guarded", tone: "primary" };
-    case "dismissed":
-      return { label: "Dismissed", tone: "danger" };
-    default:
-      return null;
-  }
-}
-
-function severityTone(severity: string | null | undefined): NonNullable<BadgeProps["tone"]> {
-  if (severity === "high") return "danger";
-  if (severity === "medium") return "warn";
-  return "neutral";
 }
 
 function matchesQuery(issue: Issue, q: string): boolean {
@@ -502,8 +464,9 @@ function IssueDetail({
   const issue = (data.issue as Issue | undefined) ?? null;
   if (!issue) return <Empty title="Issue not found" />;
 
-  const dec = decision(issue.status);
-  const life = lifecycle(issue.status);
+  const narration = narrateIssue(issue);
+  const sev = severityPhrase(issue.severity);
+  const seen = issue.recurrence_count ?? 1;
   const sectionDescription = (data.section_description as string | undefined) ?? null;
   const affected = (data.affected as Record<string, { entity_id: string; found: boolean }[]>) ?? {};
   const linkedProposals =
@@ -519,81 +482,57 @@ function IssueDetail({
     { title: "Spans", items: affected.spans ?? [] },
   ].filter((g) => g.items.length > 0);
 
+  const hasEvidence = evidenceRefs.length > 0 || (affected.spans?.length ?? 0) > 0;
+  const hasSources = sourceGroups.length > 0 || linkedProposals.length > 0;
+  const hasDetails = !!issue.body || hasEvidence || hasSources;
+
   return (
-    <div className="mx-auto max-w-3xl space-y-6 pb-4">
-      {/* Decision header */}
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-          <Badge tone={dec.tone}>{dec.label}</Badge>
-          {life && <Badge tone={life.tone}>{life.label}</Badge>}
-          {typeof issue.rank === "number" && (
-            <Badge tone="neutral" className="tabular-nums">{`Rank ${issue.rank}`}</Badge>
-          )}
-          {typeof issue.recurrence_count === "number" && issue.recurrence_count > 1 && (
-            <Badge tone="warn" title="Times this failure has recurred" className="tabular-nums">
-              <Repeat className="h-3 w-3" />
-              {`seen ${issue.recurrence_count}×`}
-            </Badge>
-          )}
-          {issue.severity && <Badge tone={severityTone(issue.severity)}>{humanize(issue.severity)}</Badge>}
-          {issue.section && <Badge tone="neutral">{humanize(issue.section)}</Badge>}
-          {issue.category && <Badge tone="neutral">{humanize(issue.category)}</Badge>}
-          {issue.source && <Badge tone="neutral">{humanize(issue.source)}</Badge>}
-          {issue.evaluator_id && (
-            <Badge tone="primary" title={`Guarded by ${issue.evaluator_id}`}>
-              <Shield className="h-3 w-3" />
-              {`Guard: ${issue.evaluator_id}`}
-            </Badge>
-          )}
-          {issue.autonomy_blocked && (
-            <Badge
-              tone="danger"
-              title={issue.autonomy_blocked_reason ?? "Autonomy blocked — escalated to human review"}
+    <div className="mx-auto max-w-3xl space-y-5 pb-4">
+      {/* The problem, in one line, with the human-readable basics underneath. */}
+      <div className="space-y-2">
+        <h2 className="text-2xl font-bold leading-snug tracking-tight text-foreground">{issue.title}</h2>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          {sev && (
+            <span
+              className={cn(
+                "font-medium",
+                issue.severity === "high" && "text-danger",
+                issue.severity === "medium" && "text-warn",
+              )}
             >
-              <Lock className="h-3 w-3" />
-              Escalated
-            </Badge>
+              {sev}
+            </span>
           )}
-          {typeof issue.auto_fix_attempts === "number" && issue.auto_fix_attempts > 0 && (
-            <Badge tone="warn" title="Auto-fix cycles spent by the guard monitor" className="tabular-nums">
-              <Undo2 className="h-3 w-3" />
-              {`${issue.auto_fix_attempts} auto-fix`}
-            </Badge>
+          {seen > 1 && (
+            <span className="inline-flex items-center gap-1">
+              <Repeat className="h-3 w-3" />
+              Seen {seen} times
+            </span>
           )}
+          {issue.section && <span>Affects {sectionPhrase(issue.section)}</span>}
         </div>
-        <div className="shrink-0">
-          <ReviewActions issue={issue} onReviewed={onReviewed} />
-        </div>
+        {sectionDescription && <p className="text-sm text-muted-foreground">{sectionDescription}</p>}
       </div>
 
-      {/* Escalation reason (autonomy blocked → back to human). */}
-      {issue.autonomy_blocked && issue.autonomy_blocked_reason && (
-        <div className="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
-          <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <span>
-            Autonomy blocked — escalated to human review: {issue.autonomy_blocked_reason}
-          </span>
-        </div>
-      )}
+      {/* What's happening, in plain English — plus the one action that matters here. */}
+      <StatusBanner narration={narration} actions={<ReviewActions issue={issue} onReviewed={onReviewed} />} />
 
-      {/* Recurrence progress toward the autonomous auto-fix threshold. */}
+      {/* How close a recurring problem is to an automatic fix. */}
       {ACCEPTABLE_STATUSES.has(issue.status) && <RecurrenceProgress issue={issue} />}
 
-      {/* Guard + rollback status for an applied fix. */}
-      <GuardStatus issue={issue} />
-
-      {/* Autonomy summary — what "Accept" (gate #1) will do. */}
+      {/* What "Accept" will do under the current autonomy setting. */}
       {(ACCEPTABLE_STATUSES.has(issue.status) || ACCEPTED_STATUSES.has(issue.status)) && (
         <AutonomySummary issue={issue} />
       )}
 
-      {/* Statement */}
-      <div className="space-y-1.5">
-        <h2 className="text-2xl font-bold leading-snug tracking-tight text-foreground">{issue.title}</h2>
-        {sectionDescription && <p className="text-sm text-muted-foreground">{sectionDescription}</p>}
-      </div>
+      {/* Why it happens — diagnosis in plain language. */}
+      {issue.root_cause && (
+        <Section label="Why it happens" icon={<Stethoscope className="h-3.5 w-3.5" />}>
+          <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{issue.root_cause}</p>
+        </Section>
+      )}
 
-      {/* Skillbook deliverable(s) */}
+      {/* The skillbook entry this issue produced. */}
       {deliveredSkills.length > 0 && (
         <div className="space-y-2">
           {deliveredSkills.map((s) => (
@@ -602,76 +541,70 @@ function IssueDetail({
         </div>
       )}
 
-      {/* Root cause (diagnosis) */}
-      {issue.root_cause && (
-        <Section label="Root cause" icon={<Stethoscope className="h-3.5 w-3.5" />}>
-          <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{issue.root_cause}</p>
-        </Section>
-      )}
+      {/* Once a fix is live, how it's holding up. */}
+      <GuardStatus issue={issue} />
 
-      {/* Justification */}
-      <Section label="Justification">
-        {issue.body ? (
-          <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{issue.body}</p>
-        ) : (
-          <p className="text-sm text-muted-foreground/70">No description provided.</p>
-        )}
-      </Section>
-
-      {/* Evidence */}
-      {(evidenceRefs.length > 0 || (affected.spans?.length ?? 0) > 0) && (
-        <Section label="Evidence" icon={<FileSearch className="h-3.5 w-3.5" />}>
-          <div className="space-y-2">
-            {evidenceRefs.length > 0 && (
-              <div className="rounded-lg border border-border bg-muted/40 p-3">
-                <StructuredDetail data={evidenceRefs} />
-              </div>
-            )}
-            {(affected.spans?.length ?? 0) > 0 && <EntityChips items={affected.spans ?? []} />}
-          </div>
-        </Section>
-      )}
-
-      {/* Sources */}
-      {(sourceGroups.length > 0 || linkedProposals.length > 0) && (
-        <Section label="Sources">
-          <div className="space-y-3">
-            {sourceGroups.map((g) => (
-              <div key={g.title} className="space-y-1.5">
-                <div className="text-xs font-medium text-muted-foreground">{g.title}</div>
-                <EntityChips items={g.items} />
-              </div>
-            ))}
-            {linkedProposals.length > 0 && (
-              <div className="space-y-1.5">
-                <div className="text-xs font-medium text-muted-foreground">Linked proposals</div>
-                <div className="space-y-1.5">
-                  {linkedProposals.map((entry) => (
-                    <div
-                      key={entry.proposal.id}
-                      className="flex items-center gap-2 rounded-lg border border-border bg-muted/60 px-3 py-2"
-                    >
-                      {entry.proposal.state && (
-                        <Badge tone="neutral">{humanize(entry.proposal.state)}</Badge>
-                      )}
-                      <span className="truncate text-sm text-foreground">
-                        {entry.proposal.title ?? entry.proposal.id}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </Section>
-      )}
-
-      {/* Review comment */}
-      <Section label="Review comment" icon={<MessageSquare className="h-3.5 w-3.5" />}>
+      {/* Your notes */}
+      <Section label="Your notes" icon={<MessageSquare className="h-3.5 w-3.5" />}>
         <CommentEditor key={issue.id} issue={issue} onSaved={onReviewed} />
       </Section>
 
-      {/* Metadata */}
+      {/* Everything technical lives behind a click so the first glance stays clean. */}
+      {hasDetails && (
+        <Disclosure summary="Evidence & affected parts" icon={<FileSearch className="h-3.5 w-3.5" />}>
+          <div className="space-y-5">
+            {issue.body && (
+              <Section label="Full description">
+                <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{issue.body}</p>
+              </Section>
+            )}
+            {hasEvidence && (
+              <Section label="Evidence">
+                <div className="space-y-2">
+                  {evidenceRefs.length > 0 && (
+                    <div className="rounded-lg border border-border bg-muted/40 p-3">
+                      <StructuredDetail data={evidenceRefs} />
+                    </div>
+                  )}
+                  {(affected.spans?.length ?? 0) > 0 && <EntityChips items={affected.spans ?? []} />}
+                </div>
+              </Section>
+            )}
+            {hasSources && (
+              <Section label="Sources">
+                <div className="space-y-3">
+                  {sourceGroups.map((g) => (
+                    <div key={g.title} className="space-y-1.5">
+                      <div className="text-xs font-medium text-muted-foreground">{g.title}</div>
+                      <EntityChips items={g.items} />
+                    </div>
+                  ))}
+                  {linkedProposals.length > 0 && (
+                    <div className="space-y-1.5">
+                      <div className="text-xs font-medium text-muted-foreground">Linked proposals</div>
+                      <div className="space-y-1.5">
+                        {linkedProposals.map((entry) => (
+                          <div
+                            key={entry.proposal.id}
+                            className="flex items-center gap-2 rounded-lg border border-border bg-muted/60 px-3 py-2"
+                          >
+                            {entry.proposal.state && <Badge tone="neutral">{humanize(entry.proposal.state)}</Badge>}
+                            <span className="truncate text-sm text-foreground">
+                              {entry.proposal.title ?? entry.proposal.id}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </Section>
+            )}
+          </div>
+        </Disclosure>
+      )}
+
+      {/* Identifiers & timestamps. */}
       <div className="flex flex-wrap gap-x-6 gap-y-1 border-t border-border/60 pt-3 text-xs text-muted-foreground">
         <span>
           Created <span title={fmtTime(issue.created_at)}>{ago(issue.created_at)}</span>
@@ -684,12 +617,14 @@ function IssueDetail({
         <span className="font-mono">{issue.id}</span>
       </div>
 
-      {/* Full record */}
-      <Card>
-        <CardBody>
-          <StructuredDetail data={data} defaultView="raw" />
-        </CardBody>
-      </Card>
+      {/* The complete raw record, for anyone who wants it. */}
+      <Disclosure summary="Full record (raw)">
+        <Card>
+          <CardBody>
+            <StructuredDetail data={data} defaultView="raw" />
+          </CardBody>
+        </Card>
+      </Disclosure>
 
       <p className="text-xs text-muted-foreground/70">
         Reviewing updates this evidence record only — it never changes agent behavior or bypasses the check/replay
@@ -712,8 +647,8 @@ function ReviewCard({
   onSelect: () => void;
   onReviewed: () => void;
 }) {
-  const dec = decision(issue.status);
-  const life = lifecycle(issue.status);
+  const narration = narrateIssue(issue);
+  const seen = issue.recurrence_count ?? 1;
   return (
     <div
       role="button"
@@ -732,37 +667,16 @@ function ReviewCard({
     >
       <div className="mb-2 line-clamp-2 text-sm font-semibold leading-snug text-foreground">{issue.title}</div>
       <div className="flex flex-wrap items-center gap-1.5">
-        <Badge tone={dec.tone}>{dec.label}</Badge>
-        {life && <Badge tone={life.tone}>{life.label}</Badge>}
-        {typeof issue.recurrence_count === "number" && issue.recurrence_count > 1 && (
-          <Badge tone="warn" title="Times this failure has recurred" className="tabular-nums">
+        <StageTag narration={narration} />
+        {issue.severity === "high" && <Badge tone="danger">High impact</Badge>}
+        {seen > 1 && (
+          <Badge tone="warn" title="Times this problem has recurred" className="tabular-nums">
             <Repeat className="h-3 w-3" />
-            {`${issue.recurrence_count}×`}
-          </Badge>
-        )}
-        {issue.severity && <Badge tone={severityTone(issue.severity)}>{humanize(issue.severity)}</Badge>}
-        {issue.section && <Badge tone="neutral">{humanize(issue.section)}</Badge>}
-        {issue.evaluator_id && (
-          <Badge tone="primary" title={`Guarded by ${issue.evaluator_id}`}>
-            <Shield className="h-3 w-3" />
-            Guard
-          </Badge>
-        )}
-        {issue.autonomy_blocked && (
-          <Badge tone="danger" title={issue.autonomy_blocked_reason ?? "Escalated to human review"}>
-            <Lock className="h-3 w-3" />
-            Escalated
+            {`${seen}×`}
           </Badge>
         )}
         <span className="ml-auto text-label text-muted-foreground">{ago(issue.created_at)}</span>
       </div>
-      {typeof issue.recurrence_count === "number" &&
-        issue.recurrence_count > 1 &&
-        ACCEPTABLE_STATUSES.has(issue.status) && (
-          <div className="mt-2.5" onClick={(e) => e.stopPropagation()} role="presentation">
-            <RecurrenceProgress issue={issue} />
-          </div>
-        )}
       {(ACCEPTABLE_STATUSES.has(issue.status) ||
         (ACCEPTED_STATUSES.has(issue.status) && (issue.proposal_ids?.length ?? 0) > 0)) && (
         <div className="mt-2.5" onClick={(e) => e.stopPropagation()} role="presentation">

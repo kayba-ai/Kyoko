@@ -1,15 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { CheckCheck, CircleDot, GitPullRequestArrow, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Proposal } from "@/lib/types";
-import { ago, humanize } from "@/lib/format";
+import { ago } from "@/lib/format";
+import { narrateProposal, sectionPhrase } from "@/lib/narrate";
 import { useApi } from "@/hooks/useApi";
-import { Badge, statusTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardBody } from "@/components/ui/card";
+import { Disclosure } from "@/components/ui/disclosure";
 import { Spinner, Empty, ErrorNote } from "@/components/ui/misc";
 import { PageHeader } from "@/components/ui/page-header";
+import { StatusBanner, StageTag } from "@/components/StatusBanner";
 import { StructuredDetail } from "@/components/RecordView";
 import { cn } from "@/lib/utils";
 
@@ -17,7 +18,8 @@ import { cn } from "@/lib/utils";
 // edits). This is the gate-#2 surface: a pending proposal authored from an accepted
 // issue is reviewed here and applied via "Approve & apply" (POST /api/proposals/apply).
 // Applying still runs server-side behind the autonomy policy + human locks — the button
-// is the human approval, not a bypass.
+// is the human approval, not a bypass. The display leads with plain English (what this
+// change does, what to do next); the numbers and raw record sit behind a toggle.
 
 function pct(v: number | null | undefined): string | null {
   if (v === null || v === undefined) return null;
@@ -43,6 +45,15 @@ function ConfidenceRow({ label, value }: { label: string; value: number | null |
         <div className="h-full rounded-full bg-primary" style={{ width: `${Math.round(r * 100)}%` }} />
       </div>
     </div>
+  );
+}
+
+function Section({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <section className="space-y-2">
+      <div className="text-xs font-medium text-muted-foreground">{label}</div>
+      {children}
+    </section>
   );
 }
 
@@ -72,8 +83,8 @@ function ProposalDetail({
 
   const title = String(data.title ?? id);
   const state = (data.state as string | undefined) ?? null;
+  const section = (data.section as string | undefined) ?? null;
   const issueId = (data.issue_id as string | undefined) ?? null;
-  const sectionLabel = (data.section_label as string | undefined) ?? (data.section as string | undefined) ?? null;
   const summary = (data.summary as string | undefined) ?? null;
   const sectionDescription = (data.section_description as string | undefined) ?? null;
   const kyokoConfidence = data.kyoko_confidence as number | null | undefined;
@@ -82,79 +93,67 @@ function ProposalDetail({
   const hasConfidence =
     pct(kyokoConfidence) !== null || pct(operatorConfidence) !== null || pct(confidence) !== null;
 
+  const narration = narrateProposal({ state, section });
+
   return (
     <div className="mx-auto max-w-3xl space-y-5">
-      <div className="space-y-2.5">
+      {/* What this proposal is, with the human-readable basics underneath. */}
+      <div className="space-y-2">
         <h2 className="text-xl font-bold tracking-tight text-foreground">{title}</h2>
-        <div className="flex flex-wrap items-center gap-1.5">
-          {state && <Badge tone={statusTone(state)}>{humanize(state)}</Badge>}
-          {sectionLabel && <Badge tone="neutral">{sectionLabel}</Badge>}
-        </div>
-        {issueId && (
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <CircleDot className="h-3.5 w-3.5" />
-            <span>Origin issue:</span>
-            <span className="font-mono text-foreground">{issueId}</span>
-          </div>
-        )}
-        {sectionDescription && <p className="text-sm text-muted-foreground">{sectionDescription}</p>}
-      </div>
-
-      {/* Gate #2 — review the authored fix above, then approve to apply it. */}
-      {state === "pending" && (
-        <div className="flex flex-col gap-2 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="text-sm text-foreground">
-              <span className="font-semibold">Ready to apply.</span>{" "}
-              <span className="text-muted-foreground">
-                Approving writes this change through the autonomy gate.
-              </span>
-            </div>
-            <Button variant="default" disabled={applying} onClick={onApply}>
-              {applying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCheck className="h-3.5 w-3.5" />}
-              Approve &amp; apply
-            </Button>
-          </div>
-          {applyError && (
-            <span className="text-xs text-danger" role="alert">
-              {applyError}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          {section && <span>Changes {sectionPhrase(section)}</span>}
+          {issueId && (
+            <span className="inline-flex items-center gap-1" title={`Origin issue: ${issueId}`}>
+              <CircleDot className="h-3 w-3" />
+              Fixes a tracked issue
             </span>
           )}
         </div>
+        {sectionDescription && <p className="text-sm text-muted-foreground">{sectionDescription}</p>}
+      </div>
+
+      {/* What's happening + the one action that matters: approve to apply. */}
+      <StatusBanner
+        narration={narration}
+        actions={
+          state === "pending" ? (
+            <Button variant="default" disabled={applying} onClick={onApply}>
+              {applying ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <CheckCheck className="h-3.5 w-3.5" />
+              )}
+              Approve &amp; apply
+            </Button>
+          ) : undefined
+        }
+      />
+      {applyError && (
+        <span className="block text-xs text-danger" role="alert">
+          {applyError}
+        </span>
       )}
 
+      {/* The change, in the operator's own words. */}
       {summary && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Summary</CardTitle>
-          </CardHeader>
-          <CardBody>
-            <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{summary}</p>
-          </CardBody>
-        </Card>
+        <Section label="What it changes">
+          <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{summary}</p>
+        </Section>
       )}
 
-      {hasConfidence && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Confidence</CardTitle>
-          </CardHeader>
-          <CardBody className="space-y-3.5">
-            <ConfidenceRow label="Kyoko" value={kyokoConfidence} />
-            <ConfidenceRow label="Operator" value={operatorConfidence} />
-            <ConfidenceRow label="Overall" value={confidence} />
-          </CardBody>
-        </Card>
-      )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Full proposal</CardTitle>
-        </CardHeader>
-        <CardBody>
+      {/* Confidence numbers and the complete record, tucked away. */}
+      <Disclosure summary="Confidence & full proposal">
+        <div className="space-y-5">
+          {hasConfidence && (
+            <div className="space-y-3.5">
+              <ConfidenceRow label="Kyoko" value={kyokoConfidence} />
+              <ConfidenceRow label="Operator" value={operatorConfidence} />
+              <ConfidenceRow label="Overall" value={confidence} />
+            </div>
+          )}
           <StructuredDetail data={data} />
-        </CardBody>
-      </Card>
+        </div>
+      </Disclosure>
     </div>
   );
 }
@@ -208,7 +207,7 @@ export function ProposalsPage() {
     <div className="flex h-full flex-col">
       <PageHeader
         title="Proposals"
-        description="Review and approve gated context, skill, and harness fixes authored from accepted issues."
+        description="Review and approve the fixes Kyoko has drafted from accepted issues."
         icon={<GitPullRequestArrow className="h-5 w-5" />}
         actions={
           data ? (
@@ -228,8 +227,8 @@ export function ProposalsPage() {
         ) : !data || data.length === 0 ? (
           <div className="flex-1">
             <Empty
-              title="No learning proposals yet"
-              hint="Proposals come from operator, ACE, and import runs once they surface a gated change."
+              title="No drafted fixes yet"
+              hint="Accept an issue on the Issues tab and Kyoko will draft a fix here for you to approve."
               icon={<GitPullRequestArrow className="h-6 w-6" />}
             />
           </div>
@@ -237,8 +236,7 @@ export function ProposalsPage() {
           <>
             <div className="w-80 shrink-0 space-y-1.5 overflow-y-auto border-r border-border p-3">
               {data.map((p) => {
-                const sectionLabel = p.section_label ?? p.section;
-                const conf = pct(p.confidence);
+                const narration = narrateProposal({ state: p.state, section: p.section });
                 const active = p.id === selected;
                 const pending = p.state === "pending";
                 const applyError = applyErrors[p.id];
@@ -261,19 +259,15 @@ export function ProposalsPage() {
                   >
                     <div className="mb-1.5 truncate text-sm font-medium text-foreground">{p.title}</div>
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <Badge tone={statusTone(p.state)}>{humanize(p.state)}</Badge>
-                      {sectionLabel && <Badge tone="neutral">{sectionLabel}</Badge>}
+                      <StageTag narration={narration} />
                       {p.issue_id && (
                         <span
                           className="inline-flex items-center gap-1 text-label text-muted-foreground"
                           title={`Origin issue: ${p.issue_id}`}
                         >
                           <CircleDot className="h-3 w-3" />
-                          Issue
+                          Fix
                         </span>
-                      )}
-                      {conf && (
-                        <span className="font-mono text-label tabular-nums text-muted-foreground">{conf}</span>
                       )}
                       <span className="ml-auto text-xs text-muted-foreground">{ago(p.created_at)}</span>
                     </div>
