@@ -28,7 +28,7 @@ def _seed(db_path: Path, *, runs: int = 1, empty_completion: bool = False) -> No
     storage.initialize_database(db_path)
     con = storage.connect(db_path)
     con.execute(
-        "INSERT INTO profiles VALUES ('p1','p1','/tmp','active','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')"
+        "INSERT INTO profiles VALUES ('p1','p1','/tmp','active','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z',NULL)"
     )
     con.execute(
         "INSERT INTO sources (id,profile_id,kind,display_name,status,adapter_version,config_json,capabilities_json) "

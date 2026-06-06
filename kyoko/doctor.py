@@ -1636,8 +1636,8 @@ def _run_eval_smoke_check(*, root: Path, temporary: bool) -> DoctorCheck:
         initialize_database(db_path)
         with connect(db_path) as con:
             con.execute(
-                "INSERT INTO profiles VALUES ('p1','p1','/tmp','active',"
-                "'2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')"
+                "INSERT INTO profiles (id, name, root_path, status, created_at, updated_at) "
+                "VALUES ('p1','p1','/tmp','active','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')"
             )
             con.execute(
                 "INSERT INTO sources (id,profile_id,kind,display_name,status,adapter_version,"
@@ -1733,8 +1733,8 @@ def _run_llm_eval_smoke_check(*, root: Path, temporary: bool) -> DoctorCheck:
         )
         with connect(db_path) as con:
             con.execute(
-                "INSERT INTO profiles VALUES ('p1','p1','/tmp','active',"
-                "'2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')"
+                "INSERT INTO profiles (id, name, root_path, status, created_at, updated_at) "
+                "VALUES ('p1','p1','/tmp','active','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')"
             )
             con.execute(
                 "INSERT INTO sources (id,profile_id,kind,display_name,status,adapter_version,"

@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 
-SCHEMA_VERSION = 33
+SCHEMA_VERSION = 34
 
 
 class StorageError(Exception):
@@ -73,7 +73,11 @@ CREATE TABLE IF NOT EXISTS profiles (
   root_path TEXT NOT NULL,
   status TEXT NOT NULL,
   created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
+  updated_at TEXT NOT NULL,
+  -- v34: "new since last" cursor for ad-hoc (non-scheduled) analysis runs. Holds the
+  -- max run started_at analyzed so far; scope=new with no explicit since reads it and
+  -- advances it. NULL = nothing analyzed yet (first run judges the whole corpus).
+  analysis_watermark TEXT
 );
 
 CREATE TABLE IF NOT EXISTS sources (
@@ -1098,6 +1102,8 @@ def initialize_database(db_path: Path) -> None:
         )
         _ensure_column(connection, "eval_definitions", "issue_id", "issue_id TEXT")
         _ensure_column(connection, "learning_proposals", "issue_id", "issue_id TEXT")
+        # v34: per-profile "new since last" cursor for ad-hoc analysis runs.
+        _ensure_column(connection, "profiles", "analysis_watermark", "analysis_watermark TEXT")
         # v32 (spec 0019): the issue lifecycle folds onto `skills` (the unified living
         # skillbook entry). Additive/nullable columns carry the problem facet, the gate/guard
         # watermarks, the recurrence dedup, ACE's `used_count`, and the durable source-eval
@@ -2097,6 +2103,32 @@ def runs_newer_than(
     count = int(row["n"]) if row is not None and row["n"] is not None else 0
     max_started = row["max_started"] if row is not None else None
     return count, (str(max_started) if max_started is not None else None)
+
+
+def get_profile_analysis_watermark(db_path: Path, *, profile_id: str) -> Optional[str]:
+    """The ad-hoc "new since last" cursor for a profile (None = nothing analyzed yet)."""
+
+    with connect(db_path) as connection:
+        row = connection.execute(
+            "SELECT analysis_watermark FROM profiles WHERE id = ?",
+            (profile_id,),
+        ).fetchone()
+    if row is None or row["analysis_watermark"] is None:
+        return None
+    return str(row["analysis_watermark"])
+
+
+def set_profile_analysis_watermark(
+    db_path: Path, *, profile_id: str, watermark: Optional[str]
+) -> None:
+    """Advance (or seed/clear) the ad-hoc "new since last" cursor for a profile."""
+
+    with connect(db_path) as connection:
+        connection.execute(
+            "UPDATE profiles SET analysis_watermark = ?, updated_at = ? WHERE id = ?",
+            (watermark, utc_now(), profile_id),
+        )
+        connection.commit()
 
 
 def _valid_hhmm(value: str) -> bool:

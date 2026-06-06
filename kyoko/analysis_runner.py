@@ -29,9 +29,11 @@ from typing import Any, Callable, Optional, Sequence
 from .live import EVENT_ANALYSIS, LiveBus, global_bus
 from .storage import (
     StorageError,
+    get_profile_analysis_watermark,
     list_analysis_schedules,
     record_schedule_result,
     runs_newer_than,
+    set_profile_analysis_watermark,
     update_analysis_schedule,
     utc_now,
 )
@@ -117,7 +119,13 @@ def execute_analysis_job(
         since, watermark_after, new_run_count = _resolve_scope(db_path, job, profile_id)
 
         if job.scope == "new" and new_run_count == 0:
-            result = {**base, "status": "skipped", "reason": "no_new_traces", "ended_at": utc_now()}
+            result = {
+                **base,
+                "status": "skipped",
+                "reason": "no_new_traces",
+                "profile_id": profile_id,
+                "ended_at": utc_now(),
+            }
             _record_schedule(db_path, job, result, watermark_after)
             publish("skipped", result)
             return result
@@ -217,6 +225,11 @@ def _resolve_scope(
         return None, max_started, 0
     # scope == "new"
     since = job.since
+    # Ad-hoc (non-scheduled) "new since last": no explicit cutoff is sent, so fall back to
+    # the per-profile cursor. Scheduled runs already carry their schedule watermark as
+    # job.since, so they keep their own cursor untouched here.
+    if since is None and job.schedule_id is None:
+        since = get_profile_analysis_watermark(db_path, profile_id=profile_id)
     count, max_started = runs_newer_than(db_path, profile_id=profile_id, since=since)
     # Advance to the newest run seen (or keep the prior cutoff if nothing newer).
     watermark_after = max_started or since
@@ -356,7 +369,19 @@ def _record_schedule(
     result: dict[str, Any],
     watermark_after: Optional[str],
 ) -> None:
+    clean_run = result.get("status") in {"succeeded", "skipped"}
     if not job.schedule_id:
+        # Ad-hoc (non-scheduled) run: advance the per-profile "new since last" cursor so a
+        # corpus sweep (scope new/all) marks those traces as seen. scope=run is a targeted
+        # re-analysis and must not move the cursor.
+        profile_id = result.get("profile_id")
+        if job.scope in {"new", "all"} and clean_run and watermark_after and profile_id:
+            try:
+                set_profile_analysis_watermark(
+                    db_path, profile_id=str(profile_id), watermark=watermark_after
+                )
+            except StorageError:
+                pass
         return
     try:
         record_schedule_result(
@@ -366,7 +391,7 @@ def _record_schedule(
             last_status=str(result.get("status")),
             last_operator_run_id=result.get("operator_run_id"),
             last_error=result.get("error"),
-            watermark=watermark_after if result.get("status") in {"succeeded", "skipped"} else None,
+            watermark=watermark_after if clean_run else None,
         )
     except StorageError:
         # A deleted schedule should not turn a successful analysis into a failure.

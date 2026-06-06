@@ -25,7 +25,7 @@ def _seed_runs(db_path: Path, specs: dict[str, list[str]]) -> None:
     """specs: {run_id: [span_status, ...]} of tool spans under profile p1."""
     storage.initialize_database(db_path)
     con = storage.connect(db_path)
-    con.execute("INSERT INTO profiles VALUES ('p1','p1','/tmp','active','t','t')")
+    con.execute("INSERT INTO profiles VALUES ('p1','p1','/tmp','active','t','t',NULL)")
     con.execute(
         "INSERT INTO sources (id,profile_id,kind,display_name,status,adapter_version,config_json,capabilities_json) "
         "VALUES ('s1','p1','t','s','active','1','{}','{}')"
@@ -155,7 +155,7 @@ class RaiseIssuesTests(unittest.TestCase):
             db = Path(tmp) / "k.db"
             storage.initialize_database(db)
             con = storage.connect(db)
-            con.execute("INSERT INTO profiles VALUES ('p1','p1','/tmp','active','t','t')")
+            con.execute("INSERT INTO profiles VALUES ('p1','p1','/tmp','active','t','t',NULL)")
             con.execute("INSERT INTO sources (id,profile_id,kind,display_name,status,adapter_version,config_json,capabilities_json) VALUES ('s1','p1','t','s','active','1','{}','{}')")
             con.execute("INSERT INTO runs (id,profile_id,source_id,status,started_at,metadata_json) VALUES ('run_0','p1','s1','succeeded','2026-01-01T00:00:00Z','{}')")
             con.execute("INSERT INTO spans (id,run_id,source_id,kind,name,status,started_at,usage_json,attributes_json) VALUES ('run_0_llm','run_0','s1','llm','gen','ok','2026-01-01T00:00:01Z','{}',?)",

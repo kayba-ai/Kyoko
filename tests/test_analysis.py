@@ -27,9 +27,11 @@ from kyoko.storage import (
     connect,
     create_analysis_schedule,
     get_analysis_schedule,
+    get_profile_analysis_watermark,
     list_analysis_schedules,
     record_schedule_result,
     runs_newer_than,
+    set_profile_analysis_watermark,
     update_analysis_schedule,
 )
 from kyoko.web import make_handler
@@ -129,6 +131,63 @@ class ExecuteAnalysisJobTests(unittest.TestCase):
                 ).fetchone()
             self.assertEqual(row["analyzed_since"], "2000-01-01T00:00:00Z")
 
+    def test_adhoc_new_scope_reads_and_advances_profile_cursor(self) -> None:
+        # The dashboard "New since last" button sends scope=new with no `since` and no
+        # schedule. The first run should analyze the whole corpus and advance the per-profile
+        # cursor; a second identical run should then skip (nothing new since last).
+        with TemporaryDirectory() as tmpdir:
+            db_path = _demo_db(tmpdir)
+            first = execute_analysis_job(
+                db_path, AnalysisJob(analyzer="mock", scope="new", run_autonomy=False)
+            )
+            self.assertEqual(first["status"], "succeeded")
+            profile_id = first["profile_id"]
+            watermark = get_profile_analysis_watermark(db_path, profile_id=profile_id)
+            self.assertIsNotNone(watermark)
+
+            second = execute_analysis_job(
+                db_path, AnalysisJob(analyzer="mock", scope="new", run_autonomy=False)
+            )
+            self.assertEqual(second["status"], "skipped")
+            self.assertEqual(second["reason"], "no_new_traces")
+
+    def test_seeded_profile_cursor_scopes_adhoc_new_run(self) -> None:
+        # Seeding the cursor into the future makes an ad-hoc "New since last" run see nothing.
+        with TemporaryDirectory() as tmpdir:
+            db_path = _demo_db(tmpdir)
+            profile_id = execute_analysis_job(
+                db_path, AnalysisJob(analyzer="mock", scope="all", run_autonomy=False)
+            )["profile_id"]
+            set_profile_analysis_watermark(
+                db_path, profile_id=profile_id, watermark="2099-01-01T00:00:00Z"
+            )
+            result = execute_analysis_job(
+                db_path, AnalysisJob(analyzer="mock", scope="new", run_autonomy=False)
+            )
+            self.assertEqual(result["status"], "skipped")
+            self.assertEqual(result["reason"], "no_new_traces")
+
+    def test_explicit_since_overrides_profile_cursor(self) -> None:
+        # An explicit `since` on the job still wins over the stored cursor.
+        with TemporaryDirectory() as tmpdir:
+            db_path = _demo_db(tmpdir)
+            profile_id = execute_analysis_job(
+                db_path, AnalysisJob(analyzer="mock", scope="all", run_autonomy=False)
+            )["profile_id"]
+            set_profile_analysis_watermark(
+                db_path, profile_id=profile_id, watermark="2099-01-01T00:00:00Z"
+            )
+            result = execute_analysis_job(
+                db_path,
+                AnalysisJob(
+                    analyzer="mock",
+                    scope="new",
+                    since="2000-01-01T00:00:00Z",
+                    run_autonomy=False,
+                ),
+            )
+            self.assertEqual(result["status"], "succeeded")
+
     def test_unsupported_analyzer_raises(self) -> None:
         with TemporaryDirectory() as tmpdir:
             db_path = _demo_db(tmpdir)
@@ -176,7 +235,7 @@ class SchedulerTickTests(unittest.TestCase):
         with connect(db_path) as connection:
             connection.execute(
                 "INSERT INTO profiles VALUES ('p1','p1','/tmp','active',"
-                "'2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')"
+                "'2026-01-01T00:00:00Z','2026-01-01T00:00:00Z',NULL)"
             )
 
     def test_first_tick_arms_without_firing(self) -> None:
