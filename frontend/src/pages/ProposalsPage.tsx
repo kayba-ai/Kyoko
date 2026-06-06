@@ -81,17 +81,29 @@ function ProposalDetail({
   if (error) return <ErrorNote error={error} />;
   if (!data) return <Empty title="Proposal not found" />;
 
-  const title = String(data.title ?? id);
-  const state = (data.state as string | undefined) ?? null;
-  const section = (data.section as string | undefined) ?? null;
-  const issueId = (data.issue_id as string | undefined) ?? null;
-  const summary = (data.summary as string | undefined) ?? null;
-  const sectionDescription = (data.section_description as string | undefined) ?? null;
-  const kyokoConfidence = data.kyoko_confidence as number | null | undefined;
-  const operatorConfidence = data.operator_confidence as number | null | undefined;
-  const confidence = data.confidence as number | null | undefined;
+  // The detail endpoint nests the proposal fields under `proposal` (the top level
+  // carries the gate/evidence envelope). Read from there, falling back to the root
+  // for safety.
+  const p = ((data.proposal as Record<string, unknown> | undefined) ?? data) as Record<string, unknown>;
+  const title = String(p.title ?? id);
+  const state = (p.state as string | undefined) ?? null;
+  const section = (p.section as string | undefined) ?? null;
+  const issueId = (p.issue_id as string | undefined) ?? null;
+  const summary = (p.summary as string | undefined) ?? null;
+  const insight = (p.insight as string | undefined) ?? null;
+  const sectionDescription = (p.section_description as string | undefined) ?? null;
+  const kyokoConfidence = p.kyoko_confidence as number | null | undefined;
+  const operatorConfidence = p.operator_confidence as number | null | undefined;
+  const confidence = p.confidence as number | null | undefined;
   const hasConfidence =
     pct(kyokoConfidence) !== null || pct(operatorConfidence) !== null || pct(confidence) !== null;
+
+  // The literal change(s) that would be written — the agent's proposed new guidance.
+  // Prefer the per-change insights; fall back to the consolidated insight.
+  const changes = (Array.isArray(p.proposed_changes) ? (p.proposed_changes as Record<string, unknown>[]) : [])
+    .map((ch) => (typeof ch.insight === "string" ? ch.insight : null))
+    .filter((t): t is string => !!t);
+  const proposedChanges = changes.length > 0 ? changes : insight ? [insight] : [];
 
   const narration = narrateProposal({ state, section });
 
@@ -141,6 +153,19 @@ function ProposalDetail({
         </Section>
       )}
 
+      {/* The concrete new guidance that would be written if approved. */}
+      {proposedChanges.length > 0 && (
+        <Section label={proposedChanges.length > 1 ? "Proposed changes" : "Proposed change"}>
+          <div className="space-y-2">
+            {proposedChanges.map((text, i) => (
+              <div key={i} className="rounded-lg border border-primary/20 bg-primary/5 p-3">
+                <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{text}</p>
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
+
       {/* Confidence numbers and the complete record, tucked away. */}
       <Disclosure summary="Confidence & full proposal">
         <div className="space-y-5">
@@ -151,7 +176,7 @@ function ProposalDetail({
               <ConfidenceRow label="Overall" value={confidence} />
             </div>
           )}
-          <StructuredDetail data={data} />
+          <StructuredDetail data={p} />
         </div>
       </Disclosure>
     </div>
