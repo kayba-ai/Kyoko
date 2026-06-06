@@ -29,7 +29,6 @@ from .analyze import (
 )
 from .apply import (
     ApplyError,
-    apply_context_proposal,
     apply_proposal,
     list_context_delivery_rules,
     list_context_delivery_rule_revisions,
@@ -1762,12 +1761,22 @@ def build_parser() -> argparse.ArgumentParser:
 
     apply = subcommands.add_parser(
         "apply",
-        help="Apply a validated context LearningProposal into the skillbook.",
+        help="Apply a validated LearningProposal (context or harness) — applying IS the human approval.",
     )
     _add_db_argument(apply)
     apply.add_argument(
         "proposal_id",
         help="LearningProposal id to apply.",
+    )
+    apply.add_argument(
+        "--harness-workspace-root",
+        type=Path,
+        help="Workspace root for a harness proposal apply.",
+    )
+    apply.add_argument(
+        "--json",
+        action="store_true",
+        help="Print machine-readable JSON.",
     )
 
     prepare_harness = subcommands.add_parser(
@@ -4742,6 +4751,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(f"{issue['id']}  {issue['title']}")
             print(f"status={issue['status']} severity={issue.get('severity') or '-'} "
                   f"section={issue.get('section') or '-'}")
+            root_cause = (issue.get("root_cause") or "").strip()
+            if root_cause:
+                print(f"root_cause: {root_cause}")
+            body = (issue.get("body") or "").strip()
+            if body:
+                print(f"body: {body}")
+            for ref in issue.get("evidence_refs") or []:
+                if not isinstance(ref, dict):
+                    continue
+                note = (ref.get("note") or "").strip()
+                role = ref.get("role") or "-"
+                entity = ref.get("entity_id") or "-"
+                print(f"  evidence[{role}] {entity}{(': ' + note) if note else ''}")
             print(f"linked_proposals={detail['summary']['linked_proposals']} "
                   f"evidence_refs={detail['summary']['evidence_refs']}")
         return 0
@@ -5623,18 +5645,30 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 0
 
     if args.command == "apply":
+        # One apply gate for both sections: a human running `apply` IS the approval,
+        # whether the proposal touches the skillbook (context) or the harness. Harness
+        # repo writes remain subject to the allow_repo_patch fence (enforced in harness.py).
         try:
-            report = apply_context_proposal(db_path=args.db, proposal_id=args.proposal_id)
+            result = apply_proposal(
+                db_path=args.db,
+                proposal_id=args.proposal_id,
+                harness_workspace_root=args.harness_workspace_root,
+            )
         except (ApplyError, StorageError) as exc:
             print(f"apply failed: {exc}", file=sys.stderr)
             return 1
-        print(f"proposal applied: {report.proposal_id}")
-        print(f"profile: {report.profile_id}")
-        print(f"state: {report.state}")
-        for skill_id in report.applied_skill_ids:
-            print(f"skill: {skill_id}")
-        for rule_id in report.applied_context_rule_ids:
-            print(f"context_rule: {rule_id}")
+        if args.json:
+            print(json.dumps(result, sort_keys=True))
+        else:
+            print(f"proposal applied: {result['proposal_id']} ({result['section']})")
+            print(f"profile: {result['profile_id']}")
+            print(f"state: {result['state']}")
+            for skill_id in result.get("applied_skill_ids", []):
+                print(f"skill: {skill_id}")
+            for rule_id in result.get("applied_context_rule_ids", []):
+                print(f"context_rule: {rule_id}")
+            for patch_id in result.get("patch_transaction_ids", []):
+                print(f"patch: {patch_id}")
         return 0
 
     if args.command == "prepare-harness":
