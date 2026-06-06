@@ -68,30 +68,6 @@ function bucket(status: string): "open" | "accepted" | "resolved" | "dismissed" 
   return "open";
 }
 
-// The category dimension is always rendered — a real category gets a primary
-// chip, an unset one a muted "Uncategorized" so the slot never silently vanishes
-// (which reads as a bug). `prominent` colors it for the detail header; the list
-// keeps it quiet next to the stage chip.
-function CategoryBadge({
-  category,
-  prominent = false,
-}: {
-  category: string | null | undefined;
-  prominent?: boolean;
-}) {
-  const has = !!category;
-  return (
-    <Badge
-      tone={has && prominent ? "primary" : "neutral"}
-      title="Issue category"
-      className={cn(!has && "opacity-70")}
-    >
-      <Tag className="h-3 w-3" />
-      {has ? humanize(category) : "Uncategorized"}
-    </Badge>
-  );
-}
-
 function matchesQuery(issue: Issue, q: string): boolean {
   if (!q) return true;
   const haystack = [issue.title, issue.body, issue.section, issue.id, issue.category, issue.severity]
@@ -562,7 +538,12 @@ function IssueDetail({
       <div className="space-y-2">
         <h2 className="text-2xl font-bold leading-snug tracking-tight text-foreground">{issue.title}</h2>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
-          <CategoryBadge category={issue.category} prominent />
+          {issue.category && (
+            <Badge tone="primary" title="Issue category">
+              <Tag className="h-3 w-3" />
+              {humanize(issue.category)}
+            </Badge>
+          )}
           {sev && (
             <span
               className={cn(
@@ -701,6 +682,40 @@ function IssueDetail({
   );
 }
 
+// ---- Category facet ---------------------------------------------------------
+
+// A toggleable chip for the free-text issue category. Selecting one narrows the
+// list to that domain; selecting it again (or "All") clears the facet.
+function CategoryChip({
+  label,
+  count,
+  active,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium leading-none transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+        active
+          ? "border-primary/30 bg-primary/10 text-primary"
+          : "border-border bg-muted/60 text-muted-foreground hover:bg-accent",
+      )}
+    >
+      {label}
+      <span className="tabular-nums opacity-70">{count}</span>
+    </button>
+  );
+}
+
 // ---- Review card (left list) ------------------------------------------------
 
 function ReviewCard({
@@ -735,7 +750,12 @@ function ReviewCard({
       <div className="mb-2 line-clamp-2 text-sm font-semibold leading-snug text-foreground">{issue.title}</div>
       <div className="flex flex-wrap items-center gap-1.5">
         <StageTag narration={narration} />
-        <CategoryBadge category={issue.category} />
+        {issue.category && (
+          <Badge tone="neutral" title="Issue category">
+            <Tag className="h-3 w-3" />
+            {humanize(issue.category)}
+          </Badge>
+        )}
         {issue.severity === "high" && <Badge tone="danger">High impact</Badge>}
         {seen > 1 && (
           <Badge tone="warn" title="Times this problem has recurred" className="tabular-nums">
@@ -762,6 +782,7 @@ export function IssuesPage() {
   const skillsState = useApi<Skill[]>(() => api.skills(), []);
   const [selected, setSelected] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("open");
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   // Bumped after a successful review so the open detail re-fetches and the list/
   // counts stay in sync.
@@ -787,10 +808,27 @@ export function IssuesPage() {
   }, [issues]);
 
   const q = query.trim().toLowerCase();
-  const filtered = useMemo(
+  // Status + text filtered, but BEFORE the category facet — this is the set the
+  // category chips are derived from, so every available category stays selectable.
+  const statusScoped = useMemo(
     () => issues.filter((i) => (statusFilter === "all" || bucket(i.status) === statusFilter) && matchesQuery(i, q)),
     [issues, statusFilter, q],
   );
+  // Distinct free-text categories present in the current view, with counts, sorted.
+  const categories = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const i of statusScoped) if (i.category) m.set(i.category, (m.get(i.category) ?? 0) + 1);
+    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [statusScoped]);
+  const filtered = useMemo(
+    () => statusScoped.filter((i) => !categoryFilter || i.category === categoryFilter),
+    [statusScoped, categoryFilter],
+  );
+
+  // Drop a category selection that no longer exists in the current status/query scope.
+  useEffect(() => {
+    if (categoryFilter && !categories.some(([c]) => c === categoryFilter)) setCategoryFilter(null);
+  }, [categories, categoryFilter]);
 
   useEffect(() => {
     if (filtered.length === 0) {
@@ -858,10 +896,29 @@ export function IssuesPage() {
                   <Input
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Filter by title, body, section, id…"
+                    placeholder="Filter by title, body, section, id, category…"
                     className="pl-8"
                   />
                 </div>
+                {categories.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    <CategoryChip
+                      label="All"
+                      count={statusScoped.length}
+                      active={!categoryFilter}
+                      onClick={() => setCategoryFilter(null)}
+                    />
+                    {categories.map(([cat, n]) => (
+                      <CategoryChip
+                        key={cat}
+                        label={humanize(cat)}
+                        count={n}
+                        active={categoryFilter === cat}
+                        onClick={() => setCategoryFilter((c) => (c === cat ? null : cat))}
+                      />
+                    ))}
+                  </div>
+                )}
                 <div className="px-0.5 text-xs text-muted-foreground tabular-nums">
                   {filtered.length} {filtered.length === 1 ? "issue" : "issues"}
                 </div>
