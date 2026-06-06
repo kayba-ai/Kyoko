@@ -522,50 +522,64 @@ function IssueDetail({
   const hasSources = sourceGroups.length > 0 || linkedProposals.length > 0;
   const hasMore = !!issue.body || hasSources;
 
+  // Only show the status banner when it carries information the on-screen action
+  // buttons don't already convey. A plain "needs review" issue says everything
+  // through its Accept/Reject buttons, so no banner. Terminal states with no
+  // action (e.g. resolved) get a small stage chip in the meta row instead.
+  const showBanner = !!(narration.headline || narration.next);
+  const showStageChip = !showBanner && narration.kind !== "review";
+
   return (
     <div className="mx-auto max-w-3xl space-y-5 pb-4">
-      {/* The problem, in one line, with the human-readable basics underneath. */}
-      <div className="space-y-2">
-        <h2 className="text-2xl font-bold leading-snug tracking-tight text-foreground">{issue.title}</h2>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
-          {issue.category && (
-            <Badge tone="primary" title="Issue category">
-              <Tag className="h-3 w-3" />
-              {humanize(issue.category)}
-            </Badge>
-          )}
-          {sev && (
-            <span
-              className={cn(
-                "font-medium",
-                issue.severity === "high" && "text-danger",
-                issue.severity === "medium" && "text-warn",
-              )}
-            >
-              {sev}
-            </span>
-          )}
-          {seen > 1 && (
-            <span className="inline-flex items-center gap-1">
-              <Repeat className="h-3 w-3" />
-              Seen {seen} times
-            </span>
-          )}
-          {issue.section && <span>Affects {sectionPhrase(issue.section)}</span>}
-        </div>
-        {sectionDescription && <p className="text-sm text-muted-foreground">{sectionDescription}</p>}
-      </div>
-
-      {/* What's happening, in plain English — plus the one action that matters here. */}
-      <StatusBanner narration={narration} actions={<ReviewActions issue={issue} onReviewed={onReviewed} />} />
-
-      {/* How close a recurring problem is to an automatic fix. */}
-      {ACCEPTABLE_STATUSES.has(issue.status) && <RecurrenceProgress issue={issue} />}
-
-      {/* What "Accept" will do under the current autonomy setting. */}
+      {/* What "Accept" will do under the current autonomy setting — shown first so
+          the decision context comes before the problem statement. */}
       {(ACCEPTABLE_STATUSES.has(issue.status) || ACCEPTED_STATUSES.has(issue.status)) && (
         <AutonomySummary issue={issue} />
       )}
+
+      {/* The problem + the one action that matters here. */}
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0 space-y-2">
+          <h2 className="text-2xl font-bold leading-snug tracking-tight text-foreground">{issue.title}</h2>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
+            {showStageChip && <StageTag narration={narration} />}
+            {issue.category && (
+              <Badge tone="primary" title="Issue category">
+                <Tag className="h-3 w-3" />
+                {humanize(issue.category)}
+              </Badge>
+            )}
+            {sev && (
+              <span
+                className={cn(
+                  "font-medium",
+                  issue.severity === "high" && "text-danger",
+                  issue.severity === "medium" && "text-warn",
+                )}
+              >
+                {sev}
+              </span>
+            )}
+            {seen > 1 && (
+              <span className="inline-flex items-center gap-1">
+                <Repeat className="h-3 w-3" />
+                Seen {seen} times
+              </span>
+            )}
+            {issue.section && <span>Affects {sectionPhrase(issue.section)}</span>}
+          </div>
+          {sectionDescription && <p className="text-sm text-muted-foreground">{sectionDescription}</p>}
+        </div>
+        <div className="shrink-0">
+          <ReviewActions issue={issue} onReviewed={onReviewed} />
+        </div>
+      </div>
+
+      {/* Status, only when it explains something the action buttons don't. */}
+      {showBanner && <StatusBanner narration={narration} />}
+
+      {/* How close a recurring problem is to an automatic fix. */}
+      {ACCEPTABLE_STATUSES.has(issue.status) && <RecurrenceProgress issue={issue} />}
 
       {/* Why it happens — diagnosis in plain language. */}
       {issue.root_cause && (
