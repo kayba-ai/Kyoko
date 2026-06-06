@@ -25,7 +25,7 @@ import { ago, fmtTime, humanize } from "@/lib/format";
 import { useApi } from "@/hooks/useApi";
 import { useLiveEvent } from "@/hooks/useLiveBus";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { Input, Textarea } from "@/components/ui/input";
 import { Tabs } from "@/components/ui/tabs";
@@ -40,11 +40,12 @@ import { cn } from "@/lib/utils";
 // record — it never changes agent behavior, mutates a skillbook/harness/repo, or
 // bypasses the check/replay gate.
 
-type StatusFilter = "open" | "resolved" | "dismissed" | "all";
+type StatusFilter = "open" | "accepted" | "resolved" | "dismissed" | "all";
 
 const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
   { value: "open", label: "Pending" },
-  { value: "resolved", label: "Accepted" },
+  { value: "accepted", label: "Accepted" },
+  { value: "resolved", label: "Resolved" },
   { value: "dismissed", label: "Rejected" },
   { value: "all", label: "All" },
 ];
@@ -53,19 +54,22 @@ const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
 // accepted at gate #1. "accepted" and beyond are already past the gate.
 const ACCEPTABLE_STATUSES = new Set<string>(["open", "prioritized", "diagnosed"]);
 
-// Bucket any lifecycle status into the three review-queue filters. "accepted" and
-// the downstream authoring/applying states are work-in-progress → Pending.
-function bucket(status: string): "open" | "resolved" | "dismissed" {
+// Bucket any lifecycle status into the four review-queue filters. Gate #1 splits
+// the queue: pre-accept (triage) → Pending; accepted/proposed (gate #1 done, a fix
+// is being authored / awaiting gate-#2 approval on Proposals) → Accepted; the
+// applied/resolved end-states → Resolved; dismissed → Rejected.
+function bucket(status: string): "open" | "accepted" | "resolved" | "dismissed" {
   if (status === "resolved" || status === "applied" || status === "guarded") return "resolved";
+  if (status === "accepted" || status === "proposed") return "accepted";
   if (status === "dismissed") return "dismissed";
   return "open";
 }
 
-// Review-queue decision bucket: resolved/applied/guarded → Accepted,
-// dismissed → Rejected, everything in-flight → Pending.
+// Review-queue decision bucket badge mirroring the filters above.
 function decision(status: string): { label: string; tone: NonNullable<BadgeProps["tone"]> } {
   if (status === "resolved" || status === "applied" || status === "guarded")
-    return { label: "Accepted", tone: "ok" };
+    return { label: "Resolved", tone: "ok" };
+  if (status === "accepted" || status === "proposed") return { label: "Accepted", tone: "primary" };
   if (status === "dismissed") return { label: "Rejected", tone: "danger" };
   return { label: "Pending", tone: "warn" };
 }
@@ -112,17 +116,21 @@ function matchesQuery(issue: Issue, q: string): boolean {
 
 // ---- Review actions (accept at gate #1 / approve+apply at gate #2 / reject) --
 //
-// In HITL there are two human gates: "Accept" (POST /api/issues/accept) authors a
-// proposal for the issue; once a proposal exists, "Approve & apply" (POST
-// /api/proposals/apply) is the gate-#2 step that actually writes the change.
-// Reject/Reopen are plain status bookkeeping.
+// Gate #1 lives here (triage): "Accept" (POST /api/issues/accept) authors a proposal
+// for the issue; Reject/Reopen are plain status bookkeeping. Gate #2 (review + apply the
+// authored fix) lives on the Proposals page — once a fix is authored this surfaces a
+// deep-link there rather than an apply control, so each tab owns exactly one gate.
 
-// The issue is awaiting a human apply once a proposal exists and it hasn't been
-// applied/resolved/guarded yet.
-const APPLYABLE_STATUSES = new Set<string>(["accepted", "proposed"]);
+// The issue has cleared gate #1 and a fix is authored / being authored.
+const ACCEPTED_STATUSES = new Set<string>(["accepted", "proposed"]);
 
 function firstProposalId(issue: Issue, accepted: AcceptIssueResult | null): string | null {
   return accepted?.propose?.proposal_id ?? issue.proposal_ids?.[0] ?? null;
+}
+
+// Deep-link to a specific authored proposal on the Proposals (gate #2) page.
+function proposalLink(proposalId: string | null): string {
+  return proposalId ? `/proposals?id=${encodeURIComponent(proposalId)}` : "/proposals";
 }
 
 function ReviewActions({
@@ -134,25 +142,25 @@ function ReviewActions({
   onReviewed: () => void;
   size?: "sm" | "default";
 }) {
-  const [pending, setPending] = useState<"accept" | "apply" | IssueStatus | null>(null);
+  const [pending, setPending] = useState<"accept" | IssueStatus | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [accepted, setAccepted] = useState<AcceptIssueResult | null>(null);
-  const [applied, setApplied] = useState(false);
   // A real operator authors the proposal on the background runner, which can take minutes;
   // hold this until the issue re-fetches with a proposal (driven by the analysis_run SSE
-  // event at the page level), then surface the authored proposal as usual.
+  // event at the page level), then surface the "review on Proposals" link.
   const [authoring, setAuthoring] = useState<string | null>(null);
 
   const proposalId = firstProposalId(issue, accepted);
+  // Gate #1 cleared and a fix exists → point the user at gate #2 on the Proposals page.
+  const fixAuthored = ACCEPTED_STATUSES.has(issue.status) && !!proposalId;
 
   // The operator finished: a proposal now exists on the re-fetched issue → drop the
-  // "Authoring…" state so "Approve & apply" lights up.
+  // "Authoring…" state so the "review on Proposals" link shows.
   useEffect(() => {
     if (authoring && (issue.proposal_ids?.length ?? 0) > 0) setAuthoring(null);
   }, [authoring, issue.proposal_ids]);
 
   const canAccept = !authoring && ACCEPTABLE_STATUSES.has(issue.status);
-  const canApply = !applied && APPLYABLE_STATUSES.has(issue.status) && !!proposalId;
   const busy = pending !== null;
 
   async function accept() {
@@ -167,21 +175,6 @@ function ReviewActions({
       } else {
         setAccepted(res);
       }
-      onReviewed();
-    } catch (e) {
-      setError(e instanceof Error ? e : new Error(String(e)));
-    } finally {
-      setPending(null);
-    }
-  }
-
-  async function apply() {
-    if (!proposalId) return;
-    setPending("apply");
-    setError(null);
-    try {
-      await api.applyProposal(proposalId);
-      setApplied(true);
       onReviewed();
     } catch (e) {
       setError(e instanceof Error ? e : new Error(String(e)));
@@ -233,15 +226,11 @@ function ReviewActions({
                 </Button>
               </>
             )}
-            {canApply && (
-              <Button variant="default" size={size} disabled={busy} onClick={apply}>
-                {pending === "apply" ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <CheckCheck className="h-3.5 w-3.5" />
-                )}
-                Approve &amp; apply
-              </Button>
+            {fixAuthored && (
+              <Link to={proposalLink(proposalId)} className={buttonVariants({ variant: "default", size })}>
+                <CheckCheck className="h-3.5 w-3.5" />
+                Review fix →
+              </Link>
             )}
           </>
         )}
@@ -252,18 +241,11 @@ function ReviewActions({
           </span>
         )}
       </div>
-      {accepted && (
+      {fixAuthored && (
         <span className="text-right text-xs text-muted-foreground">
-          {proposalId ? (
-            <Link to="/proposals" className="text-primary hover:underline" title={proposalId}>
-              Proposal authored — approve to apply →
-            </Link>
-          ) : (
-            "Accepted — no proposal authored yet."
-          )}
+          Fix authored — review &amp; approve on Proposals.
         </span>
       )}
-      {applied && <span className="text-right text-xs text-ok">Applied.</span>}
       {error && (
         <span className="text-xs text-danger" role="alert">
           {error.message}
@@ -601,7 +583,7 @@ function IssueDetail({
       <GuardStatus issue={issue} />
 
       {/* Autonomy summary — what "Accept" (gate #1) will do. */}
-      {(ACCEPTABLE_STATUSES.has(issue.status) || APPLYABLE_STATUSES.has(issue.status)) && (
+      {(ACCEPTABLE_STATUSES.has(issue.status) || ACCEPTED_STATUSES.has(issue.status)) && (
         <AutonomySummary issue={issue} />
       )}
 
@@ -782,7 +764,7 @@ function ReviewCard({
           </div>
         )}
       {(ACCEPTABLE_STATUSES.has(issue.status) ||
-        (APPLYABLE_STATUSES.has(issue.status) && (issue.proposal_ids?.length ?? 0) > 0)) && (
+        (ACCEPTED_STATUSES.has(issue.status) && (issue.proposal_ids?.length ?? 0) > 0)) && (
         <div className="mt-2.5" onClick={(e) => e.stopPropagation()} role="presentation">
           <ReviewActions issue={issue} onReviewed={onReviewed} size="sm" />
         </div>
@@ -817,7 +799,7 @@ export function IssuesPage() {
   }, [skillsState.data]);
 
   const counts = useMemo(() => {
-    const c = { open: 0, resolved: 0, dismissed: 0, all: issues.length };
+    const c = { open: 0, accepted: 0, resolved: 0, dismissed: 0, all: issues.length };
     for (const i of issues) c[bucket(i.status)] += 1;
     return c;
   }, [issues]);
