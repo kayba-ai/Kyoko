@@ -1138,13 +1138,14 @@ def initialize_database(db_path: Path) -> None:
             ("source_measure_run_id", "source_measure_run_id TEXT"),
         ):
             _ensure_column(connection, "skills", _col, _ddl)
-        # v32 fix: a `skills` table migrated from a pre-v32 shape kept NOT NULL on
-        # `insight`/`section`, but problem-phase entries store those as NULL (the fix/section
-        # are only filled in once diagnosed/proposed). SQLite can't drop a NOT NULL via ALTER,
-        # so rebuild the table to match SCHEMA_SQL when the legacy constraint is detected.
-        # Runs AFTER the column adds above so the copy preserves every v32 column; before the
-        # index block below so indexes bind to the rebuilt table.
-        _relax_legacy_skills_constraints(connection)
+        # v32 fix: tables migrated from a pre-v32 shape keep constraints SQLite can't ALTER
+        # away — `skills` kept NOT NULL on insight/section (problem-phase entries store those
+        # NULL), and `eval_definitions.issue_id` kept a FK to the dropped `issues` table
+        # (now folded into `skills`), which makes every INSERT fail with
+        # `no such table: main.issues`. Rebuild the affected tables to match SCHEMA_SQL.
+        # Runs AFTER the column adds above so copies preserve every v32 column; before the
+        # skills index block below so those indexes bind to the rebuilt table.
+        _rebuild_legacy_tables(connection)
         # Indexes over v32-added skill columns — created here (not in SCHEMA_SQL) so they
         # bind AFTER the columns exist on a migrated legacy `skills` table.
         for _idx_sql in (
@@ -1669,46 +1670,70 @@ def _ensure_column(connection: sqlite3.Connection, table: str, column: str, defi
         connection.execute(f"ALTER TABLE {table} ADD COLUMN {definition}")
 
 
-def _relax_legacy_skills_constraints(connection: sqlite3.Connection) -> None:
-    """Rebuild ``skills`` when a legacy NOT NULL on ``insight`` is detected.
+def _rebuild_legacy_tables(connection: sqlite3.Connection) -> None:
+    """Rebuild tables whose pre-v32 constraints SQLite can't ALTER away (idempotent).
 
-    Pre-v32 ``skills`` had ``insight``/``section`` NOT NULL. The unified skillbook stores
-    problem-phase entries with those NULL (the fix/section land only once the entry is
-    diagnosed/proposed). SQLite cannot drop a NOT NULL via ALTER, so when we detect the
-    legacy constraint we rebuild the table to the canonical (SCHEMA_SQL) shape, preserving
-    all rows. Idempotent: a table already matching SCHEMA_SQL (``insight`` nullable) is left
-    untouched, so this is a no-op on fresh DBs and on every subsequent open.
+    - ``skills``: pre-v32 kept ``insight``/``section`` NOT NULL, but problem-phase entries
+      store those NULL (the fix/section land only once diagnosed/proposed).
+    - ``eval_definitions``: pre-v32 ``issue_id`` had a FK to the dropped ``issues`` table
+      (folded into ``skills``), so every INSERT failed with ``no such table: main.issues``.
+
+    Each rebuild is gated on detecting the legacy shape, so this is a no-op on fresh DBs and
+    on every subsequent open.
     """
 
     info = connection.execute("PRAGMA table_info(skills)").fetchall()
-    if not info:
-        return
     # PRAGMA table_info columns: (cid, name, type, notnull, dflt_value, pk)
-    not_null = {str(row[1]): int(row[3]) for row in info}
-    if not not_null.get("insight"):
-        return  # already nullable — canonical shape, nothing to do
+    if info and int({str(r[1]): r[3] for r in info}.get("insight", 0) or 0):
+        _rebuild_table_from_schema(connection, "skills")
 
-    old_columns = [str(row[1]) for row in info]
+    row = connection.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='eval_definitions'"
+    ).fetchone()
+    if row is not None and row[0] and "REFERENCES issues" in row[0]:
+        _rebuild_table_from_schema(connection, "eval_definitions")
+
+
+def _rebuild_table_from_schema(connection: sqlite3.Connection, table: str) -> None:
+    """Rebuild ``table`` to its canonical SCHEMA_SQL definition, preserving rows.
+
+    SQLite can't ALTER away a NOT NULL or change a FK, so rename + recreate + copy. Uses
+    ``legacy_alter_table=ON`` so the rename doesn't rewrite other tables' FK references, and
+    ``foreign_keys=OFF`` so the rename/drop is unenforced mid-rebuild. The table's named
+    indexes are dropped first so SCHEMA_SQL's ``CREATE INDEX`` names are free to rebind to
+    the recreated table (skills indexes, created outside SCHEMA_SQL, are re-created by the
+    caller's index block afterward).
+    """
+
+    old_columns = [str(r[1]) for r in connection.execute(f"PRAGMA table_info({table})").fetchall()]
+    if not old_columns:
+        return
+    named_indexes = [
+        str(r[0])
+        for r in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name=? AND sql IS NOT NULL",
+            (table,),
+        ).fetchall()
+    ]
     connection.commit()  # close any implicit transaction before toggling PRAGMAs
-    # legacy_alter_table=ON so RENAME does NOT rewrite FK references in other tables
-    # (e.g. skill_revisions); foreign_keys=OFF so the rename/drop is unenforced mid-rebuild.
     connection.execute("PRAGMA legacy_alter_table = ON")
     connection.execute("PRAGMA foreign_keys = OFF")
     try:
-        connection.execute("DROP TABLE IF EXISTS _skills_legacy_rebuild")
-        connection.execute("ALTER TABLE skills RENAME TO _skills_legacy_rebuild")
-        # skills no longer exists, so the canonical CREATE TABLE in SCHEMA_SQL recreates it
-        # (every other CREATE IF NOT EXISTS is a no-op).
+        for index_name in named_indexes:
+            connection.execute(f"DROP INDEX IF EXISTS {index_name}")
+        tmp = f"_{table}_rebuild_tmp"
+        connection.execute(f"DROP TABLE IF EXISTS {tmp}")
+        connection.execute(f"ALTER TABLE {table} RENAME TO {tmp}")
+        # The renamed-away table no longer exists, so SCHEMA_SQL's canonical CREATE TABLE
+        # (+ its CREATE INDEX) recreates it; every other CREATE IF NOT EXISTS is a no-op.
         connection.executescript(SCHEMA_SQL)
         new_columns = [
-            str(row[1]) for row in connection.execute("PRAGMA table_info(skills)").fetchall()
+            str(r[1]) for r in connection.execute(f"PRAGMA table_info({table})").fetchall()
         ]
         shared = [c for c in old_columns if c in new_columns]
         cols_sql = ", ".join(shared)
-        connection.execute(
-            f"INSERT INTO skills ({cols_sql}) SELECT {cols_sql} FROM _skills_legacy_rebuild"
-        )
-        connection.execute("DROP TABLE _skills_legacy_rebuild")
+        connection.execute(f"INSERT INTO {table} ({cols_sql}) SELECT {cols_sql} FROM {tmp}")
+        connection.execute(f"DROP TABLE {tmp}")
         connection.commit()
     finally:
         connection.execute("PRAGMA legacy_alter_table = OFF")

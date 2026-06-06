@@ -261,6 +261,48 @@ class StorageTests(unittest.TestCase):
                     connection.execute("SELECT COUNT(*) FROM skills").fetchone()[0], 2
                 )
 
+    def test_migration_rebuilds_eval_definitions_legacy_issues_fk(self) -> None:
+        # Pre-v32 `eval_definitions.issue_id` referenced the `issues` table, which the
+        # unification dropped. On a migrated DB the stale FK makes every INSERT fail with
+        # `no such table: main.issues`. The migration must rebuild the FK to `skills`.
+        from kyoko.llm_evals import list_llm_evals
+
+        with TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "legacy.db"
+            initialize_database(db_path)
+            with connect(db_path) as connection:
+                connection.execute(
+                    "INSERT INTO profiles (id, name, root_path, status, created_at, updated_at) "
+                    "VALUES ('p1','p1','/tmp','active','t','t')"
+                )
+                create_sql = connection.execute(
+                    "SELECT sql FROM sqlite_master WHERE type='table' AND name='eval_definitions'"
+                ).fetchone()[0]
+                legacy_sql = create_sql.replace("REFERENCES skills(id)", "REFERENCES issues(id)")
+                self.assertIn("REFERENCES issues(id)", legacy_sql)
+                connection.execute("PRAGMA legacy_alter_table = ON")
+                connection.execute("PRAGMA foreign_keys = OFF")
+                connection.execute("ALTER TABLE eval_definitions RENAME TO _ed_old")
+                connection.execute(legacy_sql)
+                connection.execute("DROP TABLE _ed_old")
+                connection.execute("PRAGMA foreign_keys = ON")
+                connection.execute("PRAGMA legacy_alter_table = OFF")
+                connection.commit()
+
+            initialize_database(db_path)  # migration should rebuild the FK
+
+            with connect(db_path) as connection:
+                sql = connection.execute(
+                    "SELECT sql FROM sqlite_master WHERE type='table' AND name='eval_definitions'"
+                ).fetchone()[0]
+                self.assertIn("REFERENCES skills(id)", sql)
+                self.assertNotIn("REFERENCES issues", sql)
+
+            # The actual symptom is gone: seeding bundled judges (an upsert that the stale FK
+            # broke) now succeeds and returns the templates.
+            evals = list_llm_evals(db_path=db_path, profile_id="p1")
+            self.assertGreater(len(evals), 0)
+
     def test_ingest_materializes_inline_payloads_to_registered_blobs(self) -> None:
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"
