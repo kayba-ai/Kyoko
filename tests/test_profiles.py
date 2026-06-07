@@ -386,7 +386,7 @@ class ProfileTests(unittest.TestCase):
             routing = list_profiles(db_path)[0]["routing"]
             report = run_profile_next_step(db_path=db_path, run=True)
 
-            self.assertEqual(routing["suggested_commands"][0]["cli_args"][6], "zzz_replay")
+            self.assertIn("zzz_replay", routing["suggested_commands"][0]["cli_args"])
             self.assertEqual(report.status, "executed")
             self.assertEqual(report.reason, "ran_replay_adapter")
             self.assertEqual(report.result["adapter_id"], "zzz_replay")

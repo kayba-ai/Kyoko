@@ -1,7 +1,7 @@
 # Scope
 
-Kyoko v0 is a local repair loop for one developer working on local AI agent
-workflows.
+Kyoko v0 is a local self-improvement loop for one developer working on
+local AI agent workflows.
 
 ## In Scope
 
@@ -29,12 +29,12 @@ workflows.
 
 ## Product Boundary
 
-Kyoko is not just a trace viewer. The trace is evidence for a repair workflow.
-The product is complete only when an issue can move through proposal, check,
-replay, and a reviewable or policy-approved apply decision.
+Kyoko is not just a trace viewer. The trace is evidence for a repair
+workflow. The product is complete only when an issue can move through proposal,
+check, replay, and a reviewable or policy-approved apply decision.
 
-Kyoko is also not a general agent orchestrator. It observes and improves an
-existing workflow; it does not replace the user's agent framework.
+Kyoko is also not a general agent orchestrator. It observes and improves
+an existing workflow; it does not replace the user's agent framework.
 
 ## Safety Rules
 
@@ -47,6 +47,5 @@ existing workflow; it does not replace the user's agent framework.
 
 ## Naming
 
-The current package and CLI are named `kyoko`. Product naming may change before
-public release, but repo documentation should describe the tool accurately and
-avoid promising package names that are not implemented yet.
+The published distribution, primary CLI, Python import namespace, generated
+helper filenames, and project data directory all use the `kyoko` name.

@@ -7,7 +7,9 @@ recursive-include kyoko/assets *.json
 recursive-include kyoko/assets *.py
 recursive-include kyoko/assets/web *
 recursive-include docs *.md *.json *.sql
+recursive-include docs *.png
 recursive-include examples *.mjs *.py
+recursive-include examples *.md
 recursive-include scripts *.py
 recursive-include tests *.py
 global-exclude __pycache__ *.py[cod] .DS_Store

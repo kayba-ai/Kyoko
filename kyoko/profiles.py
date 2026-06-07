@@ -668,7 +668,7 @@ def _command(
     return {
         "intent": intent,
         "label": label,
-        "cli_args": ["python3", "-m", "kyoko", *args],
+        "cli_args": ["kyoko", *args],
         "mutating": mutating,
         "requires": requires or [],
     }

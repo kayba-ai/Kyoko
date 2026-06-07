@@ -2,10 +2,10 @@
 #
 # Kyoko local installer.
 #
-# Kyoko is a local, single-user, single-machine tool. This script installs the
-# `kyoko` console command (entry point: kyoko.cli:main) on your machine. It does
-# NOT start any service, open any port, or phone home — after install you run
-# `kyoko serve` yourself.
+# Kyoko is a local, single-user, single-machine tool. This script
+# installs the `kyoko` console command (entry point: kyoko.cli:main) on
+# your machine. It does NOT start any service, open any port, or phone home;
+# after install you run `kyoko serve` yourself.
 #
 # Usage:
 #   # From a published release (once Kyoko is on PyPI):

@@ -1,21 +1,32 @@
 # Architecture
 
-Kyoko is a local-first runtime for repairing AI agent workflows from evidence.
-The core product loop is:
+Kyoko is a local-first self-improvement loop for AI agent workflows. It
+is built around one product invariant: behavior changes must be backed by an
+issue, a proposal, check/replay evidence, policy evaluation, and human-lock
+enforcement.
 
 ```text
-telemetry -> issue -> proposal -> check -> replay -> gated apply
+source telemetry
+  -> normalized runs and spans
+  -> issues and evidence
+  -> LearningProposal
+  -> generated checks
+  -> bounded replay
+  -> gated context or harness apply
 ```
 
-## Runtime Components
+## Runtime Map
 
-- `kyoko/cli.py`: argparse CLI and command dispatch.
-- `kyoko/web.py`: loopback dashboard, JSON API, and Server-Sent Events stream.
-- `kyoko/storage.py`: SQLite schema, migrations, and canonical event ingest.
-- `kyoko/assets/`: bundled schemas, fixtures, demo data, and built dashboard.
-- `frontend/`: React/Vite dashboard source.
-- `sdk/typescript/` and `kyoko/sdk.py`: telemetry recorder/client SDKs.
-- `examples/`: source and replay hook examples for real integrations.
+| Component | Role |
+| --- | --- |
+| `kyoko/cli.py` | Argparse CLI, command dispatch, and JSON automation surface. |
+| `kyoko/web.py` | Loopback dashboard, JSON API, and Server-Sent Events stream. |
+| `kyoko/storage.py` | SQLite schema, migrations, canonical ingest, and status reporting. |
+| `kyoko/assets/` | Bundled schemas, fixtures, demo data, detectors, evals, and dashboard bundle. |
+| `frontend/` | React/Vite dashboard source committed into `kyoko/assets/web` after build. |
+| `kyoko/sdk.py` | Python telemetry recorder and local HTTP client. |
+| `sdk/typescript/` | Dependency-free TypeScript telemetry SDK. |
+| `examples/` | Source and replay hook examples for real integrations. |
 
 ## Data Model
 
@@ -30,21 +41,25 @@ Kyoko stores normalized local evidence:
 - payload blob metadata.
 
 The default database is `~/.kyoko/kyoko.db`. Project bootstrap creates
-`.kyoko/kyoko.db` inside the selected project. Large or sensitive payloads are
-kept in the sibling blob store and served through redacted previews by default.
+`.kyoko/kyoko.db` inside the selected project. Payload blobs live next to the
+selected database under `blobs/`.
 
 ## Evidence And Repair
 
 An issue is an evidence-backed statement about observed behavior. A proposal is
-a proposed behavior change linked to evidence. A check is a deterministic or
-judge-backed assertion Kyoko can run against replay output. A replay run is a
-bounded attempt to reproduce the workflow under controlled side-effect modes.
+a proposed behavior change linked to that evidence. A check is a deterministic
+or judge-backed assertion Kyoko can run against replay output. A replay
+run is a bounded attempt to reproduce the workflow under an explicit side-effect
+mode.
 
-Only the final apply step changes behavior. Context writes update Kyoko-managed
-skills or delivery rules. Harness writes create reviewable patch transactions
-against an explicit workspace root.
+Only the final apply step changes behavior:
 
-## Safety Boundary
+- Context writes update Kyoko-managed skills or delivery rules.
+- Harness writes create reviewable patch transactions against an explicit
+  workspace root.
+- Operator output and native tool output become proposals first.
+
+## Gate Boundary
 
 Every behavior-changing path flows through the same gate:
 
@@ -56,16 +71,18 @@ Every behavior-changing path flows through the same gate:
 6. Enforce human locks.
 7. Apply context or harness changes only if the gate allows it.
 
-The dashboard, CLI, MCP tools, and `kyoko improve` use the same underlying
-functions. There should be no direct apply shortcut outside this gate.
+The dashboard, CLI, MCP tools, and `kyoko improve` use the same
+underlying functions. There should be no direct apply shortcut outside this
+gate.
 
 ## Dashboard And API
 
 `kyoko serve` starts a local HTTP server. By default it binds to
-`127.0.0.1:8765`. The React dashboard is built into `kyoko/assets/web`; when the
-bundle is missing, the server falls back to a small inline dashboard.
+`127.0.0.1:8765`. If the React bundle is present, the server serves the built
+dashboard from `kyoko/assets/web`; otherwise it falls back to a small inline
+dashboard.
 
-The API mirrors CLI workflows. Push updates use Server-Sent Events rather than
+The API mirrors CLI workflows. Live updates use Server-Sent Events rather than
 WebSockets.
 
 ## MCP
@@ -76,5 +93,18 @@ Kyoko exposes a stdio MCP server for coding agents:
 kyoko mcp serve --db .kyoko/kyoko.db
 ```
 
-MCP tools expose read, inspection, proposal, check, replay, and improve
+MCP tools expose read, inspection, proposal, check/replay, and improve
 workflows. They do not expose unchecked direct writes.
+
+## Release Surface
+
+The release surface includes more than Python modules:
+
+- `README.md` and the top-level docs,
+- `docs/specs`, `docs/schemas`, and `docs/fixtures`,
+- bundled JSON and Python assets under `kyoko/assets`,
+- the built dashboard under `kyoko/assets/web`,
+- CLI `--json` contracts validated by golden fixtures.
+
+Run `python3 scripts/validate_gate_artifacts.py` when any contract artifact or
+bundled asset changes.

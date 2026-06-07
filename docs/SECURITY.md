@@ -1,28 +1,28 @@
 # Security
 
-Kyoko is a local, single-user tool. It is not a hosted observability platform
-and does not implement team auth, RBAC, tenant isolation, billing, or cloud
-workers.
+Kyoko is a local, single-user tool. It is not a hosted observability
+platform and does not implement team auth, RBAC, tenant isolation, billing, or
+cloud workers.
 
 ## Local Data
 
-By default Kyoko stores data under:
+Default storage:
 
 ```text
 ~/.kyoko/kyoko.db
 ~/.kyoko/blobs/
 ```
 
-Project bootstrap stores data under:
+Project bootstrap storage:
 
 ```text
 .kyoko/kyoko.db
 .kyoko/blobs/
 ```
 
-Nothing is sent to a hosted Kyoko service. External commands only run when the
-user invokes an integration that shells out to a local CLI, framework runtime,
-operator, judge, or replay server.
+Nothing is sent to a hosted Kyoko service. External commands only run
+when the user invokes an integration that shells out to a local CLI, framework
+runtime, operator, judge, or replay server.
 
 ## Dashboard Binding
 
@@ -32,8 +32,7 @@ operator, judge, or replay server.
 kyoko serve --db .kyoko/kyoko.db
 ```
 
-If you bind to a non-loopback host, Kyoko requires an auth token. You can pass
-one explicitly:
+If you bind to a non-loopback host, Kyoko requires an auth token:
 
 ```bash
 kyoko serve --host 0.0.0.0 --auth-token "$KYOKO_AUTH_TOKEN"
@@ -45,8 +44,9 @@ tokenized dashboard load.
 
 ## Redaction
 
-Kyoko stores payloads locally so it can resolve evidence and replay behavior.
-Surfaces that export or serve evidence should use redacted previews by default:
+Kyoko stores payloads locally so it can resolve evidence and replay
+behavior. Surfaces that export or serve evidence should use redacted previews
+by default:
 
 - CLI/API summaries,
 - MCP tools,
@@ -56,16 +56,31 @@ Surfaces that export or serve evidence should use redacted previews by default:
 
 Large payloads belong in the blob store, not hot SQLite rows.
 
+## External Commands
+
+Kyoko can call local tools when you explicitly configure them:
+
+- source adapters,
+- replay adapters and replay servers,
+- operator agents,
+- judge commands,
+- MCP client install smokes,
+- dashboard browser smokes.
+
+Treat those commands as part of your local trust boundary. Kyoko records
+their artifacts and results, but it does not make an untrusted external command
+safe.
+
 ## Write Boundaries
 
 Behavior-changing writes are gated. Operator output and ACE/native output become
-validated proposals first; they do not directly mutate context, skills, or a
-workspace.
+validated proposals first; they do not directly mutate context, skills, checks,
+or a workspace.
 
-Kyoko applies changes only after proposal validation, evidence resolution,
-check/replay evidence, autonomy-policy evaluation, and human-lock enforcement.
-Harness changes require an explicit workspace root and are represented as patch
-transactions.
+Kyoko applies changes only after proposal validation, evidence
+resolution, check/replay evidence, autonomy-policy evaluation, and human-lock
+enforcement. Harness changes require an explicit workspace root and are
+represented as patch transactions.
 
 ## Replay Boundaries
 

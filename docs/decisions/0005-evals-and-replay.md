@@ -3,6 +3,9 @@
 Status: accepted for first implementation slice
 Date: 2026-05-31
 
+Current naming note: the gate artifact this decision originally called an
+`eval` is now a `check`. Measurement `eval` detectors are a separate subsystem.
+
 ## Decision
 
 Kyoko will treat evals and replay as canonical runtime state, not as ad hoc
@@ -10,13 +13,13 @@ operator notes.
 
 The first implementation slice stores:
 
-- `eval_specs`
-- `eval_runs`
+- `check_specs`
+- `check_runs`
 - `replay_runs`
 
-Generated eval specs are created from validated `LearningProposal` changes.
+Generated check specs are created from validated `LearningProposal` changes.
 Replay runs are recorded with explicit side-effect modes. Eval runs are
-separate records linked to eval specs and optionally to replay runs.
+separate measurement records; gate checks are linked to replay runs.
 
 The second implementation slice adds controlled replay result ingestion:
 
@@ -32,19 +35,19 @@ The second implementation slice adds controlled replay result ingestion:
 CLI:
 
 ```text
-kyoko generate-evals <proposal_id> --json
-kyoko replay <eval_spec_id> --json
+kyoko generate-checks <proposal_id> --json
+kyoko replay <check_spec_id> --json
 kyoko complete-replay <replay_run_id> <fixture> --json
-kyoko replay-command <eval_spec_id> --command "..." --output-dir ... --run-eval --json
+kyoko replay-command <check_spec_id> --command "..." --output-dir ... --run-check --json
 kyoko replay-server-health <server_url> --json
-kyoko replay-server-run <server_url> <eval_spec_id> --run-eval --json
-kyoko replay-adapter-register <adapter_id> --command "..." --json
-kyoko replay-adapter-register <adapter_id> --server-url http://127.0.0.1:61200 --json
-kyoko replay-adapter-register <adapter_id> --command "..." --server-url http://127.0.0.1:61200 --json
-kyoko replay-adapter-register <adapter_id> --server-url https://replay.example.test --allow-remote-server --json
-kyoko replay-adapter-run <adapter_id> <eval_spec_id> --run-eval --json
-kyoko run-eval <eval_spec_id> --json
-kyoko evals --json
+kyoko replay-server-run <server_url> <check_spec_id> --run-check --json
+kyoko replay-adapter-register <adapter_id> --name "Replay adapter" --command "..." --json
+kyoko replay-adapter-register <adapter_id> --name "Replay adapter" --server-url http://127.0.0.1:61200 --json
+kyoko replay-adapter-register <adapter_id> --name "Replay adapter" --command "..." --server-url http://127.0.0.1:61200 --json
+kyoko replay-adapter-register <adapter_id> --name "Replay adapter" --server-url https://replay.example.test --allow-remote-server --json
+kyoko replay-adapter-run <adapter_id> <check_spec_id> --run-check --json
+kyoko run-check <check_spec_id> --json
+kyoko checks --json
 kyoko demo --json
 ```
 
@@ -58,10 +61,10 @@ POST /api/replay/complete
 POST /api/evals/run
 ```
 
-Evidence bundles now include eval specs, eval runs, and replay runs so operator
+Evidence bundles now include check specs, check runs, and replay runs so operator
 agents can see prior gates and avoid repeating stale recommendations.
 
-Deterministic eval specs can include an `assertions` list. Supported v0
+Deterministic check specs can include an `assertions` list. Supported v0
 assertions:
 
 - `target_status_not_failed`: baseline failure must map to a replay target that
@@ -89,7 +92,7 @@ END_KYOKO_REPLAY_RESULT_JSON
 
 Kyoko writes `replay-request.json`, sets `KYOKO_REPLAY_REQUEST_PATH`,
 captures raw stdout/stderr, extracts exactly one replay result block, ingests
-the replay result, and can run the eval immediately when `--run-eval` is set.
+the replay result, and can run the check immediately when `--run-check` is set.
 If the command fails, times out, or returns malformed output, Kyoko marks the
 replay run `errored` with the failure reason.
 
@@ -110,7 +113,7 @@ to `POST /replay`, then completes the replay from either a full
 `kyoko.replay_result.v1` response or a server response that points at an
 already-ingested output run. HTTP replay server URLs are loopback-only by
 default; direct server commands and registered adapters require explicit
-`--allow-remote-server` opt-in before Kyoko will send replay/eval context to a
+`--allow-remote-server` opt-in before Kyoko will send replay/check context to a
 non-loopback endpoint. Running a managed HTTP adapter starts the server command,
 polls health, captures stdout/stderr, executes the replay, and stops the server
 process. Users and operator agents can refer to a stable adapter id instead of
@@ -120,7 +123,7 @@ The bundled first-run demo uses `python -m kyoko.fixture_replay` as its
 package-local replay adapter. `scripts/kyoko_fixture_replay.py` remains a
 source-checkout wrapper for direct fixture debugging. Both execute the same
 contract as any other replay command, but keep side effects mocked so the whole
-telemetry to proposal to replay/eval to context-apply path can run with one
+telemetry to proposal to replay/check to context-apply path can run with one
 command.
 
 ## Safety Boundary
@@ -142,7 +145,7 @@ Recorded replay result:
 
 `live_network` and `unknown` side-effect modes are rejected. Live network
 replay must wait for side-effect review, tool/network/filesystem policy
-enforcement, secrets policy, and eval gate wiring even though the bounded HTTP
+enforcement, secrets policy, and check gate wiring even though the bounded HTTP
 replay-server path exists.
 
 Controlled replay fixtures may represent a completed replay under a bounded
@@ -160,17 +163,17 @@ secret-shaped values while preserving replay ids, eval ids, entity ids, status
 fields, and trace shape. Kyoko records a redaction audit event when the replay
 request is changed by redaction.
 
-## Eval Trust
+## Check Trust
 
-Generated eval specs start as `L0_generated`.
+Generated check specs start as `L0_generated`.
 
-The deterministic runner can promote a generated eval to `L1_repeated` only
-after two stable deterministic results. This promotion means the eval is
+The deterministic runner can promote a generated check to `L1_repeated` only
+after two stable deterministic results. This promotion means the check is
 repeatable and tied to evidence. It does not mean the proposed fix passed.
 
-For the current Hermes/news-research fixture, the generated deterministic eval
+For the current Hermes/news-research fixture, the generated deterministic check
 fails against the original failed span. After the controlled replay success
-fixture is completed, the same eval compares:
+fixture is completed, the same check compares:
 
 ```text
 span_fetch_timeout_001 -> failed
@@ -181,16 +184,15 @@ That result is promoted to `L2_regression` because Kyoko has fail-before and
 pass-after evidence with bounded side effects.
 
 Kyoko never auto-promotes to `L3_human_approved`. That level is set only by an
-explicit human approval action through `kyoko eval-spec-approve`,
-`POST /api/eval-specs/approve`, or the dashboard `Approve L3` control. The
-approval writes an `eval_spec_human_approved` timeline event and is rejected
-while the eval spec is human-locked.
+explicit human approval action through `kyoko check-approve` or the dashboard
+approval control. The approval writes a timeline event and is rejected while
+the check spec is human-locked.
 
 ## Consequences
 
 Positive:
 
-- eval/replay state exists in the canonical database and UI,
+- check/replay state exists in the canonical database and UI,
 - operator agents can reason over previous gate attempts,
 - unsafe replay modes are blocked early and completed replay results must stay
   within the requested side-effect boundary,
@@ -203,7 +205,7 @@ Positive:
 Costs:
 
 - this is not yet live replay,
-- current evals can prove baseline failure and controlled fixture before/after
+- current checks can prove baseline failure and controlled fixture before/after
   success, but not arbitrary real-world re-execution,
 - autonomous context and harness gates must still wait for real replay and
   pass-after-fix evidence.
@@ -219,6 +221,6 @@ Costs:
    evals. Generic replay-shape presets now cover replay success, no failed
    spans, minimum span count, and minimum handoff count.
 3. Richer UI for gate-decision history. Proposal detail now exposes persisted
-   autonomy gate history in CLI, API, dashboard, and MCP. Eval detail exposes
+   autonomy gate history in CLI, API, dashboard, and MCP. Check detail exposes
    assertion-level evidence; replay detail exposes Kyoko-owned artifact
    previews for replay-command output and managed replay-server logs.

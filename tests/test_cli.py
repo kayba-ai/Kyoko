@@ -3615,7 +3615,12 @@ class CliTests(unittest.TestCase):
             self.assertIn("--profile-id profile_news_research", payload["commands"]["import_openclaw_sessions"])
 
             register_replay_out = io.StringIO()
-            register_replay_args = shlex.split(payload["commands"]["replay_adapter_register"])[3:]
+            register_replay_parts = shlex.split(payload["commands"]["replay_adapter_register"])
+            if register_replay_parts[:3] == ["python3", "-m", "kyoko"]:
+                register_replay_args = register_replay_parts[3:]
+            else:
+                self.assertIn(register_replay_parts[0], {"kyoko"})
+                register_replay_args = register_replay_parts[1:]
             with redirect_stdout(register_replay_out):
                 register_replay_code = main(register_replay_args)
             register_replay_payload = json.loads(register_replay_out.getvalue())

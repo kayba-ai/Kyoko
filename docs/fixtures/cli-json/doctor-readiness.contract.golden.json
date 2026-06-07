@@ -139,7 +139,7 @@
       "3.13": "python_build_backend_unavailable:setuptools.build_meta"
     },
     "missing_targets": [],
-    "ready_matrix_command": "python3 -m kyoko release-smoke --python-target 3.12 --python-target 3.13 --artifact both --json",
+    "ready_matrix_command": "kyoko release-smoke --python-target 3.12 --python-target 3.13 --artifact both --json",
     "ready_targets": [
       "3.12",
       "3.13"
@@ -149,8 +149,6 @@
   "suggested_commands": [
     {
       "cli_args": [
-        "python3",
-        "-m",
         "kyoko",
         "doctor",
         "--safe-smokes",
@@ -162,8 +160,6 @@
     },
     {
       "cli_args": [
-        "python3",
-        "-m",
         "kyoko",
         "doctor",
         "--smoke-demo",
@@ -175,8 +171,6 @@
     },
     {
       "cli_args": [
-        "python3",
-        "-m",
         "kyoko",
         "doctor",
         "--operator-smoke-prepare",
@@ -188,8 +182,6 @@
     },
     {
       "cli_args": [
-        "python3",
-        "-m",
         "kyoko",
         "doctor",
         "--judge-smoke-prepare",
@@ -201,8 +193,6 @@
     },
     {
       "cli_args": [
-        "python3",
-        "-m",
         "kyoko",
         "doctor",
         "--ace-native-prepare",
@@ -214,8 +204,6 @@
     },
     {
       "cli_args": [
-        "python3",
-        "-m",
         "kyoko",
         "doctor",
         "--integration-smoke",
@@ -227,8 +215,6 @@
     },
     {
       "cli_args": [
-        "python3",
-        "-m",
         "kyoko",
         "doctor",
         "--improve-smoke",
@@ -240,8 +226,6 @@
     },
     {
       "cli_args": [
-        "python3",
-        "-m",
         "kyoko",
         "doctor",
         "--opentelemetry-smoke",
@@ -256,8 +240,6 @@
     },
     {
       "cli_args": [
-        "python3",
-        "-m",
         "kyoko",
         "doctor",
         "--ace-native-smoke",
@@ -272,8 +254,6 @@
     },
     {
       "cli_args": [
-        "python3",
-        "-m",
         "kyoko",
         "doctor",
         "--dashboard-smoke",
@@ -289,8 +269,6 @@
     },
     {
       "cli_args": [
-        "python3",
-        "-m",
         "kyoko",
         "operator-smoke",
         "--all-presets",
@@ -308,8 +286,6 @@
     },
     {
       "cli_args": [
-        "python3",
-        "-m",
         "kyoko",
         "operator-smoke",
         "--all-presets",
@@ -329,8 +305,6 @@
     },
     {
       "cli_args": [
-        "python3",
-        "-m",
         "kyoko",
         "judge-smoke",
         "--command",
@@ -350,8 +324,6 @@
     },
     {
       "cli_args": [
-        "python3",
-        "-m",
         "kyoko",
         "mcp",
         "install-smoke",

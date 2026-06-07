@@ -965,7 +965,7 @@ def _release_python_target_suggested_commands(check: DoctorCheck) -> list[dict[s
 
     ready_targets = detail.get("ready_targets")
     if isinstance(ready_targets, list) and ready_targets:
-        args = ["python3", "-m", "kyoko", "release-smoke"]
+        args = ["kyoko", "release-smoke"]
         for target in ready_targets:
             args.extend(["--python-target", str(target)])
         args.extend(["--artifact", "both", "--json"])
@@ -995,7 +995,7 @@ def _doctor_command(
     return _suggested_command(
         intent,
         label,
-        ["python3", "-m", "kyoko", *args],
+        ["kyoko", *args],
         mutating=mutating,
         requires=requires,
     )
@@ -1245,7 +1245,7 @@ def _check_release_python_targets() -> DoctorCheck:
         if path is not None
     ]
     ready_matrix_command = (
-        "python3 -m kyoko release-smoke "
+        "kyoko release-smoke "
         + " ".join(f"--python-target {shlex.quote(target)}" for target in ready_targets)
         + " --artifact both --json"
         if ready_targets
@@ -1274,7 +1274,7 @@ def _check_release_python_targets() -> DoctorCheck:
             "unready_targets": {},
             "ready_matrix_command": ready_matrix_command,
             "build_backend_install_commands": build_backend_install_commands,
-            "matrix_command": "python3 -m kyoko release-smoke --python-matrix --artifact both --json",
+            "matrix_command": "kyoko release-smoke --python-matrix --artifact both --json",
         },
     )
 
@@ -1300,7 +1300,7 @@ def _check_mcp_clients() -> DoctorCheck:
         message=message,
         detail={
             "clients": commands,
-            "matrix_command": "python3 -m kyoko mcp install-smoke --all-targets --json",
+            "matrix_command": "kyoko mcp install-smoke --all-targets --json",
         },
     )
 
@@ -1442,7 +1442,7 @@ def _run_operator_smoke_prepare_check(*, output_dir: Path, temporary: bool) -> D
             "artifacts_retained": not temporary,
             "live_operator_invoked": False,
             "matrix_command": (
-                "python3 -m kyoko operator-smoke "
+                "kyoko operator-smoke "
                 "--all-presets --prepare-only --json"
             ),
         },
@@ -1491,11 +1491,11 @@ def _run_judge_smoke_prepare_check(*, output_dir: Path, temporary: bool) -> Doct
             "artifacts_retained": not temporary,
             "commands": {
                 "judge_smoke_prepare": (
-                    "python3 -m kyoko judge-smoke --prepare-only --provider-backed "
+                    "kyoko judge-smoke --prepare-only --provider-backed "
                     "--output-dir /tmp/kyoko-judge-smoke --json"
                 ),
                 "judge_smoke_live_provider": (
-                    "python3 -m kyoko judge-smoke --command "
+                    "kyoko judge-smoke --command "
                     "'python /path/to/provider-judge.py' --provider-backed "
                     "--output-dir .kyoko/smoke/judge-provider-live --json"
                 ),
@@ -1586,7 +1586,7 @@ def _run_ace_native_prepare_check(*, root: Path, temporary: bool) -> DoctorCheck
             "canonical_mutation": payload.get("canonical_mutation"),
             "commands": {
                 "ace_native_prepare": (
-                    "python3 -m kyoko ace-native-run --db /tmp/kyoko.db "
+                    "kyoko ace-native-run --db /tmp/kyoko.db "
                     "--command 'python /path/to/provider-backed-ace.py --after {after_path}' "
                     "--output-dir /tmp/kyoko-ace-native --prepare-only --provider-backed --json"
                 ),
@@ -1927,7 +1927,7 @@ def _run_dashboard_smoke_check(
         "external_model_invoked": False,
         "commands": {
             "dashboard_smoke": (
-                "python3 -m kyoko dashboard-smoke "
+                "kyoko dashboard-smoke "
                 "--output-dir /tmp/kyoko-dashboard-smoke --screenshot --json"
             ),
         },
@@ -1997,7 +1997,7 @@ def _run_ace_native_smoke_check(*, root: Path, temporary: bool) -> DoctorCheck:
         "stderr_tail": native.get("stderr_tail"),
         "commands": {
             "ace_native_smoke": (
-                "python3 -m kyoko ace-native-smoke "
+                "kyoko ace-native-smoke "
                 "--db /tmp/kyoko.db --output-dir /tmp/kyoko-ace-native-smoke --json"
             ),
         },
@@ -2095,7 +2095,7 @@ def _run_improve_smoke_check(*, root: Path, temporary: bool) -> DoctorCheck:
         "status_counts": final_status.get("counts"),
         "commands": {
             "improve_smoke": (
-                "python3 -m kyoko integration-smoke improve "
+                "kyoko integration-smoke improve "
                 "--db /tmp/kyoko.db --output-dir /tmp/kyoko-improve-smoke --json"
             ),
         },
@@ -2172,7 +2172,7 @@ def _run_opentelemetry_smoke_check(
         },
         "commands": {
             "opentelemetry_smoke": (
-                "python3 -m kyoko integration-smoke opentelemetry-python "
+                "kyoko integration-smoke opentelemetry-python "
                 "--db /tmp/kyoko.db --python-executable /path/to/venv/bin/python "
                 "--output-dir /tmp/kyoko-opentelemetry-smoke --json"
             ),
@@ -2230,7 +2230,7 @@ def _run_mcp_install_smoke_check(*, output_dir: Path, temporary: bool) -> Doctor
             "temporary": temporary,
             "artifacts_retained": not temporary,
             "live_operator_invoked": False,
-            "matrix_command": "python3 -m kyoko mcp install-smoke --all-targets --json",
+            "matrix_command": "kyoko mcp install-smoke --all-targets --json",
         },
     )
 
@@ -2349,10 +2349,10 @@ def _run_integration_smoke_check(*, root: Path, temporary: bool) -> DoctorCheck:
             },
             "live_operator_invoked": False,
             "commands": {
-                "source_template": "python3 -m kyoko source-adapter-template /tmp/kyoko_source_adapter.py --framework langgraph-python --json",
-                "source_smoke": "python3 -m kyoko integration-smoke source --db /tmp/kyoko.db /tmp/kyoko_source_adapter.py --hook /tmp/source_hook.py:collect --json",
-                "replay_template": "python3 -m kyoko replay-server-template /tmp/kyoko_replay_server.py --framework generic-python --json",
-                "replay_smoke": "python3 -m kyoko integration-smoke replay-server --command 'python3 /tmp/kyoko_replay_server.py --port 61200' --server-url http://127.0.0.1:61200 --hook /tmp/replay_hook.py:replay --run-replay --json",
+                "source_template": "kyoko source-adapter-template /tmp/kyoko_source_adapter.py --framework langgraph-python --json",
+                "source_smoke": "kyoko integration-smoke source --db /tmp/kyoko.db /tmp/kyoko_source_adapter.py --hook /tmp/source_hook.py:collect --json",
+                "replay_template": "kyoko replay-server-template /tmp/kyoko_replay_server.py --framework generic-python --json",
+                "replay_smoke": "kyoko integration-smoke replay-server --command 'python3 /tmp/kyoko_replay_server.py --port 61200' --server-url http://127.0.0.1:61200 --hook /tmp/replay_hook.py:replay --run-replay --json",
             },
         },
     )

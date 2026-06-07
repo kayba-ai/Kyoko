@@ -92,7 +92,7 @@ Run:
     python3 kyoko_replay_server.py --port 61200
 
 Register:
-    python3 -m kyoko replay-adapter-register \\
+    kyoko replay-adapter-register \\
       --db /tmp/kyoko.db \\
       $profile_name-replay \\
       --name "$profile_name replay" \\
@@ -364,7 +364,7 @@ Run:
     node kyoko_replay_server.mjs --port 61200
 
 Register:
-    python3 -m kyoko replay-adapter-register \\
+    kyoko replay-adapter-register \\
       --db /tmp/kyoko.db \\
       $profile_name-replay \\
       --name "$profile_name replay" \\

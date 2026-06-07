@@ -1,34 +1,30 @@
 # Kyoko Documentation
 
-Kyoko is a local repair loop for AI agent workflows. These docs are organized
-for a release-ready repository: start with the short user guides, then drop into
-reference contracts only when you are changing behavior.
+Kyoko is a self-improvement loop for AI agents. Start with the product
+docs. Use the reference material only when you are changing behavior or
+validating a release.
 
-## Start Here
+## Product Docs
 
-- [Install](INSTALL.md): supported install paths and source builds.
-- [Quickstart](QUICKSTART.md): run the demo, bootstrap a project, and open the
-  dashboard.
-- [Architecture](ARCHITECTURE.md): how telemetry, issues, proposals, checks,
-  replay, and gated apply fit together.
-- [Integrations](INTEGRATIONS.md): SDKs, source adapters, replay servers,
-  operator agents, MCP, and framework scaffolds.
-- [CLI Reference](CLI.md): command groups and common workflows.
-- [Security](SECURITY.md): local data, dashboard binding, tokens, redaction, and
-  write boundaries.
-- [Development](DEVELOPMENT.md): tests, dashboard builds, release smoke, and
-  contract artifacts.
-- [Scope](SCOPE.md): v0 boundaries and non-goals.
+| Guide | Purpose |
+| --- | --- |
+| [Getting Started](GETTING_STARTED.md) | Demo, project bootstrap, telemetry, inspection, and the repair loop. |
+| [Install](INSTALL.md) | Install paths, verification, data location, and setup fixes. |
+| [Integrations](INTEGRATIONS.md) | Source adapters, replay adapters, operator agents, MCP, and SDKs. |
+| [CLI Reference](CLI.md) | Common command groups and JSON automation surface. |
+| [Security](SECURITY.md) | Local data, loopback serving, tokens, redaction, replay, and write boundaries. |
+| [Development](DEVELOPMENT.md) | Tests, dashboard bundle, release smoke, and contract artifacts. |
 
-## Reference Contracts
+## Reference
 
-The following directories are not prose docs. They are part of the test and
-release surface:
-
-- `docs/specs/`: design and command-contract specs.
-- `docs/schemas/`: JSON Schemas used by validators and fixtures.
-- `docs/fixtures/`: golden CLI outputs, source events, replay results,
-  proposals, and migration fixtures.
+| Reference | Purpose |
+| --- | --- |
+| [Architecture](ARCHITECTURE.md) | Runtime components, data model, and gate boundaries. |
+| [Scope](SCOPE.md) | v0 product boundary and non-goals. |
+| `specs/` | Design and command-contract specs. |
+| `schemas/` | JSON Schemas used by validators and fixtures. |
+| `fixtures/` | Golden CLI outputs, source events, replay results, proposals, and migration fixtures. |
+| `decisions/` | Short decisions that explain product boundaries. |
 
 When a CLI `--json` shape, schema, fixture, or gate behavior changes, update the
 matching reference artifact and run:

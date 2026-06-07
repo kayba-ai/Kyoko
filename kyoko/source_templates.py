@@ -91,10 +91,10 @@ Run:
       python3 kyoko_source_adapter.py --output source-events.json
 
 Ingest:
-    python3 -m kyoko ingest --db /tmp/kyoko.db source-events.json --json
+    kyoko ingest --db /tmp/kyoko.db source-events.json --json
 
 Or post directly to a running local Kyoko app:
-    python3 -m kyoko serve --db /tmp/kyoko.db
+    kyoko serve --db /tmp/kyoko.db
     KYOKO_SOURCE_HOOK=/absolute/path/to/hooks.py:collect \\
       python3 kyoko_source_adapter.py --post-url http://127.0.0.1:8765/api/ingest
 
@@ -341,10 +341,10 @@ Run:
       node kyoko_source_adapter.mjs --output source-events.json
 
 Ingest:
-    python3 -m kyoko ingest --db /tmp/kyoko.db source-events.json --json
+    kyoko ingest --db /tmp/kyoko.db source-events.json --json
 
 Or post directly to a running local Kyoko app:
-    python3 -m kyoko serve --db /tmp/kyoko.db
+    kyoko serve --db /tmp/kyoko.db
     KYOKO_SOURCE_HOOK=/absolute/path/to/hooks.mjs:collect \\
       node kyoko_source_adapter.mjs --post-url http://127.0.0.1:8765/api/ingest
 

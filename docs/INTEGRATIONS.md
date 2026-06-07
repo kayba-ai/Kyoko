@@ -1,45 +1,80 @@
 # Integrations
 
-Kyoko is useful when it can observe a workflow, replay it safely, and hand the
-evidence to a local operator or developer. Integrations are local commands,
-SDKs, or generated scaffolds; Kyoko does not require a hosted service.
+Kyoko is useful when it can observe a workflow, replay it safely, and
+hand evidence to a local developer or operator agent. Integrations are local
+SDK calls, generated scaffolds, imports, or commands. Kyoko does not
+require a hosted service.
 
-## Telemetry Sources
+## Compatibility
 
-Supported source paths:
+| Area | Supported paths |
+| --- | --- |
+| Source telemetry | Python SDK, TypeScript SDK, generated source adapters, OTLP/GenAI JSON, Hermes import, OpenClaw import |
+| Replay | External replay commands, managed HTTP replay servers, generated replay scaffolds |
+| Operator agents | Codex, Claude, generic command adapters, local presets |
+| Agent clients | Dashboard, JSON CLI, stdio MCP server |
+| Framework scaffolds | `generic-python`, `generic-typescript`, `langgraph-python`, `pydantic-ai-python`, `openai-agents-python`, `crewai-python`, `hermes-python`, `openclaw-python`, `ai-sdk-typescript` |
 
-- Python SDK: `kyoko/sdk.py`.
-- TypeScript SDK: `sdk/typescript`.
-- Generated source adapters:
+Example hooks live in [../examples](../examples).
 
-  ```bash
-  kyoko source-adapter-template .kyoko/scripts/source_adapter.py \
-    --framework generic-python \
-    --profile-name my-agent
-  ```
+## Source Telemetry
 
-- OTLP/GenAI JSON:
+### Python SDK
 
-  ```bash
-  kyoko ingest-otlp --db .kyoko/kyoko.db otlp.json --json
-  ```
+```python
+from kyoko import KyokoClient, KyokoRecorder
 
-- Local Hermes and OpenClaw imports:
+recorder = KyokoRecorder(
+    profile_id="my-agent",
+    profile_name="My Agent",
+    root_path=".",
+    agent_name="researcher",
+)
 
-  ```bash
-  kyoko discover-sources --db .kyoko/kyoko.db --root-path . --json
-  kyoko import-hermes-kanban --db .kyoko/kyoko.db ~/.hermes/kanban.db --board default --json
-  kyoko import-openclaw-sessions --db .kyoko/kyoko.db ~/.openclaw/agents/main/sessions --agent-id main --json
-  ```
+with recorder.run("research task") as run:
+    with run.span("search", kind="tool") as span:
+        span.finish("succeeded", output_ref="output://search-results")
+    run.finish("succeeded", summary="Collected search results.")
 
-Framework scaffold labels include `generic-python`, `generic-typescript`,
-`langgraph-python`, `pydantic-ai-python`, `openai-agents-python`,
-`crewai-python`, `hermes-python`, `openclaw-python`, and `ai-sdk-typescript`.
+KyokoClient().ingest(recorder.to_source_events())
+```
+
+### TypeScript SDK
+
+The dependency-free TypeScript SDK is under [../sdk/typescript](../sdk/typescript).
+It uses the same source-event format as the Python SDK and defaults to
+`http://127.0.0.1:8765`.
+
+### Generated Source Adapter
+
+```bash
+kyoko source-adapter-template .kyoko/scripts/source_adapter.py \
+  --framework generic-python \
+  --profile-name my-agent \
+  --json
+```
+
+Smoke it before relying on it:
+
+```bash
+kyoko integration-smoke source .kyoko/scripts/source_adapter.py \
+  --hook path/to/source_hook.py:collect \
+  --json
+```
+
+If the smoke reports `source_hook_required`, the generated adapter is present
+but no collector hook has been wired in yet.
+
+### OTLP, Hermes, And OpenClaw
+
+```bash
+kyoko ingest-otlp --db .kyoko/kyoko.db otlp.json --json
+kyoko discover-sources --db .kyoko/kyoko.db --root-path . --json
+kyoko import-hermes-kanban --db .kyoko/kyoko.db ~/.hermes/kanban.db --board default --json
+kyoko import-openclaw-sessions --db .kyoko/kyoko.db ~/.openclaw/agents/main/sessions --agent-id main --json
+```
 
 ## Replay
-
-Replay adapters run a check against controlled before/after behavior. Kyoko
-supports external replay commands and HTTP replay servers.
 
 Generate a replay server scaffold:
 
@@ -50,17 +85,18 @@ kyoko replay-server-template .kyoko/scripts/replay_server.py \
   --json
 ```
 
-Smoke it before registering it:
+Smoke it:
 
 ```bash
 kyoko integration-smoke replay-server \
   --command "python3 .kyoko/scripts/replay_server.py --port 61200" \
   --server-url http://127.0.0.1:61200 \
+  --hook path/to/replay_hook.py:replay \
   --run-replay \
   --json
 ```
 
-Register a managed replay server:
+Register it:
 
 ```bash
 kyoko replay-adapter-register --db .kyoko/kyoko.db my-agent_replay \
@@ -72,12 +108,14 @@ kyoko replay-adapter-register --db .kyoko/kyoko.db my-agent_replay \
   --json
 ```
 
-Replay server URLs are loopback-only unless `--allow-remote-server` is supplied.
+If `61200` is busy, choose another local port and update both the server
+command and `--server-url`. HTTP replay server URLs are loopback-only unless
+`--allow-remote-server` is supplied.
 
 ## Operator Agents
 
-Operator agents author proposals from evidence. Kyoko can register common local
-CLI presets when they are installed:
+Operator agents author proposals from evidence. Register safe local presets
+when the matching CLIs are installed:
 
 ```bash
 kyoko operator-adapter-bootstrap --db .kyoko/kyoko.db --json
@@ -90,29 +128,22 @@ Run a prepare-only smoke before invoking a live operator:
 kyoko operator-smoke --db .kyoko/kyoko.db --prepare-only --all-presets --json
 ```
 
-## MCP Clients
+Operator output becomes a validated proposal. It does not directly mutate
+context, skills, checks, or workspace files.
 
-Generate or install MCP config for local clients:
+## MCP
+
+Generate an install plan:
 
 ```bash
-kyoko mcp config --db .kyoko/kyoko.db --target codex --json
 kyoko mcp install-plan --db .kyoko/kyoko.db --target codex --json
-kyoko mcp install --db .kyoko/kyoko.db --target generic --output .kyoko/config/mcp.json --json
 ```
 
-For verified clients, isolated install smokes are available:
+Run the server:
 
 ```bash
-kyoko mcp install-smoke --db .kyoko/kyoko.db --all-targets --json
+kyoko mcp serve --db .kyoko/kyoko.db
 ```
 
-## SDKs
-
-The Python SDK ships with the package:
-
-```python
-from kyoko import KyokoClient, KyokoRecorder
-```
-
-The TypeScript SDK is under `sdk/typescript`. It is dependency-free at runtime
-and uses the same source-event format as the Python SDK.
+MCP tools expose inspection, proposal, check/replay, and improve workflows.
+They do not expose unchecked direct writes.

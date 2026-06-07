@@ -582,7 +582,7 @@ class DoctorTests(unittest.TestCase):
         self.assertIn("mcp_clients", checks)
         self.assertEqual(
             checks["release_python_targets"].detail["matrix_command"],
-            "python3 -m kyoko release-smoke --python-matrix --artifact both --json",
+            "kyoko release-smoke --python-matrix --artifact both --json",
         )
         self.assertIn("missing_targets", checks["release_python_targets"].detail)
         self.assertIn("ready_targets", checks["release_python_targets"].detail)
@@ -590,7 +590,7 @@ class DoctorTests(unittest.TestCase):
         self.assertIn("ready_matrix_command", checks["release_python_targets"].detail)
         self.assertEqual(
             checks["mcp_clients"].detail["matrix_command"],
-            "python3 -m kyoko mcp install-smoke --all-targets --json",
+            "kyoko mcp install-smoke --all-targets --json",
         )
         readiness = report.to_json()["readiness"]
         self.assertTrue(readiness["local_runtime_ready"])
@@ -612,43 +612,43 @@ class DoctorTests(unittest.TestCase):
         suggestions = {command["intent"]: command for command in report.to_json()["suggested_commands"]}
         self.assertEqual(
             suggestions["doctor_safe_smokes"]["cli_args"],
-            ["python3", "-m", "kyoko", "doctor", "--safe-smokes", "--json"],
+            ["kyoko", "doctor", "--safe-smokes", "--json"],
         )
         self.assertEqual(
             suggestions["doctor_smoke_demo"]["cli_args"],
-            ["python3", "-m", "kyoko", "doctor", "--smoke-demo", "--json"],
+            ["kyoko", "doctor", "--smoke-demo", "--json"],
         )
         self.assertEqual(
             suggestions["doctor_operator_smoke_prepare"]["cli_args"],
-            ["python3", "-m", "kyoko", "doctor", "--operator-smoke-prepare", "--json"],
+            ["kyoko", "doctor", "--operator-smoke-prepare", "--json"],
         )
         self.assertEqual(
             suggestions["doctor_judge_smoke_prepare"]["cli_args"],
-            ["python3", "-m", "kyoko", "doctor", "--judge-smoke-prepare", "--json"],
+            ["kyoko", "doctor", "--judge-smoke-prepare", "--json"],
         )
         self.assertEqual(
             suggestions["doctor_ace_native_prepare"]["cli_args"],
-            ["python3", "-m", "kyoko", "doctor", "--ace-native-prepare", "--json"],
+            ["kyoko", "doctor", "--ace-native-prepare", "--json"],
         )
         self.assertEqual(
             suggestions["doctor_integration_smoke"]["cli_args"],
-            ["python3", "-m", "kyoko", "doctor", "--integration-smoke", "--json"],
+            ["kyoko", "doctor", "--integration-smoke", "--json"],
         )
         self.assertEqual(
             suggestions["doctor_improve_smoke"]["cli_args"],
-            ["python3", "-m", "kyoko", "doctor", "--improve-smoke", "--json"],
+            ["kyoko", "doctor", "--improve-smoke", "--json"],
         )
         self.assertEqual(
             suggestions["doctor_opentelemetry_smoke"]["cli_args"],
-            ["python3", "-m", "kyoko", "doctor", "--opentelemetry-smoke", "--json"],
+            ["kyoko", "doctor", "--opentelemetry-smoke", "--json"],
         )
         self.assertEqual(
             suggestions["doctor_ace_native_smoke"]["cli_args"],
-            ["python3", "-m", "kyoko", "doctor", "--ace-native-smoke", "--json"],
+            ["kyoko", "doctor", "--ace-native-smoke", "--json"],
         )
         self.assertEqual(
             suggestions["doctor_dashboard_smoke"]["cli_args"],
-            ["python3", "-m", "kyoko", "doctor", "--dashboard-smoke", "--json"],
+            ["kyoko", "doctor", "--dashboard-smoke", "--json"],
         )
         self.assertFalse(suggestions["doctor_smoke_demo"]["mutating"])
 
@@ -663,17 +663,17 @@ class DoctorTests(unittest.TestCase):
             text,
         )
         self.assertIn("suggested_commands:", text)
-        self.assertIn("doctor_safe_smokes: python3 -m kyoko doctor --safe-smokes --json", text)
+        self.assertIn("doctor_safe_smokes: kyoko doctor --safe-smokes --json", text)
         self.assertIn(
-            "doctor_opentelemetry_smoke: python3 -m kyoko doctor --opentelemetry-smoke --json",
+            "doctor_opentelemetry_smoke: kyoko doctor --opentelemetry-smoke --json",
             text,
         )
         self.assertIn(
-            "doctor_dashboard_smoke: python3 -m kyoko doctor --dashboard-smoke --json",
+            "doctor_dashboard_smoke: kyoko doctor --dashboard-smoke --json",
             text,
         )
         if "release_smoke_matrix" in suggestions:
-            self.assertIn("release_smoke_matrix: python3 -m kyoko release-smoke", text)
+            self.assertIn("release_smoke_matrix: kyoko release-smoke", text)
         else:
             self.assertEqual(checks["release_python_targets"].status, "pass")
             self.assertNotIn("release_smoke_matrix:", text)
@@ -701,8 +701,6 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(
             command["cli_args"],
             [
-                "python3",
-                "-m",
                 "kyoko",
                 "operator-smoke",
                 "--all-presets",
@@ -725,8 +723,6 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(
             failure_command["cli_args"],
             [
-                "python3",
-                "-m",
                 "kyoko",
                 "operator-smoke",
                 "--all-presets",
@@ -844,7 +840,7 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(check.detail["unready_targets"], {})
         self.assertEqual(
             check.detail["ready_matrix_command"],
-            "python3 -m kyoko release-smoke --python-target 3.12 --artifact both --json",
+            "kyoko release-smoke --python-target 3.12 --artifact both --json",
         )
         self.assertEqual(check.detail["build_backend_install_commands"], {})
 
@@ -887,7 +883,7 @@ class DoctorTests(unittest.TestCase):
         self.assertFalse(checks["operator_smoke_prepare"].detail["live_operator_invoked"])
         self.assertEqual(
             checks["operator_smoke_prepare"].detail["matrix_command"],
-            "python3 -m kyoko operator-smoke --all-presets --prepare-only --json",
+            "kyoko operator-smoke --all-presets --prepare-only --json",
         )
         self.assertTrue(smoke.call_args.kwargs["prepare_only"])
 

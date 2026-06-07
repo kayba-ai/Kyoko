@@ -47,22 +47,22 @@ provider access.
 Self-contained demo:
 
 ```bash
-python3 -m kyoko demo --db /tmp/kyoko-demo.db --json
+kyoko demo --db /tmp/kyoko-demo.db --json
 ```
 
 First-run readiness without mutating the user's default database:
 
 ```bash
-python3 -m kyoko doctor --json
-python3 -m kyoko doctor --safe-smokes --json
-python3 -m kyoko doctor --smoke-demo --json
-python3 -m kyoko doctor --ace-native-prepare --json
+kyoko doctor --json
+kyoko doctor --safe-smokes --json
+kyoko doctor --smoke-demo --json
+kyoko doctor --ace-native-prepare --json
 ```
 
 Project bootstrap for a real local agent repository:
 
 ```bash
-python3 -m kyoko project-bootstrap --project-dir . --profile-name news-research --source-framework langgraph-python --replay-framework hermes-python --mcp-target codex --json
+kyoko project-bootstrap --project-dir . --profile-name news-research --source-framework langgraph-python --replay-framework hermes-python --mcp-target codex --json
 ```
 
 The generated `.kyoko/NEXT_STEPS.md` includes the same no-live-model
@@ -79,12 +79,12 @@ placeholder has been replaced.
 Release-package smoke:
 
 ```bash
-python3 -m kyoko release-smoke --artifact both --json
+kyoko release-smoke --artifact both --json
 ```
 
 Dashboard path:
 
-- Start `python3 -m kyoko serve --db /tmp/kyoko-demo.db`.
+- Start `kyoko serve --db /tmp/kyoko-demo.db`.
 - Click `Run demo`.
 - Inspect proposals, check/replay state, applied context, and the proposal
   evidence chain.

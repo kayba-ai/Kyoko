@@ -1,69 +1,61 @@
 # Kyoko
 
-Kyoko is a local repair loop for AI agent workflows. It turns agent traces into
-diagnosed issues, proposed fixes, deterministic checks, replay evidence, and
-policy-gated context or harness updates.
+[![CI](https://github.com/kayba-ai/kyoko/actions/workflows/ci.yml/badge.svg)](https://github.com/kayba-ai/kyoko/actions/workflows/ci.yml)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-green.svg)](LICENSE)
 
-Kyoko is designed for one developer working on one local agent workflow. The
-runtime is a Python CLI, a loopback-only dashboard/API, a SQLite database, a
-content-addressed blob store, and optional local integrations for agent CLIs,
-MCP clients, telemetry sources, and replay servers.
+## A Self-Improvement Loop For AI Agents
 
-## What it does
+Kyoko turns a failed agent run into an evidence-backed issue, a proposed
+fix, replay/check evidence, and a gated apply decision.
 
-Kyoko gives agent developers a repeatable path from "this run failed" to "this
-fix is supported by evidence":
+![Kyoko dashboard overview](docs/assets/kyoko-dashboard-overview.png)
 
 ```text
-telemetry -> issue -> proposal -> check -> replay -> gated apply
+trace -> issue -> proposal -> check -> replay -> gated apply
 ```
 
-- Records or imports agent runs, spans, handoffs, live events, and payload
-  previews.
-- Surfaces first-class issues with resolved evidence.
-- Accepts operator-agent or user-authored `LearningProposal` fixes.
-- Generates check specs and runs bounded replay to prove before/after behavior.
-- Applies context skills or harness patches only through explicit gates,
-  autonomy policy, and human locks.
-- Serves a local dashboard and MCP server for coding-agent workflows.
+Kyoko is local-first: SQLite database, local blob store, loopback
+dashboard/API, JSON CLI, optional MCP server, and opt-in integrations for
+source telemetry, operator agents, and replay.
+
+## Quick Demo
+
+Kyoko requires Python 3.12 or newer. From this checkout:
+
+```bash
+python3 -m pip install .
+kyoko demo --db /tmp/kyoko-demo.db --json
+kyoko serve --db /tmp/kyoko-demo.db
+```
+
+Open [http://127.0.0.1:8765](http://127.0.0.1:8765).
+
+The demo uses bundled fixture data, so it does not require a live model,
+framework adapter, or replay server.
 
 ## Install
 
-Kyoko requires Python 3.12 or newer. The recommended CLI install is isolated:
+Current source install:
+
+```bash
+git clone https://github.com/kayba-ai/kyoko.git
+cd kyoko
+python3 -m pip install .
+```
+
+After the package is published, use an isolated CLI install:
 
 ```bash
 pipx install kyoko
 ```
 
-Other supported install paths:
+See [docs/INSTALL.md](docs/INSTALL.md) for `uv`, editable installs, the
+installer script, upgrades, and common setup fixes.
 
-```bash
-uv tool install kyoko
-python3 -m pip install kyoko
-python3 -m pip install .      # from a checkout
-```
+## Use It In A Project
 
-Until the package is published to PyPI, install from a local checkout:
-
-```bash
-python3 -m pip install .
-```
-
-See [docs/INSTALL.md](docs/INSTALL.md) for installer details, upgrades, and
-source builds.
-
-## Quick Start
-
-Run the self-contained demo against a throwaway database:
-
-```bash
-kyoko demo --db /tmp/kyoko-demo.db --json
-kyoko serve --db /tmp/kyoko-demo.db
-```
-
-Then open `http://127.0.0.1:8765`.
-
-Bootstrap Kyoko inside a real local agent project:
+Run this from the root of an agent project:
 
 ```bash
 kyoko project-bootstrap \
@@ -72,73 +64,81 @@ kyoko project-bootstrap \
   --source-framework generic-python \
   --replay-framework generic-python \
   --mcp-target codex
+```
 
+Then check readiness and start the dashboard:
+
+```bash
 kyoko doctor --db .kyoko/kyoko.db --safe-smokes --json
 kyoko serve --db .kyoko/kyoko.db
 ```
 
-`project-bootstrap` creates `.kyoko/kyoko.db`, source/replay scaffolds, an MCP
-config, operator adapter presets, and `.kyoko/NEXT_STEPS.md`.
+`project-bootstrap` writes `.kyoko/kyoko.db`, source/replay scaffolds, MCP
+config, operator presets, and `.kyoko/NEXT_STEPS.md`.
+
+## What Kyoko Does
+
+- Records or imports local agent traces from SDKs, generated adapters, OTLP,
+  Hermes, or OpenClaw.
+- Turns observed behavior into first-class issues with local evidence.
+- Converts user or operator fixes into validated `LearningProposal` records.
+- Generates checks and runs bounded replay before applying changes.
+- Applies context or harness changes only through policy gates and human locks.
+- Exposes the loop through a dashboard, JSON CLI, and local MCP server.
+
+## Integrations
+
+| Area | Supported paths |
+| --- | --- |
+| Source telemetry | Python SDK, TypeScript SDK, generated source adapters, OTLP/GenAI JSON, Hermes import, OpenClaw import |
+| Replay | External replay commands, managed HTTP replay servers, generated replay scaffolds |
+| Operator agents | Codex, Claude, generic command adapters, local presets |
+| Agent clients | Dashboard, JSON CLI, stdio MCP server |
+| Framework scaffolds | Generic Python/TypeScript, LangGraph, Pydantic AI, OpenAI Agents, CrewAI, Hermes, OpenClaw, AI SDK |
+
+See [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) and
+[examples/README.md](examples/README.md).
 
 ## Documentation
 
-- [Install](docs/INSTALL.md): package, source, and one-line installer paths.
-- [Quickstart](docs/QUICKSTART.md): demo and project bootstrap flows.
-- [Architecture](docs/ARCHITECTURE.md): runtime components and safety gates.
-- [Integrations](docs/INTEGRATIONS.md): telemetry, replay, operators, MCP, and
-  SDKs.
-- [CLI Reference](docs/CLI.md): command groups and common workflows.
-- [Security](docs/SECURITY.md): local-first data, loopback serving, redaction,
-  and write boundaries.
-- [Development](docs/DEVELOPMENT.md): tests, frontend builds, release smoke,
+- [Getting Started](docs/GETTING_STARTED.md): demo, project bootstrap,
+  telemetry, inspection, and the repair loop.
+- [Install](docs/INSTALL.md): install paths, verification, data location, and
+  common setup fixes.
+- [Integrations](docs/INTEGRATIONS.md): source adapters, replay adapters,
+  operator agents, MCP, and SDKs.
+- [CLI Reference](docs/CLI.md): grouped command reference.
+- [Security](docs/SECURITY.md): local data, loopback serving, tokens,
+  redaction, and write boundaries.
+- [Development](docs/DEVELOPMENT.md): tests, dashboard bundle, release smoke,
   and contract artifacts.
-- [Scope](docs/SCOPE.md): what Kyoko v0 is and is not.
 
-Reference contracts live under `docs/specs`, `docs/schemas`, and
-`docs/fixtures`. They are part of the test and release surface, not marketing
-docs.
+Specs, schemas, fixtures, and design decisions live under `docs/` as reference
+contracts.
 
 ## Repository Layout
 
 ```text
-kyoko/              Python package, CLI, dashboard/API, bundled assets
+kyoko/              Python import package, CLI runtime, dashboard/API, bundled assets
 frontend/           React/Vite dashboard source
 sdk/typescript/     Dependency-free TypeScript telemetry SDK
 examples/           Source and replay hook examples
-scripts/            Installer, fixture replay helpers, artifact validation
+scripts/            Installer, release smoke, fixture and artifact helpers
 tests/              Python unittest suite and CLI contract tests
-docs/               User docs plus reference specs, schemas, and fixtures
-```
-
-## Local Development
-
-```bash
-python3 -m pip install -e .
-python3 scripts/validate_gate_artifacts.py
-python3 -m unittest discover -s tests
-python3 -m kyoko doctor --safe-smokes --json
-```
-
-Build the dashboard bundle that ships inside the Python package:
-
-```bash
-cd frontend
-npm install
-npm run build
-```
-
-Run release packaging smoke:
-
-```bash
-python3 -m kyoko release-smoke --artifact both --install-deps --json
+docs/               User docs plus specs, schemas, fixtures, and decisions
 ```
 
 ## Status
 
-Kyoko is pre-1.0 software. The local runtime, dashboard, bundled demo, doctor
-checks, source/replay scaffolds, MCP server, operator adapters, checks, replay,
-and conservative autonomy gates are implemented. Hosted/team features, cloud
-workers, multi-tenant auth, and provider-backed automation are outside v0 scope.
+Kyoko is pre-1.0 software. The published distribution, primary CLI, Python
+import namespace, and project data directory all use the `kyoko` name.
+
+Implemented: local runtime, dashboard, demo, doctor checks, SDKs,
+source/replay scaffolds, MCP server, operator adapters, checks, replay, and
+conservative autonomy gates.
+
+Outside v0: hosted observability, team workspaces, cloud workers, multi-tenant
+auth, billing, and unchecked autonomous repository writes.
 
 ## License
 

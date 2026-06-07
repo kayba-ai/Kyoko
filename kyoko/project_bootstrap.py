@@ -161,24 +161,24 @@ def _bootstrap_commands(
     project_dir: Path,
 ) -> dict[str, str]:
     return {
-        "doctor": f"python3 -m kyoko doctor --db {_quote(db_path)} --json",
+        "doctor": f"kyoko doctor --db {_quote(db_path)} --json",
         "doctor_safe_smokes": (
-            f"python3 -m kyoko doctor --db {_quote(db_path)} --safe-smokes "
+            f"kyoko doctor --db {_quote(db_path)} --safe-smokes "
             f"--smoke-output-dir {_quote(project_dir / '.kyoko' / 'smoke' / 'doctor')} --json"
         ),
-        "profile_next": f"python3 -m kyoko profile-next --db {_quote(db_path)} --json",
+        "profile_next": f"kyoko profile-next --db {_quote(db_path)} --json",
         "source": _source_command_for_path(source_path),
-        "ingest": f"python3 -m kyoko ingest --db {_quote(db_path)} /tmp/kyoko-source-events.json --json",
+        "ingest": f"kyoko ingest --db {_quote(db_path)} /tmp/kyoko-source-events.json --json",
         "discover_sources": (
-            f"python3 -m kyoko discover-sources --db {_quote(db_path)} "
+            f"kyoko discover-sources --db {_quote(db_path)} "
             f"--profile-id {shlex.quote(profile_id)} "
             f"--profile-name {shlex.quote(profile_name)} "
             f"--root-path {_quote(project_dir)} --json"
         ),
-        "serve": f"python3 -m kyoko serve --db {_quote(db_path)}",
+        "serve": f"kyoko serve --db {_quote(db_path)}",
         "mcp": f"Use MCP config: {_quote(mcp_config_path)}",
         "replay_adapter_register": (
-            f"python3 -m kyoko replay-adapter-register --db {_quote(db_path)} "
+            f"kyoko replay-adapter-register --db {_quote(db_path)} "
             f"{shlex.quote(_replay_adapter_id(profile_id))} "
             f"--name {shlex.quote(profile_name + ' replay')} "
             f"--command {_quote(_replay_server_command(replay_path))} "
@@ -189,7 +189,7 @@ def _bootstrap_commands(
             f"--profile-id {shlex.quote(profile_id)} --json"
         ),
         "replay_smoke": (
-            "python3 -m kyoko integration-smoke replay-server "
+            "kyoko integration-smoke replay-server "
             f"--command {_quote(_replay_server_start_command(replay_path))} "
             "--server-url http://127.0.0.1:61200 "
             f"--output-dir {_quote(project_dir / '.kyoko' / 'smoke' / 'replay')} "
@@ -198,14 +198,14 @@ def _bootstrap_commands(
         ),
         "replay": _replay_command_for_path(replay_path),
         "import_hermes_kanban": (
-            f"python3 -m kyoko import-hermes-kanban --db {_quote(db_path)} "
+            f"kyoko import-hermes-kanban --db {_quote(db_path)} "
             "~/.hermes/kanban.db --board default "
             f"--profile-id {shlex.quote(profile_id)} "
             f"--profile-name {shlex.quote(profile_name)} "
             f"--root-path {_quote(project_dir)} --json"
         ),
         "import_openclaw_sessions": (
-            f"python3 -m kyoko import-openclaw-sessions --db {_quote(db_path)} "
+            f"kyoko import-openclaw-sessions --db {_quote(db_path)} "
             "~/.openclaw/agents/main/sessions --agent-id main "
             f"--profile-id {shlex.quote(profile_id)} "
             f"--profile-name {shlex.quote(profile_name)} "
