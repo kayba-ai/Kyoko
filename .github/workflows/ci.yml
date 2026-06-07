@@ -27,7 +27,10 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install package
-        run: python -m pip install --upgrade pip && python -m pip install -e .
+        # setuptools/wheel/build are needed for the packaging tests, which build
+        # sdists/wheels with --no-build-isolation. Python 3.12+ venvs no longer
+        # bundle setuptools, so install the build backend explicitly.
+        run: python -m pip install --upgrade pip setuptools wheel build && python -m pip install -e .
 
       - name: Validate gate artifacts
         run: python scripts/validate_gate_artifacts.py

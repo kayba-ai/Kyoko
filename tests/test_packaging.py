@@ -553,6 +553,12 @@ class PackagingTests(unittest.TestCase):
             self.assertIn(f"{prefix}/tests/test_source_hook_examples.py", names)
 
     def test_release_install_smoke_installs_wheel_and_sdist(self) -> None:
+        # An ambient install of the project (e.g. CI `python -m pip install -e .`, or
+        # any `pip install .`) leaves a `kyoko.egg-info` in the source tree. Only the
+        # release smoke itself must not create one, so snapshot its state up front and
+        # assert no *new* egg-info appears.
+        egg_info = ROOT / "kyoko.egg-info"
+        egg_info_preexisting = egg_info.exists()
         with TemporaryDirectory() as tmpdir_name:
             output_dir = Path(tmpdir_name) / "release-smoke"
 
@@ -594,7 +600,8 @@ class PackagingTests(unittest.TestCase):
                     "install_sdist_legacy_setup_py",
                     [command["name"] for command in sdist_commands],
                 )
-            self.assertFalse((ROOT / "kyoko.egg-info").exists())
+            if not egg_info_preexisting:
+                self.assertFalse(egg_info.exists())
 
     def test_release_install_smoke_bootstraps_missing_build_backend(self) -> None:
         with TemporaryDirectory() as tmpdir_name:
