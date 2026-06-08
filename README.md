@@ -88,10 +88,10 @@ Either way, nothing behavior-changing ships without passing the gate.
 
 ## Quick demo
 
-Kyoko requires Python 3.12 or newer. From this checkout:
+Kyoko requires Python 3.12 or newer.
 
 ```bash
-python3 -m pip install .
+pipx install kyoko
 kyoko demo --db /tmp/kyoko-demo.db --json
 kyoko serve --db /tmp/kyoko-demo.db
 ```
@@ -104,15 +104,15 @@ model, framework adapter, or replay server.
 ## Install
 
 ```bash
-git clone https://github.com/kayba-ai/kyoko.git
-cd kyoko
-python3 -m pip install .
+pipx install kyoko
 ```
 
-After the package is published, prefer an isolated CLI install:
+`pip install kyoko` and `uv tool install kyoko` work too. To run from source:
 
 ```bash
-pipx install kyoko
+git clone https://github.com/kayba-ai/kyoko.git
+cd kyoko
+python3 -m pip install -e .
 ```
 
 See [docs/INSTALL.md](docs/INSTALL.md) for `uv`, editable installs, the

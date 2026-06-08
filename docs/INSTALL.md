@@ -3,36 +3,27 @@
 Kyoko installs as a Python CLI named `kyoko`. It requires Python
 3.12 or newer.
 
-## From This Repository
+## Install
 
-Current GitHub-user install:
+`pipx` keeps the CLI isolated in its own environment:
 
 ```bash
-git clone https://github.com/kayba-ai/kyoko.git
-cd kyoko
-python3 -m pip install .
-kyoko --version
+pipx install kyoko
 ```
 
-Editable development install:
+`pip` and `uv` work too:
 
 ```bash
-python3 -m pip install -e .
+python3 -m pip install kyoko
+uv tool install kyoko
 ```
 
 Verify:
 
 ```bash
+kyoko --version
 kyoko doctor --json
 kyoko demo --db /tmp/kyoko-demo.db --json
-```
-
-## Published Package
-
-After the package is published, use an isolated CLI installer:
-
-```bash
-pipx install kyoko
 ```
 
 Upgrade or uninstall:
@@ -42,11 +33,15 @@ pipx upgrade kyoko
 pipx uninstall kyoko
 ```
 
-Other supported published-package paths:
+## From Source
+
+For development or to run an unreleased version:
 
 ```bash
-uv tool install kyoko
-python3 -m pip install --user kyoko
+git clone https://github.com/kayba-ai/kyoko.git
+cd kyoko
+python3 -m pip install -e .   # editable install
+kyoko --version
 ```
 
 ## Installer Script

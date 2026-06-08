@@ -5,10 +5,8 @@ real agent project.
 
 ## Run The Demo
 
-From the repository root:
-
 ```bash
-python3 -m pip install .
+pipx install kyoko
 kyoko demo --db /tmp/kyoko-demo.db --json
 kyoko serve --db /tmp/kyoko-demo.db
 ```
