@@ -10,14 +10,14 @@
 **Kyoko is the all-in-one, fully local tool for debugging and improving your AI
 agents.**
 
-Point it at **any agent you're building** — instrument it with OpenTelemetry or
-the SDKs — or plug straight into CLI agents you already run like Codex, Claude
+Point it at **any agent you're building** (instrument it with OpenTelemetry or
+the SDKs), or plug straight into CLI agents you already run like Codex, Claude
 Code, OpenClaw, and Hermes. Kyoko captures what your agent actually does and
 runs a closed repair loop over it: it **analyses** real runs into a living state
 reflection of the system, files recurring and generalised failures as
 **issues**, drafts concrete **fixes**, and proves them with replay and **evals**
-before anything ships. Everything runs on your machine — traces, database, and
-dashboard — and any model or external call is opt-in.
+before anything ships. Everything runs on your machine (traces, database, and
+dashboard), and any model or external call is opt-in.
 
 Most agent tooling stops at showing you traces; you still have to read them,
 guess what went wrong, write the fix, and hope it didn't break something else.
@@ -33,10 +33,10 @@ explicitly choose.
 ## Why Kyoko
 
 - **OpenTelemetry-native.** Ingests OTLP/GenAI spans; SDKs and importers for the rest.
-- **Runs on your coding agent.** Codex, Claude Code, OpenClaw, Hermes do the analysis *and* author fixes — through their own CLI login, so no API keys and no extra spend.
+- **Runs on your coding agent.** Codex, Claude Code, OpenClaw, Hermes do the analysis *and* author fixes through their own CLI login, so no API keys and no extra spend.
 - **Fully local.** SQLite + loopback UI. Nothing leaves your machine; external calls opt-in.
 - **Cumulative analysis.** Builds a state reflection from traces, issues, evals, and fixes, so repeated behavior becomes more accurate fixes over time.
-- **Measured, not guessed.** Failure rate from real evals — not status flags.
+- **Measured, not guessed.** Failure rate from real evals, not status flags.
 - **Safe by default.** No change ships without passing the gate. No shortcuts, anywhere.
 - **Zero-fuss.** One `kyoko` CLI, near-zero deps, `--json` everywhere. No server, no cloud.
 
@@ -58,28 +58,28 @@ explicitly choose.
         └─────────────────┘           └─────────────────┘
 
    Gate = checks · replay · policy · locks; a fix applies only if it passes.
-   Evals score the result and feed the next analysis — the loop tightens.
+   Evals score the result and feed the next analysis; the loop tightens.
 ```
 
-1. **Analyse** — Kyoko reads your agent's traces *for you*, diagnoses what went
+1. **Analyse:** Kyoko reads your agent's traces *for you*, diagnoses what went
    wrong, and updates a state reflection of how the system behaves over time.
    No manual log-digging.
-2. **Issues** — it surfaces the failures to you automatically as first-class,
+2. **Issues:** it surfaces the failures to you automatically as first-class,
    evidence-backed issues, grouped by category and severity so you fix the
-   pattern, not the symptom — including problems you did not predefine as a
+   pattern, not the symptom, including problems you did not predefine as a
    metric.
-3. **Proposals** — each accepted issue becomes a concrete fix (to context/skills
+3. **Proposals:** each accepted issue becomes a concrete fix (to context/skills
    or the agent's harness), then runs the **gate**: generated checks, bounded
    replay, autonomy policy, and human locks. It applies only if it passes.
-4. **Evals** — a measurement plane of deterministic detectors and LLM judges
+4. **Evals:** a measurement plane of deterministic detectors and LLM judges
    scores runs into a failure rate, before vs after. Failure is decided by
    evals, never by a status flag on a trace.
 
-**Run it your way.** The same loop, the same gate — you pick the autonomy level:
+**Run it your way.** The same loop, the same gate. You pick the autonomy level:
 
-- **Human-in-the-loop** — Kyoko surfaces issues and drafts fixes, and you review
+- **Human-in-the-loop:** Kyoko surfaces issues and drafts fixes, and you review
   and approve each change before it applies.
-- **Fully autonomous** — the policy auto-applies any change that clears replay,
+- **Fully autonomous:** the policy auto-applies any change that clears replay,
   evals, and human locks, and parks anything that doesn't for you to look at.
 
 Either way, nothing behavior-changing ships without passing the gate.
@@ -141,7 +141,7 @@ kyoko serve --db .kyoko/kyoko.db
 ```
 
 Point telemetry at Kyoko with the Python or TypeScript SDK, a generated
-adapter, or an importer — see [Getting Started](docs/GETTING_STARTED.md) for the
+adapter, or an importer. See [Getting Started](docs/GETTING_STARTED.md) for the
 end-to-end walkthrough.
 
 ## What you get
@@ -152,15 +152,15 @@ end-to-end walkthrough.
   state reflection, then turns recurring or generalised weaknesses into
   evidence-backed issues with category, severity, and the spans where they
   happened.
-- **Fixes out:** issues become validated `LearningProposal` records — authored
+- **Fixes out:** issues become validated `LearningProposal` records, authored
   by you or an operator agent (Codex, Claude, or a generic command).
 - **Verification:** generated checks plus bounded replay against external
   commands or managed loopback replay servers.
-- **Measurement:** an evidence-only eval plane — deterministic detectors and
-  LLM-judge evals — for what you choose to measure, alongside analysis that
+- **Measurement:** an evidence-only eval plane (deterministic detectors and
+  LLM-judge evals) for what you choose to measure, alongside analysis that
   surfaces unmeasured patterns from observed behavior.
 - **Surfaces:** a local dashboard, a JSON-everywhere CLI, and a stdio MCP server
-  for coding agents — all sharing the same gated apply path.
+  for coding agents, all sharing the same gated apply path.
 
 | Area | Supported paths |
 | --- | --- |
@@ -175,8 +175,8 @@ See [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) and
 
 ## How safety works
 
-Every behavior-changing path — operator output, imports, MCP tools, and
-`kyoko improve` — flows through one gate:
+Every behavior-changing path (operator output, imports, MCP tools, and
+`kyoko improve`) flows through one gate:
 
 1. Validate the proposal against its schema.
 2. Resolve the evidence it references.
