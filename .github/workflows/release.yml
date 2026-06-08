@@ -1,0 +1,96 @@
+name: Release
+
+# Publishes kyoko to PyPI via Trusted Publishing (OIDC, no stored token) when a
+# version tag is pushed. Create the tag from a commit whose setup.cfg version
+# matches, e.g.:
+#   git tag v0.1.0 && git push origin v0.1.0
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build distribution
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend deps
+        run: npm ci
+        working-directory: frontend
+
+      # The React SPA is served from kyoko/assets/web inside the wheel, so build
+      # it before packaging to guarantee the published artifact ships the UI.
+      - name: Build dashboard bundle
+        run: npm run build
+        working-directory: frontend
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tooling
+        run: python -m pip install --upgrade pip setuptools wheel build && python -m pip install -e .
+
+      # PyPI versions are immutable. Fail before publishing if the tag (vX.Y.Z)
+      # does not match setup.cfg's version.
+      - name: Verify tag matches package version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(python -c 'import importlib.metadata as m; print(m.version("kyoko"))')"
+          echo "tag=$tag package=$pkg"
+          if [ "$tag" != "$pkg" ]; then
+            echo "::error::Git tag v$tag does not match package version $pkg (setup.cfg). Bump setup.cfg or retag."
+            exit 1
+          fi
+
+      # Build wheel/sdist and confirm they install cleanly before we publish.
+      - name: Release smoke (build + install both artifacts)
+        run: python -m kyoko release-smoke --artifact both --install-deps --json
+
+      - name: Build sdist and wheel
+        run: |
+          rm -rf dist
+          python -m build
+
+      - name: Upload distribution artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    # Must match the "Environment name" set on the PyPI trusted publisher and the
+    # environment configured under GitHub repo Settings -> Environments.
+    environment: pypi
+    permissions:
+      id-token: write # required for OIDC trusted publishing
+
+    steps:
+      - name: Download distribution artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
