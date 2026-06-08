@@ -68,11 +68,15 @@ recorder = KyokoRecorder(
 
 with recorder.run("research task") as run:
     with run.span("search", kind="tool") as span:
-        span.finish("succeeded", output_ref="output://search-results")
-    run.finish("succeeded", summary="Collected search results.")
+        span.finish(status="succeeded", output_ref="output://search-results")
+    run.finish(status="succeeded", summary="Collected search results.")
 
 KyokoClient().ingest(recorder.to_source_events())
 ```
+
+`KyokoClient` posts to a running server (default `http://127.0.0.1:8765`), so
+start `kyoko serve --db .kyoko/kyoko.db` first. Events land in whatever database
+that server was started with.
 
 Other source paths are covered in [Integrations](INTEGRATIONS.md): TypeScript
 SDK, generated source adapters, OTLP/GenAI JSON, Hermes, and OpenClaw.
@@ -84,7 +88,7 @@ kyoko runs --db .kyoko/kyoko.db --json
 kyoko current-run --db .kyoko/kyoko.db --json
 kyoko run-outline --db .kyoko/kyoko.db <run-id> --json
 kyoko search-run --db .kyoko/kyoko.db <run-id> "timeout" --json
-kyoko span-payload --db .kyoko/kyoko.db <span-id> output --json
+kyoko span-payload --db .kyoko/kyoko.db <span-id> --target output --json
 ```
 
 ## Move From Issue To Repair
@@ -111,7 +115,7 @@ Checks and replay provide evidence before apply:
 
 ```bash
 kyoko generate-checks --db .kyoko/kyoko.db <proposal-id> --json
-kyoko replay --db .kyoko/kyoko.db <check-id> --json
+kyoko replay --db .kyoko/kyoko.db <check-spec-id> --json
 kyoko run-autonomy --db .kyoko/kyoko.db --json
 ```
 

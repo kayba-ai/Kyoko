@@ -1,8 +1,9 @@
 # Kyoko Documentation
 
-Kyoko is a self-improvement loop for AI agents. Start with the product
-docs. Use the reference material only when you are changing behavior or
-validating a release.
+Kyoko is a local repair loop for AI agents: it analyses real runs, files
+issues, drafts fixes, and proves them with replay and evals before anything
+ships. Start with the product docs. Use the reference material only when you are
+changing behavior or validating a release.
 
 ## Product Docs
 

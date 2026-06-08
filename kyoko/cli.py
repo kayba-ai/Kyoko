@@ -262,7 +262,7 @@ from .web import DEFAULT_HOST, DEFAULT_PORT, WebError, serve
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="kyoko",
-        description="Local, self-hosted optimization loop for agentic workflows.",
+        description="Local-first repair loop for debugging and improving AI agents.",
     )
     parser.add_argument("--version", action="version", version=f"kyoko {__version__}")
 

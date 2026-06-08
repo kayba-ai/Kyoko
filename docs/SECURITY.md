@@ -38,6 +38,11 @@ If you bind to a non-loopback host, Kyoko requires an auth token:
 kyoko serve --host 0.0.0.0 --auth-token "$KYOKO_AUTH_TOKEN"
 ```
 
+`127.0.0.1`, `localhost`, and `::1` (and the rest of `127.0.0.0/8`) count as
+loopback and run without a token; any other host requires one. If you bind to a
+non-loopback host from the CLI without `--auth-token`, Kyoko generates a token
+and prints it in the dashboard URL.
+
 The server accepts the token through a bearer header, `X-Kyoko-Token`, a
 `token` query parameter, or the strict same-site cookie it sets after a valid
 tokenized dashboard load.

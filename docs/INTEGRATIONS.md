@@ -33,8 +33,8 @@ recorder = KyokoRecorder(
 
 with recorder.run("research task") as run:
     with run.span("search", kind="tool") as span:
-        span.finish("succeeded", output_ref="output://search-results")
-    run.finish("succeeded", summary="Collected search results.")
+        span.finish(status="succeeded", output_ref="output://search-results")
+    run.finish(status="succeeded", summary="Collected search results.")
 
 KyokoClient().ingest(recorder.to_source_events())
 ```

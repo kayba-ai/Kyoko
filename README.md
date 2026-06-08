@@ -211,6 +211,13 @@ See [docs/SECURITY.md](docs/SECURITY.md) and [docs/ARCHITECTURE.md](docs/ARCHITE
 Specs, schemas, fixtures, and design decisions live under `docs/` as reference
 contracts.
 
+## Contributing
+
+Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for
+local setup, the test and validation gates, and how to submit a change. To
+report a security vulnerability, follow [SECURITY.md](SECURITY.md) rather than
+opening a public issue.
+
 ## Repository layout
 
 ```text

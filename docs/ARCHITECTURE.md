@@ -34,10 +34,15 @@ Kyoko stores normalized local evidence:
 
 - profiles, sources, runs, spans, handoffs, and timeline events,
 - live events and MCP logs,
-- issues and annotations,
+- a unified skillbook (`skills`) that folds issue evidence and learned
+  context together,
+- annotations,
 - learning proposals,
-- check specs, check runs, replay runs, and judge results,
-- context skills, delivery rules, patch transactions, and human locks,
+- check specs, check runs, and replay runs (judge output is carried inside
+  check runs),
+- eval and llm_eval definitions, measure runs, and measure results
+  (evidence-only metrics),
+- delivery rules, patch transactions, and human locks,
 - payload blob metadata.
 
 The default database is `~/.kyoko/kyoko.db`. Project bootstrap creates

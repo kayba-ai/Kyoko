@@ -86,6 +86,8 @@ Keep GitHub-facing docs practical:
 - `docs/INTEGRATIONS.md`: source, replay, operator, MCP, and SDK wiring.
 - `docs/CLI.md`: grouped command reference.
 - `docs/SECURITY.md`: local data, auth, redaction, replay, and write boundaries.
+- `docs/ARCHITECTURE.md`: runtime components, data model, and gate boundaries.
+- `docs/SCOPE.md`: v0 product boundary and non-goals.
 
 Keep long-lived behavior contracts under `docs/specs`, `docs/schemas`, and
 `docs/fixtures`.

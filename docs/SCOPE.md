@@ -12,6 +12,7 @@ local AI agent workflows.
 - Source adapters and importers for local agent traces.
 - Replay adapters and generated replay-server scaffolds.
 - Issue, proposal, check, replay, and gated apply workflows.
+- Evidence-only eval and LLM-judge measurement of agent runs.
 - Conservative context and harness autonomy.
 - MCP server for local coding-agent workflows.
 - Release artifacts as a Python wheel and source distribution.

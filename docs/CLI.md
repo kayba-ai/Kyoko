@@ -38,7 +38,7 @@ kyoko run-detail --db .kyoko/kyoko.db <run-id> --json
 kyoko run-outline --db .kyoko/kyoko.db <run-id> --json
 kyoko search-run --db .kyoko/kyoko.db <run-id> "timeout" --json
 kyoko span-context --db .kyoko/kyoko.db <span-id> --json
-kyoko span-payload --db .kyoko/kyoko.db <span-id> output --json
+kyoko span-payload --db .kyoko/kyoko.db <span-id> --target output --json
 ```
 
 ## Issues And Proposals
@@ -152,8 +152,9 @@ kyoko status --db .kyoko/kyoko.db --json
 kyoko dashboard-metrics --db .kyoko/kyoko.db --json
 kyoko storage-report --db .kyoko/kyoko.db --json
 kyoko wal-checkpoint --db .kyoko/kyoko.db --json
-kyoko prune --db .kyoko/kyoko.db --dry-run --json
-kyoko prune-retention --db .kyoko/kyoko.db --older-than-days 30 --dry-run --json
+# prune and prune-retention default to a dry run; pass --apply to delete.
+kyoko prune --db .kyoko/kyoko.db --json
+kyoko prune-retention --db .kyoko/kyoko.db --trace-older-than-days 30 --json
 ```
 
 ## Development And Release
