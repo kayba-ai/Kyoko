@@ -28,7 +28,7 @@ fixes, replays, and evals, so it can surface the problems humans would not
 think to measure by hand while still respecting the detectors and judges you
 explicitly choose.
 
-<img src="docs/assets/kyoko-dashboard-overview.png" alt="Kyoko dashboard overview" width="80%" />
+<img src="docs/assets/kyoko-dashboard-overview.png" alt="Kyoko dashboard overview" width="90%" />
 
 ## Why Kyoko
 
@@ -84,7 +84,7 @@ explicitly choose.
 
 Either way, nothing behavior-changing ships without passing the gate.
 
-<img src="docs/assets/kyoko-dashboard-issues.png" alt="Kyoko issues review queue" width="80%" />
+<img src="docs/assets/kyoko-dashboard-issues.png" alt="Kyoko issues review queue" width="90%" />
 
 ## Quick demo
 
