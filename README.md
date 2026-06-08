@@ -1,6 +1,9 @@
 # Kyoko
 
-[![CI](https://github.com/kayba-ai/kyoko/actions/workflows/ci.yml/badge.svg)](https://github.com/kayba-ai/kyoko/actions/workflows/ci.yml)
+[![GitHub stars](https://img.shields.io/github/stars/kayba-ai/kyoko?style=social)](https://github.com/kayba-ai/kyoko)
+[![Kayba Website](https://img.shields.io/badge/kayba.ai-6B8BA8?style=flat&logo=data:image/png;base64,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&logoColor=white)](https://kayba.ai)
+[![Discord](https://img.shields.io/discord/1429935408145236131?label=Discord&logo=discord&logoColor=white&color=5865F2)](https://discord.gg/mqCqH7sTyK)
+[![Twitter Follow](https://img.shields.io/twitter/follow/kaybaai?style=social)](https://twitter.com/kaybaai)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-green.svg)](LICENSE)
 
@@ -25,24 +28,34 @@ fixes, replays, and evals, so it can surface the problems humans would not
 think to measure by hand while still respecting the detectors and judges you
 explicitly choose.
 
-![Kyoko dashboard overview](docs/assets/kyoko-dashboard-overview.png)
+<img src="docs/assets/kyoko-dashboard-overview.png" alt="Kyoko dashboard overview" width="80%" />
+
+## Why Kyoko
+
+- **OpenTelemetry-native.** Ingests OTLP/GenAI spans; SDKs and importers for the rest.
+- **Runs on your coding agent.** Codex, Claude Code, OpenClaw, Hermes do the analysis *and* author fixes — through their own CLI login, so no API keys and no extra spend.
+- **Fully local.** SQLite + loopback UI. Nothing leaves your machine; external calls opt-in.
+- **Cumulative analysis.** Builds a state reflection from traces, issues, evals, and fixes, so repeated behavior becomes more accurate fixes over time.
+- **Measured, not guessed.** Failure rate from real evals — not status flags.
+- **Safe by default.** No change ships without passing the gate. No shortcuts, anywhere.
+- **Zero-fuss.** One `kyoko` CLI, near-zero deps, `--json` everywhere. No server, no cloud.
 
 ## The loop
 
 ```text
-        ┌─────────────────┐          ┌─────────────────┐
-        │  ① Analyse      │ ───────▶ │  ② Issues       │
-        │  traces in      │          │  recurring      │
-        │                 │          │  failures       │
-        └─────────────────┘          └─────────────────┘
-                 ▲                             │
-                 │ measure                     │ accept
-                 │                             ▼
-        ┌─────────────────┐  ┌──────┐  ┌─────────────────┐
-        │  ④ Evals        │ ◀┤ gate ├─ │  ③ Proposals    │
-        │  failure rate   │  └──────┘  │  candidate      │
-        │                 │   apply    │  fixes          │
-        └─────────────────┘            └─────────────────┘
+        ┌─────────────────┐           ┌─────────────────┐
+        │  1. Analyse     │ ─────-──▶ │  2. Issues      │
+        │  traces in      │           │  recurring      │
+        │                 │           │  failures       │
+        └─────────────────┘           └─────────────────┘
+                 ▲                            │
+                 │ measure                    │ accept
+                 │                            ▼
+        ┌─────────────────┐  ┌──────┐ ┌─────────────────┐
+        │  4. Evals       │◀-┤ gate ├─│  3. Proposals   │
+        │  failure rate   │  └──────┘ │  candidate      │
+        │                 │   apply   │  fixes          │
+        └─────────────────┘           └─────────────────┘
 
    Gate = checks · replay · policy · locks; a fix applies only if it passes.
    Evals score the result and feed the next analysis — the loop tightens.
@@ -71,17 +84,7 @@ explicitly choose.
 
 Either way, nothing behavior-changing ships without passing the gate.
 
-## Why Kyoko
-
-- **OpenTelemetry-native.** Ingests OTLP/GenAI spans; SDKs and importers for the rest.
-- **Plugs into CLI agents.** Codex, Claude Code, OpenClaw, Hermes — operators author fixes, MCP drives the loop.
-- **Fully local.** SQLite + loopback UI. Nothing leaves your machine; external calls opt-in.
-- **Cumulative analysis.** Builds a state reflection from traces, issues, evals, and fixes, so repeated behavior becomes more accurate fixes over time.
-- **Measured, not guessed.** Failure rate from real evals — not status flags.
-- **Safe by default.** No change ships without passing the gate. No shortcuts, anywhere.
-- **Zero-fuss.** One `kyoko` CLI, near-zero deps, `--json` everywhere. No server, no cloud.
-
-![Kyoko issues review queue](docs/assets/kyoko-dashboard-issues.png)
+<img src="docs/assets/kyoko-dashboard-issues.png" alt="Kyoko issues review queue" width="80%" />
 
 ## Quick demo
 
@@ -220,19 +223,14 @@ tests/              Python unittest suite and CLI contract tests
 docs/               User docs plus specs, schemas, fixtures, and decisions
 ```
 
-## Status
-
-Kyoko is pre-1.0, single-user, local-first software. The published
-distribution, primary CLI, Python import namespace, and project data directory
-all use the `kyoko` name.
-
-**Implemented:** local runtime, dashboard, demo, doctor checks, SDKs,
-source/replay scaffolds, MCP server, operator adapters, checks, replay, evals,
-and conservative autonomy gates.
-
-**Outside v0:** hosted observability, team workspaces, cloud workers,
-multi-tenant auth, billing, and unchecked autonomous repository writes.
-
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE).
+
+---
+
+<div align="center">
+
+**Built by [Kayba](https://kayba.ai) and the open-source community.**
+
+</div>
