@@ -1,3 +1,5 @@
+<img src="docs/assets/kyoko-demo.gif" alt="Kyoko" width="100%" />
+
 # Kyoko
 
 [![GitHub stars](https://img.shields.io/github/stars/kayba-ai/kyoko?style=social)](https://github.com/kayba-ai/kyoko)
@@ -6,8 +8,6 @@
 [![Twitter Follow](https://img.shields.io/twitter/follow/kaybaai?style=social)](https://twitter.com/kaybaai)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-green.svg)](LICENSE)
-
-<img src="docs/assets/kyoko-demo.gif" alt="Kyoko demo" width="100%" />
 
 **Kyoko is the all-in-one, fully local tool for debugging and improving your AI
 agents.**
