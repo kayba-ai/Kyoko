@@ -41,7 +41,7 @@ API key or hosted service.
 
 ```text
         ┌─────────────────┐           ┌─────────────────┐
-        │  1. Analyse     │ ─────-──▶ │  2. Issues      │
+        │  1. Analyse     │ ───────▶ │  2. Issues      │
         │  traces in      │           │  recurring      │
         │                 │           │  failures       │
         └─────────────────┘           └─────────────────┘
@@ -49,28 +49,27 @@ API key or hosted service.
                  │ measure                    │ accept
                  │                            ▼
         ┌─────────────────┐  ┌──────┐ ┌─────────────────┐
-        │  4. Evals       │◀-┤ gate ├─│  3. Proposals   │
-        │  failure rate   │  └──────┘ │  candidate      │
-        │                 │   apply   │  fixes          │
+        │  4. Evals       │◀─┤ gate ├─│  3. Proposals   │
+        │  failure rate   │  └──────┘ │  fixes          │
+        │                 │   apply   │                 │
         └─────────────────┘           └─────────────────┘
-
-   Gate = checks · replay · policy · locks; a fix applies only if it passes.
-   Evals score the result and feed the next analysis; the loop tightens.
 ```
 
-1. **Analyse:** Kyoko reads your agent's traces *for you*, diagnoses what went
-   wrong, and updates a state reflection of how the system behaves over time.
-   No manual log-digging.
-2. **Issues:** it surfaces the failures to you automatically as first-class,
-   evidence-backed issues, grouped by category and severity so you fix the
-   pattern, not the symptom, including problems you did not predefine as a
-   metric.
-3. **Proposals:** each accepted issue becomes a concrete fix (to context/skills
-   or the agent's harness), then runs the **gate**: generated checks, bounded
-   replay, autonomy policy, and human locks. It applies only if it passes.
-4. **Evals:** a measurement plane of deterministic detectors and LLM judges
-   scores runs into a failure rate, before vs after. Failure is decided by
-   evals, never by a status flag on a trace.
+Kyoko keeps the repair loop explicit. Every step creates something you can
+inspect in the dashboard or CLI.
+
+1. **Analyse:** Kyoko reads real traces from your agent and looks across runs
+   for repeated behavior: tool mistakes, missing context, policy drift, brittle
+   routing, bad handoffs, or eval failures.
+2. **Issues:** recurring failures become evidence-backed issues with category,
+   severity, occurrence count, and links to the spans where they happened.
+3. **Proposals:** accepted issues become concrete fixes to your agent context,
+   skills, evals, or harness. The fix stays reviewable before it can apply.
+4. **Evals:** Kyoko reruns failing traces, runs deterministic checks, and
+   compares eval results so the gate can decide whether the fix worked.
+
+The **gate** is the control point. It applies a fix only when checks, replay
+evidence, autonomy policy, and human locks allow it.
 
 **Run it your way.** The same loop, the same gate. You pick the autonomy level:
 
@@ -79,13 +78,12 @@ API key or hosted service.
 - **Fully autonomous:** the policy auto-applies any change that clears replay,
   evals, and human locks, and parks anything that doesn't for you to look at.
 
-Either way, nothing behavior-changing ships without passing the gate.
-
 <img src="docs/assets/kyoko-dashboard-issues.png" alt="Kyoko issues review queue" width="90%" />
 
 ## Quick demo
 
-Kyoko requires Python 3.12 or newer.
+Try Kyoko without wiring up an agent. The demo creates a local database, loads
+bundled fixture runs, and serves the dashboard.
 
 ```bash
 pipx install kyoko
@@ -95,16 +93,18 @@ kyoko serve --db /tmp/kyoko-demo.db
 
 Open [http://127.0.0.1:8765](http://127.0.0.1:8765).
 
-The demo runs the full loop against bundled fixture data, so it needs no live
-model, framework adapter, or replay server.
+Requires Python 3.12 or newer. No live model, framework adapter, or replay
+server is needed for the demo.
 
-## Install
+## Install options
 
 ```bash
 pipx install kyoko
 ```
 
-`pip install kyoko` and `uv tool install kyoko` work too. To run from source:
+`pip install kyoko` and `uv tool install kyoko` work too.
+
+To run from source:
 
 ```bash
 git clone https://github.com/kayba-ai/kyoko.git
@@ -117,7 +117,7 @@ installer script, upgrades, and common setup fixes.
 
 ## Use it in your project
 
-Run this from the root of an agent project:
+Bootstrap Kyoko from the root of an agent project:
 
 ```bash
 kyoko project-bootstrap \
@@ -128,9 +128,10 @@ kyoko project-bootstrap \
   --mcp-target codex
 ```
 
-`project-bootstrap` writes `.kyoko/kyoko.db`, source/replay scaffolds, MCP
-config, operator presets, and `.kyoko/NEXT_STEPS.md`. Then check readiness and
-start the dashboard:
+`project-bootstrap` writes a local `.kyoko/` workspace: database, source/replay
+scaffolds, MCP config, operator presets, and `.kyoko/NEXT_STEPS.md`.
+
+Then check readiness and start the dashboard:
 
 ```bash
 kyoko doctor --db .kyoko/kyoko.db --safe-smokes --json
@@ -139,55 +140,55 @@ kyoko serve --db .kyoko/kyoko.db
 
 Point telemetry at Kyoko with the Python or TypeScript SDK, a generated
 adapter, or an importer. See [Getting Started](docs/GETTING_STARTED.md) for the
-end-to-end walkthrough.
+full walkthrough.
 
 ## What you get
 
-- **Telemetry in:** Python SDK, TypeScript SDK, generated source adapters,
-  OTLP/GenAI JSON, Hermes import, OpenClaw import.
-- **Diagnosis:** per-trace and cumulative analysis that folds behavior into a
-  state reflection, then turns recurring or generalised weaknesses into
-  evidence-backed issues with category, severity, and the spans where they
-  happened.
-- **Fixes out:** issues become validated `LearningProposal` records, authored
-  by you or an operator agent (Codex, Claude, or a generic command).
-- **Verification:** generated checks plus bounded replay against external
-  commands or managed loopback replay servers.
-- **Measurement:** an evidence-only eval plane (deterministic detectors and
-  LLM-judge evals) for what you choose to measure, alongside analysis that
-  surfaces unmeasured patterns from observed behavior.
-- **Surfaces:** a local dashboard, a JSON-everywhere CLI, and a stdio MCP server
-  for coding agents, all sharing the same gated apply path.
+- **Run capture:** Python SDK, TypeScript SDK, generated source adapters,
+  OTLP/GenAI JSON, Hermes import, and OpenClaw import.
+- **Issue queue:** recurring failures grouped into evidence-backed issues with
+  category, severity, occurrence count, and span links.
+- **Fix proposals:** accepted issues become validated `LearningProposal`
+  records for context, skills, evals, or harness changes.
+- **Verification:** bounded replay, deterministic checks, and eval comparison
+  before a fix can apply.
+- **Operator path:** Codex, Claude, OpenClaw, Hermes, or a generic command can
+  analyze evidence and draft fixes through existing CLI auth.
+- **Control surfaces:** local dashboard, JSON-everywhere CLI, and stdio MCP
+  server, all sharing the same gated apply path.
 
 | Area | Supported paths |
 | --- | --- |
 | Source telemetry | Python SDK, TypeScript SDK, generated source adapters, OTLP/GenAI JSON, Hermes import, OpenClaw import |
 | Replay | External replay commands, managed HTTP replay servers, generated replay scaffolds |
-| Operator agents | Codex, Claude, generic command adapters, local presets |
+| Operator agents | Codex, Claude Code, OpenClaw, Hermes, generic command adapters, local presets |
 | Agent clients | Dashboard, JSON CLI, stdio MCP server |
 | Framework scaffolds | Generic Python/TypeScript, LangGraph, Pydantic AI, OpenAI Agents, CrewAI, Hermes, OpenClaw, AI SDK |
 
 See [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) and
 [examples/README.md](examples/README.md).
 
-## How safety works
+## The gate and local boundary
 
 Every behavior-changing path (operator output, imports, MCP tools, and
 `kyoko improve`) flows through one gate:
 
-1. Validate the proposal against its schema.
+1. Validate the structured proposal.
 2. Resolve the evidence it references.
 3. Generate or select checks.
-4. Run bounded replay and the checks.
+4. Run bounded replay and deterministic checks.
 5. Evaluate the autonomy policy.
 6. Enforce human locks on protected targets.
 7. Apply context or harness changes **only** if the gate allows it.
 
-Context writes update Kyoko-managed skills and delivery rules; harness writes
-create reviewable patch transactions against an explicit workspace root.
-Replay server URLs are loopback-only unless you pass `--allow-remote-server`,
-and evidence exported to prompts, MCP, API, or bundles is redacted by default.
-See [docs/SECURITY.md](docs/SECURITY.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Operator agents can analyze evidence and draft fixes; they do not directly
+mutate Kyoko state. Context writes update Kyoko-managed skills and delivery
+rules. Harness writes create reviewable patch transactions against an explicit
+workspace root.
+
+Replay server URLs are loopback-only unless you pass `--allow-remote-server`.
+Evidence exported to prompts, MCP, API, or bundles is redacted by default. See
+[docs/SECURITY.md](docs/SECURITY.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Documentation
 
