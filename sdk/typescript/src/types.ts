@@ -114,8 +114,13 @@ export interface LiveEvent {
 
 /** Server response from `POST /api/ingest`. */
 export interface IngestResponse {
-  profile_id: string;
-  ingested_counts: Record<string, number>;
+  profile_id?: string;
+  ingested_counts?: Record<string, number>;
+  /** True on a successful POST; false when a best-effort ingest found no server. */
+  delivered?: boolean;
+  /** Set when a best-effort ingest could not reach a running Kyoko server. */
+  unreachable?: boolean;
+  detail?: string;
 }
 
 /** Server response from `POST /v1/live`. */
