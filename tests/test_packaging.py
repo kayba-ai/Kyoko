@@ -576,7 +576,7 @@ class PackagingTests(unittest.TestCase):
                 ["wheel", "sdist"],
             )
             for artifact in payload["artifacts"]:
-                self.assertEqual(artifact["installed_version"], "0.1.0")
+                self.assertEqual(artifact["installed_version"], "0.1.1")
                 self.assertTrue(artifact["install_ok"])
                 self.assertIn(artifact["install_strategy"], {"pip", "legacy_setup_py"})
                 self.assertTrue(artifact["doctor_ok"])
