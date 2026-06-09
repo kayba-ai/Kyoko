@@ -405,41 +405,20 @@ function AgentSetup({
   target,
   onTargetChange,
   onComplete,
-  canRegisterOperator,
 }: {
   target: AgentTarget;
   onTargetChange: (target: AgentTarget) => void;
   onComplete: () => void;
-  canRegisterOperator: boolean;
 }) {
   const [plan, setPlan] = React.useState<Obj | null>(null);
-  const [bootstrap, setBootstrap] = React.useState<Obj | null>(null);
-  const [busy, setBusy] = React.useState<"plan" | "bootstrap" | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
   async function loadPlan(nextTarget = target) {
-    setBusy("plan");
     setError(null);
     try {
       setPlan(await api.mcpInstallPlan(nextTarget, "user"));
     } catch (err) {
       setError(errMessage(err));
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function runBootstrap() {
-    setBusy("bootstrap");
-    setError(null);
-    try {
-      const report = await api.bootstrapAdapters(target);
-      setBootstrap(report);
-      onComplete();
-    } catch (err) {
-      setError(operatorErrorMessage(err, target));
-    } finally {
-      setBusy(null);
     }
   }
 
@@ -452,41 +431,69 @@ function AgentSetup({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Connect Codex or Claude</CardTitle>
+        <CardTitle>Connect agent to Kyoko</CardTitle>
         <Badge tone={command ? "ok" : "neutral"}>{target}</Badge>
       </CardHeader>
       <CardBody className="flex flex-col gap-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <Select
-            value={target}
-            onChange={(next) => onTargetChange(next as AgentTarget)}
-            options={[
-              { value: "codex", label: "Codex" },
-              { value: "claude", label: "Claude" },
-            ]}
-            className="w-full sm:w-48"
-          />
-          <Button type="button" onClick={() => void runBootstrap()} disabled={busy === "bootstrap" || !canRegisterOperator}>
-            {busy === "bootstrap" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Radio className="h-4 w-4" />}
-            Register proposal writer
-          </Button>
-        </div>
-        {!canRegisterOperator && (
-          <div className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-            Proposal-writer registration unlocks after traces create a Kyoko profile. MCP connection works without it.
-          </div>
-        )}
+        <Select
+          value={target}
+          onChange={(next) => onTargetChange(next as AgentTarget)}
+          options={[
+            { value: "codex", label: "Codex" },
+            { value: "claude", label: "Claude" },
+          ]}
+          className="w-full sm:w-48"
+        />
         <div className="flex flex-col gap-2">
           <div className="text-sm text-muted-foreground">
-            Run this once so {target === "codex" ? "Codex" : "Claude"} can see Kyoko MCP tools.
+            Run this once so {target === "codex" ? "Codex" : "Claude"} can see Kyoko MCP tools and help find traces.
           </div>
           <CopyCommand command={command} onCopied={onComplete} />
         </div>
         {error && <InlineError message={error} />}
-        <BootstrapSummary result={bootstrap} />
-        <DetailsBox label="technical details" result={bootstrap ?? plan} />
+        <DetailsBox label="technical details" result={plan} />
       </CardBody>
     </Card>
+  );
+}
+
+function ProposalWriterSetup({ target }: { target: AgentTarget }) {
+  const [bootstrap, setBootstrap] = React.useState<Obj | null>(null);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  async function runBootstrap() {
+    setBusy(true);
+    setError(null);
+    try {
+      setBootstrap(await api.bootstrapAdapters(target));
+    } catch (err) {
+      setError(operatorErrorMessage(err, target));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-border bg-muted/30 p-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="text-sm font-medium text-foreground">Enable proposal writer</div>
+          <div className="mt-1 text-sm text-muted-foreground">
+            Register local {target === "codex" ? "Codex" : "Claude"} so Kyoko can call it later to draft proposals.
+          </div>
+        </div>
+        <Button type="button" onClick={() => void runBootstrap()} disabled={busy}>
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Radio className="h-4 w-4" />}
+          Register proposal writer
+        </Button>
+      </div>
+      <div className="mt-3 flex flex-col gap-3">
+        {error && <InlineError message={error} />}
+        <BootstrapSummary result={bootstrap} />
+        <DetailsBox label="technical details" result={bootstrap} />
+      </div>
+    </div>
   );
 }
 
@@ -603,7 +610,7 @@ export function SetupWizardPage() {
     <div className="flex h-full flex-col">
       <PageHeader
         title="Setup"
-        description="Bring traces in, connect a local operator, and verify the first useful Kyoko loop."
+        description="Connect an agent, bring traces in, and verify the first useful Kyoko loop."
         icon={<Wand2 className="h-5 w-5" />}
       />
       <div className="flex-1 overflow-y-auto p-6">
@@ -628,7 +635,6 @@ export function SetupWizardPage() {
                 target={agentTarget}
                 onTargetChange={setAgentTarget}
                 onComplete={() => setAgentDone(true)}
-                canRegisterOperator={tracesReady}
               />
             </StepSection>
             <StepSection
@@ -660,6 +666,7 @@ export function SetupWizardPage() {
                   <div className="text-sm text-muted-foreground">
                     Traces are available and setup checks have run. Start analysis to surface issues.
                   </div>
+                  <ProposalWriterSetup target={agentTarget} />
                   <Link to="/analysis" className={buttonVariants({ variant: "outline" })}>
                     Open analysis
                     <ArrowRight className="h-4 w-4" />
