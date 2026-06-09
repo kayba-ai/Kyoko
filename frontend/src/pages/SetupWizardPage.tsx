@@ -1,5 +1,6 @@
 import * as React from "react";
 import {
+  ArrowRight,
   CheckCircle2,
   Clipboard,
   FileJson,
@@ -11,10 +12,11 @@ import {
   Upload,
   Wand2,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { api, ApiError } from "@/lib/api";
 import { useApi } from "@/hooks/useApi";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { Select } from "@/components/ui/select";
@@ -45,13 +47,19 @@ function countValue(data: Obj | null | undefined, ...keys: string[]): number {
 }
 
 function errMessage(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
+  if (error instanceof ApiError) {
+    const detail = isObj(error.detail) ? error.detail.detail : null;
+    return typeof detail === "string" && detail ? detail : error.message;
+  }
   if (error instanceof Error) return error.message;
   return String(error);
 }
 
 function operatorErrorMessage(error: unknown, target: AgentTarget): string {
   const message = errMessage(error);
+  if (message === "profile_required") {
+    return "Kyoko needs a profile before it can register an operator. Add traces first, then register the agent as a proposal writer.";
+  }
   if (message.startsWith("operator_preset_command_not_found:")) {
     const command = message.split(":")[1] || target;
     return `Kyoko could not find \`${command}\` on the PATH used by this dashboard server. Install ${target === "codex" ? "Codex" : "Claude Code"}, or restart \`kyoko serve\` from a shell where \`${command}\` works.`;
@@ -209,7 +217,7 @@ function BootstrapSummary({ result }: { result: Obj | null }) {
   );
 }
 
-function CopyCommand({ command }: { command: string }) {
+function CopyCommand({ command, onCopied }: { command: string; onCopied?: () => void }) {
   const [copied, setCopied] = React.useState(false);
   return (
     <div className="flex min-w-0 items-center gap-2 rounded-lg border border-border bg-muted p-2">
@@ -223,6 +231,7 @@ function CopyCommand({ command }: { command: string }) {
         disabled={!command}
         onClick={async () => {
           await navigator.clipboard.writeText(command);
+          onCopied?.();
           setCopied(true);
           window.setTimeout(() => setCopied(false), 1500);
         }}
@@ -395,9 +404,13 @@ function TraceSetup({
 function AgentSetup({
   target,
   onTargetChange,
+  onComplete,
+  canRegisterOperator,
 }: {
   target: AgentTarget;
   onTargetChange: (target: AgentTarget) => void;
+  onComplete: () => void;
+  canRegisterOperator: boolean;
 }) {
   const [plan, setPlan] = React.useState<Obj | null>(null);
   const [bootstrap, setBootstrap] = React.useState<Obj | null>(null);
@@ -420,7 +433,9 @@ function AgentSetup({
     setBusy("bootstrap");
     setError(null);
     try {
-      setBootstrap(await api.bootstrapAdapters(target));
+      const report = await api.bootstrapAdapters(target);
+      setBootstrap(report);
+      onComplete();
     } catch (err) {
       setError(operatorErrorMessage(err, target));
     } finally {
@@ -451,20 +466,21 @@ function AgentSetup({
             ]}
             className="w-full sm:w-48"
           />
-          <Button type="button" variant="outline" onClick={() => void loadPlan()} disabled={busy === "plan"}>
-            {busy === "plan" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Terminal className="h-4 w-4" />}
-            Refresh command
-          </Button>
-          <Button type="button" onClick={() => void runBootstrap()} disabled={busy === "bootstrap"}>
+          <Button type="button" onClick={() => void runBootstrap()} disabled={busy === "bootstrap" || !canRegisterOperator}>
             {busy === "bootstrap" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Radio className="h-4 w-4" />}
-            Register operator
+            Register proposal writer
           </Button>
         </div>
+        {!canRegisterOperator && (
+          <div className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+            Proposal-writer registration unlocks after traces create a Kyoko profile. MCP connection works without it.
+          </div>
+        )}
         <div className="flex flex-col gap-2">
           <div className="text-sm text-muted-foreground">
             Run this once so {target === "codex" ? "Codex" : "Claude"} can see Kyoko MCP tools.
           </div>
-          <CopyCommand command={command} />
+          <CopyCommand command={command} onCopied={onComplete} />
         </div>
         {error && <InlineError message={error} />}
         <BootstrapSummary result={bootstrap} />
@@ -474,7 +490,7 @@ function AgentSetup({
   );
 }
 
-function VerifySetup({ tracesReady }: { tracesReady: boolean }) {
+function VerifySetup({ tracesReady, onComplete }: { tracesReady: boolean; onComplete: () => void }) {
   const [doctor, setDoctor] = React.useState<Obj | null>(null);
   const [next, setNext] = React.useState<Obj | null>(null);
   const [busy, setBusy] = React.useState<"doctor" | "next" | null>(null);
@@ -485,6 +501,7 @@ function VerifySetup({ tracesReady }: { tracesReady: boolean }) {
     setError(null);
     try {
       setDoctor(await api.doctor({ safe_smokes: false }));
+      onComplete();
     } catch (err) {
       setError(errMessage(err));
     } finally {
@@ -497,6 +514,7 @@ function VerifySetup({ tracesReady }: { tracesReady: boolean }) {
     setError(null);
     try {
       setNext(await api.profileNext());
+      onComplete();
     } catch (err) {
       setError(errMessage(err));
     } finally {
@@ -566,6 +584,8 @@ function VerifySetup({ tracesReady }: { tracesReady: boolean }) {
 export function SetupWizardPage() {
   const [active, setActive] = React.useState<StepKey | null>("agents");
   const [agentTarget, setAgentTarget] = React.useState<AgentTarget>("codex");
+  const [agentDone, setAgentDone] = React.useState(false);
+  const [verifyDone, setVerifyDone] = React.useState(false);
   const metrics = useApi(() => api.dashboardMetrics(), []);
   const [importBump, setImportBump] = React.useState(0);
   const runs = countValue(metrics.data as Obj | null, "runs.total", "total");
@@ -573,6 +593,7 @@ export function SetupWizardPage() {
   const runStats = isObj(dashboardMetrics?.runs) ? dashboardMetrics.runs : null;
   const traceCount = countValue(runStats, "total") || runs || importBump;
   const tracesReady = traceCount > 0;
+  const setupDone = agentDone && tracesReady && verifyDone;
 
   React.useEffect(() => {
     if (importBump > 0) metrics.reload();
@@ -597,13 +618,18 @@ export function SetupWizardPage() {
             <StepSection
               step={1}
               active={active === "agents"}
-              done={false}
+              done={agentDone}
               label="Connect agent"
               detail="Codex or Claude through MCP"
               icon={<Terminal className="h-4 w-4" />}
               onToggle={() => setActive((current) => (current === "agents" ? null : "agents"))}
             >
-              <AgentSetup target={agentTarget} onTargetChange={setAgentTarget} />
+              <AgentSetup
+                target={agentTarget}
+                onTargetChange={setAgentTarget}
+                onComplete={() => setAgentDone(true)}
+                canRegisterOperator={tracesReady}
+              />
             </StepSection>
             <StepSection
               step={2}
@@ -619,14 +645,28 @@ export function SetupWizardPage() {
             <StepSection
               step={3}
               active={active === "verify"}
-              done={false}
+              done={verifyDone}
               label="Verify"
               detail="Readiness and next action"
               icon={<ShieldCheck className="h-4 w-4" />}
               onToggle={() => setActive((current) => (current === "verify" ? null : "verify"))}
             >
-              <VerifySetup tracesReady={tracesReady} />
+              <VerifySetup tracesReady={tracesReady} onComplete={() => setVerifyDone(true)} />
             </StepSection>
+            {setupDone && (
+              <Card>
+                <CardBody className="flex flex-col gap-3">
+                  <div className="text-sm font-medium text-foreground">First useful loop</div>
+                  <div className="text-sm text-muted-foreground">
+                    Traces are available and setup checks have run. Start analysis to surface issues.
+                  </div>
+                  <Link to="/analysis" className={buttonVariants({ variant: "outline" })}>
+                    Open analysis
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </CardBody>
+              </Card>
+            )}
           </div>
         )}
       </div>
