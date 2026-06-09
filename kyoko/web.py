@@ -333,6 +333,38 @@ def make_handler(
     class KyokoRequestHandler(BaseHTTPRequestHandler):
         server_version = "KyokoHTTP/0.1"
 
+        def do_HEAD(self) -> None:
+            path = _request_path(self.path)
+            if not self._is_authorized():
+                self._send_auth_required(head_only=True)
+                return
+            if path == "/":
+                if spa_bundle_available():
+                    self._serve_spa_index(head_only=True)
+                else:
+                    self._send_html(_dashboard_html(), head_only=True)
+                return
+            if not path.startswith("/api/") and not path.startswith("/v1/"):
+                asset = _resolve_static_asset(path)
+                if asset is not None:
+                    self._serve_static_file(asset, head_only=True)
+                    return
+            if path == "/api/health":
+                self._send_json({"ok": True, "status": "ok"}, head_only=True)
+                return
+            if (
+                spa_bundle_available()
+                and not path.startswith("/api/")
+                and not path.startswith("/v1/")
+            ):
+                self._serve_spa_index(head_only=True)
+                return
+            self._send_json(
+                {"error": "not_found", "path": path},
+                status=HTTPStatus.NOT_FOUND,
+                head_only=True,
+            )
+
         def do_GET(self) -> None:
             path = _request_path(self.path)
             if not self._is_authorized():
@@ -353,6 +385,9 @@ def make_handler(
                         return
                 if path == "/api/status":
                     self._send_json(status_to_json(get_database_status(resolved_db_path)))
+                    return
+                if path == "/api/health":
+                    self._send_json({"ok": True, "status": "ok"})
                     return
                 if path == "/api/events/stream":
                     self._send_sse_stream()
@@ -2765,7 +2800,13 @@ def make_handler(
                 raise ValueError("request body must be a JSON object")
             return payload
 
-        def _send_json(self, payload: dict[str, Any], *, status: HTTPStatus = HTTPStatus.OK) -> None:
+        def _send_json(
+            self,
+            payload: dict[str, Any],
+            *,
+            status: HTTPStatus = HTTPStatus.OK,
+            head_only: bool = False,
+        ) -> None:
             body = json.dumps(payload, sort_keys=True).encode("utf-8")
             self.send_response(status.value)
             self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -2775,6 +2816,8 @@ def make_handler(
             self._send_auth_cookie_if_needed()
             try:
                 self.end_headers()
+                if head_only:
+                    return
                 self.wfile.write(body)
             except (BrokenPipeError, ConnectionResetError):
                 return
@@ -2820,7 +2863,7 @@ def make_handler(
             finally:
                 bus.unsubscribe(subscriber)
 
-        def _send_html(self, html: str) -> None:
+        def _send_html(self, html: str, *, head_only: bool = False) -> None:
             body = html.encode("utf-8")
             self.send_response(HTTPStatus.OK.value)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -2830,16 +2873,18 @@ def make_handler(
             self._send_auth_cookie_if_needed()
             try:
                 self.end_headers()
+                if head_only:
+                    return
                 self.wfile.write(body)
             except (BrokenPipeError, ConnectionResetError):
                 return
 
-        def _serve_spa_index(self) -> None:
+        def _serve_spa_index(self, *, head_only: bool = False) -> None:
             index = SPA_BUNDLE_DIR / "index.html"
             try:
                 body = index.read_bytes()
             except OSError:
-                self._send_html(_dashboard_html())
+                self._send_html(_dashboard_html(), head_only=head_only)
                 return
             self.send_response(HTTPStatus.OK.value)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -2851,15 +2896,21 @@ def make_handler(
             self._send_auth_cookie_if_needed()
             try:
                 self.end_headers()
+                if head_only:
+                    return
                 self.wfile.write(body)
             except (BrokenPipeError, ConnectionResetError):
                 return
 
-        def _serve_static_file(self, file_path: Path) -> None:
+        def _serve_static_file(self, file_path: Path, *, head_only: bool = False) -> None:
             try:
                 body = file_path.read_bytes()
             except OSError:
-                self._send_json({"error": "not_found"}, status=HTTPStatus.NOT_FOUND)
+                self._send_json(
+                    {"error": "not_found"},
+                    status=HTTPStatus.NOT_FOUND,
+                    head_only=head_only,
+                )
                 return
             content_type = _STATIC_CONTENT_TYPES.get(file_path.suffix.lower(), "application/octet-stream")
             self.send_response(HTTPStatus.OK.value)
@@ -2874,14 +2925,17 @@ def make_handler(
             self.send_header("X-Content-Type-Options", "nosniff")
             try:
                 self.end_headers()
+                if head_only:
+                    return
                 self.wfile.write(body)
             except (BrokenPipeError, ConnectionResetError):
                 return
 
-        def _send_auth_required(self) -> None:
+        def _send_auth_required(self, *, head_only: bool = False) -> None:
             self._send_json(
                 {"error": "auth_required", "detail": "Valid Kyoko auth token required."},
                 status=HTTPStatus.UNAUTHORIZED,
+                head_only=head_only,
             )
 
         def _send_unsupported_media_type(self) -> None:

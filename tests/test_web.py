@@ -103,6 +103,11 @@ class RunningServer:
         with urlopen(request, timeout=5) as response:
             return response.read().decode("utf-8")
 
+    def head(self, path: str):
+        request = Request(f"{self.base_url}{path}", headers=self._headers(), method="HEAD")
+        with urlopen(request, timeout=5) as response:
+            return response.status, dict(response.headers), response.read()
+
     def post_json(self, path: str, payload: dict) -> dict:
         request = Request(
             f"{self.base_url}{path}",
@@ -196,6 +201,8 @@ class WebTests(unittest.TestCase):
             )
 
             with RunningServer(db_path) as server:
+                health = server.get_json("/api/health")
+                health_head = server.head("/api/health")
                 status = server.get_json("/api/status")
                 dashboard_metrics = server.get_json("/api/dashboard-metrics")
                 source_discovery = server.get_json(
@@ -220,6 +227,9 @@ class WebTests(unittest.TestCase):
                 autonomy_events = server.get_json("/api/autonomy-events")
                 evidence = server.get_json("/api/evidence-summary")
 
+            self.assertEqual(health, {"ok": True, "status": "ok"})
+            self.assertEqual(health_head[0], 200)
+            self.assertEqual(health_head[2], b"")
             self.assertTrue(status["initialized"])
             self.assertEqual(len(source_discovery["candidates"]), 2)
             self.assertTrue(
