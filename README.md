@@ -9,7 +9,8 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-green.svg)](LICENSE)
 
-**Kyoko turns agent runs into measured, gated fixes.**
+**Kyoko is a fully local system for debugging and improving agents with measured,
+gated fixes.**
 
 Kyoko captures what your agent actually did, finds recurring failures, turns
 them into evidence-backed issues, drafts fixes, and tests them by rerunning the
