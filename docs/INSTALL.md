@@ -62,6 +62,14 @@ The script checks Python, prefers `pipx`, falls back to `uv`, then falls back
 to `python3 -m pip install --user`. It installs the working tree when run from
 inside the repository.
 
+If your default `python3` is older than 3.12 but a newer interpreter is
+installed, the script will prefer `python3.13` or `python3.12`. You can also
+select an interpreter explicitly:
+
+```bash
+KYOKO_PYTHON=/usr/bin/python3.12 ./scripts/install.sh
+```
+
 As with any `curl | bash` installer, inspect it first if you do not already
 trust the source:
 

@@ -22,6 +22,7 @@
 # Environment overrides:
 #   KYOKO_INSTALL_SPEC   Package spec to install (default: "kyoko", or "." inside the repo).
 #   KYOKO_INSTALL_METHOD Force one of: pipx | uv | pip (default: auto-detect).
+#   KYOKO_PYTHON         Python executable to use (default: first compatible python3.13/python3.12/python3/python).
 #
 set -euo pipefail
 
@@ -36,30 +37,49 @@ die()  { err "$*"; exit 1; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
 # ---------------------------------------------------------------------------
-# Locate python3 and verify it is >= 3.12.
+# Locate Python and verify it is >= 3.12.
 # ---------------------------------------------------------------------------
 PYTHON=""
-detect_python() {
-  local candidate
-  for candidate in python3 python; do
-    if have "$candidate"; then
-      PYTHON="$(command -v "$candidate")"
-      break
-    fi
-  done
-  [ -n "$PYTHON" ] || die "Could not find python3 on PATH. Install Python >= ${MIN_PY_MAJOR}.${MIN_PY_MINOR} first."
+PYTHON_VERSION=""
+python_version() {
+  "$1" -c 'import sys; print("%d.%d" % sys.version_info[:2])' 2>/dev/null || echo "0.0"
+}
 
-  local version
-  version="$("$PYTHON" -c 'import sys; print("%d.%d" % sys.version_info[:2])' 2>/dev/null || echo "0.0")"
+python_is_compatible() {
+  local version="$1"
   local major="${version%%.*}"
   local minor="${version##*.}"
+  [ "$major" -gt "$MIN_PY_MAJOR" ] || {
+    [ "$major" -eq "$MIN_PY_MAJOR" ] && [ "$minor" -ge "$MIN_PY_MINOR" ]
+  }
+}
 
-  if [ "$major" -lt "$MIN_PY_MAJOR" ] || { [ "$major" -eq "$MIN_PY_MAJOR" ] && [ "$minor" -lt "$MIN_PY_MINOR" ]; }; then
-    warn "Detected Python ${version} at ${PYTHON}; Kyoko requires Python >= ${MIN_PY_MAJOR}.${MIN_PY_MINOR}."
-    warn "Continuing anyway, but install may fail. Install a newer Python to be safe."
-  else
-    log "Using Python ${version} (${PYTHON})."
+detect_python() {
+  local candidate
+  local version
+
+  if [ -n "${KYOKO_PYTHON:-}" ]; then
+    have "$KYOKO_PYTHON" || die "KYOKO_PYTHON='${KYOKO_PYTHON}' was not found on PATH."
+    PYTHON="$(command -v "$KYOKO_PYTHON")"
+    PYTHON_VERSION="$(python_version "$PYTHON")"
+    python_is_compatible "$PYTHON_VERSION" || die "Detected Python ${PYTHON_VERSION} at ${PYTHON}; Kyoko requires Python >= ${MIN_PY_MAJOR}.${MIN_PY_MINOR}."
+    log "Using Python ${PYTHON_VERSION} (${PYTHON})."
+    return
   fi
+
+  for candidate in python3.13 python3.12 python3 python; do
+    if have "$candidate"; then
+      version="$(python_version "$candidate")"
+      if python_is_compatible "$version"; then
+        PYTHON="$(command -v "$candidate")"
+        PYTHON_VERSION="$version"
+        log "Using Python ${PYTHON_VERSION} (${PYTHON})."
+        return
+      fi
+    fi
+  done
+
+  die "Could not find Python >= ${MIN_PY_MAJOR}.${MIN_PY_MINOR} on PATH. Install Python ${MIN_PY_MAJOR}.${MIN_PY_MINOR}+ first, or set KYOKO_PYTHON=/path/to/python."
 }
 
 # ---------------------------------------------------------------------------
@@ -98,8 +118,8 @@ choose_method() {
 }
 
 install_with_pipx() {
-  log "Installing with pipx: pipx install '${INSTALL_SPEC}'"
-  pipx install --force "${INSTALL_SPEC}"
+  log "Installing with pipx: pipx install --python '${PYTHON}' '${INSTALL_SPEC}'"
+  pipx install --force --python "${PYTHON}" "${INSTALL_SPEC}"
 }
 
 install_with_uv() {
