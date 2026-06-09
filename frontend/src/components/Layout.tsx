@@ -13,6 +13,7 @@ import {
   Settings as SettingsIcon,
   Moon,
   Sun,
+  Wand2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -37,7 +38,10 @@ interface NavSection {
 const SECTIONS: NavSection[] = [
   {
     // Lead tab, no heading — the outcome dashboard.
-    items: [{ to: "/overview", label: "Overview", icon: LayoutDashboard }],
+    items: [
+      { to: "/setup", label: "Setup", icon: Wand2 },
+      { to: "/overview", label: "Overview", icon: LayoutDashboard },
+    ],
   },
   {
     // Steps 02/04 — surface, prioritize, diagnose. Issues are the spine;

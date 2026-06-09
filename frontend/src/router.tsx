@@ -12,13 +12,15 @@ import { DetectorsPage } from "./pages/DetectorsPage";
 import { JudgesPage } from "./pages/JudgesPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { OverviewPage } from "./pages/OverviewPage";
+import { SetupWizardPage } from "./pages/SetupWizardPage";
 
 export const router = createBrowserRouter([
   {
     path: "/",
     element: <Layout />,
     children: [
-      { index: true, element: <Navigate to="/traces" replace /> },
+      { index: true, element: <Navigate to="/setup" replace /> },
+      { path: "setup", element: <SetupWizardPage /> },
       { path: "overview", element: <OverviewPage /> },
       { path: "traces", element: <TracesPage /> },
       { path: "traces/:traceId", element: <TraceDetailPage /> },

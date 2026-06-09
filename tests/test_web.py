@@ -669,6 +669,31 @@ class WebTests(unittest.TestCase):
             self.assertEqual(imported["import"]["counts"]["spans"], 6)
             self.assertEqual(status["counts"]["runs"], 1)
 
+    def test_setup_discover_sources_alias_lists_candidates(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            db_path = tmp_path / "kyoko.db"
+            home = tmp_path / "home"
+            _write_openclaw_sessions(home)
+
+            with RunningServer(db_path) as server:
+                discovery = server.get_json(f"/api/discover-sources?home={quote(str(home))}")
+
+            self.assertEqual(discovery["candidates"][0]["id"], "openclaw_main")
+            self.assertEqual(discovery["candidates"][0]["status"], "ready")
+
+    def test_setup_mcp_install_plan_returns_native_codex_command(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "kyoko.db"
+
+            with RunningServer(db_path) as server:
+                plan = server.get_json("/api/mcp/install-plan?target=codex")
+
+            self.assertEqual(plan["target"], "codex")
+            self.assertEqual(plan["server"], "kyoko")
+            self.assertEqual(plan["command"][0:4], ["codex", "mcp", "add", "kyoko"])
+            self.assertIn("codex mcp add kyoko", plan["shell_command"])
+
     def test_otlp_ingest_endpoints_accept_json_payloads(self) -> None:
         with TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "kyoko.db"

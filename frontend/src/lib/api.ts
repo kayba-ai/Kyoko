@@ -266,6 +266,33 @@ export const api = {
   // simplification) — neither has a policy endpoint anymore; Settings shows them
   // statically. Only storage is live.
   storageReport: () => getJson<Record<string, unknown>>("/api/storage-report"),
+
+  // ---- Setup wizard --------------------------------------------------------
+  doctor: (body: Record<string, unknown> = {}) =>
+    postJson<Record<string, unknown>>("/api/doctor", body),
+  discoverSources: (opts: {
+    home?: string;
+    profile_id?: string;
+    profile_name?: string;
+    root_path?: string;
+    include_missing?: boolean;
+  } = {}) => getJson<Record<string, unknown>>("/api/discover-sources", opts),
+  importDiscoveredSource: (body: {
+    candidate_id: string;
+    home?: string;
+    profile_id?: string;
+    profile_name?: string;
+    root_path?: string;
+    output_dir?: string;
+  }) => postJson<Record<string, unknown>>("/api/import-discovered-source", body),
+  ingestSourceEvents: (payload: Record<string, unknown>) =>
+    postJson<Record<string, unknown>>("/api/ingest", payload),
+  ingestOtlp: (payload: Record<string, unknown>) =>
+    postJson<Record<string, unknown>>("/api/ingest-otlp", payload),
+  mcpInstallPlan: (target: "generic" | "codex" | "claude" | "openclaw" | "hermes", scope = "user") =>
+    getJson<Record<string, unknown>>("/api/mcp/install-plan", { target, scope }),
+  profileNext: (body: Record<string, unknown> = {}) =>
+    postJson<Record<string, unknown>>("/api/profile-next", body),
 };
 
 function unwrapList<T>(key: string) {

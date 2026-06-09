@@ -99,7 +99,7 @@ from .integration_smoke import (
     run_source_adapter_smoke,
 )
 from .load_smoke import LoadSmokeError, run_load_smoke
-from .mcp import McpError, run_mcp_install_smoke_matrix
+from .mcp import McpError, build_mcp_install_plan, run_mcp_install_smoke_matrix
 from .proposals import list_learning_proposals
 from .redaction import (
     RedactionError,
@@ -388,6 +388,37 @@ def make_handler(
                     return
                 if path == "/api/health":
                     self._send_json({"ok": True, "status": "ok"})
+                    return
+                if path == "/api/discover-sources":
+                    self._send_json(
+                        discover_local_sources(
+                            db_path=resolved_db_path,
+                            home=_expanded_path(_query_param(self.path, "home")),
+                            profile_id=_query_param(self.path, "profile_id"),
+                            profile_name=_query_param(self.path, "profile_name"),
+                            root_path=_expanded_path(_query_param(self.path, "root_path")),
+                            include_missing=_query_param(self.path, "include_missing")
+                            in {"1", "true", "yes"},
+                        ).to_json()
+                    )
+                    return
+                if path == "/api/mcp/install-plan":
+                    target = _query_param(self.path, "target") or "generic"
+                    scope = _query_param(self.path, "scope") or "local"
+                    name = _query_param(self.path, "name") or "kyoko"
+                    schema = _expanded_path(_query_param(self.path, "schema"))
+                    try:
+                        plan = build_mcp_install_plan(
+                            db_path=resolved_db_path,
+                            schema_path=schema,
+                            server_name=name,
+                            target=target,
+                            scope=scope,
+                        )
+                    except McpError as exc:
+                        self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                        return
+                    self._send_json(plan.to_json())
                     return
                 if path == "/api/events/stream":
                     self._send_sse_stream()
