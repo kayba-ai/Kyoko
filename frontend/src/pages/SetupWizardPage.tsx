@@ -217,48 +217,17 @@ function BootstrapSummary({ result }: { result: Obj | null }) {
   );
 }
 
-async function copyText(text: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    // Fall back for embedded browsers or permission states where navigator.clipboard is unavailable.
-  }
-
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  textarea.setAttribute("readonly", "");
-  textarea.style.position = "fixed";
-  textarea.style.left = "-9999px";
-  textarea.style.top = "0";
-  document.body.appendChild(textarea);
-  textarea.focus();
-  textarea.select();
-  try {
-    return document.execCommand("copy");
-  } finally {
-    document.body.removeChild(textarea);
-  }
+async function copyText(text: string): Promise<void> {
+  await navigator.clipboard.writeText(text);
 }
 
 function CopyCommand({ command, onCopied }: { command: string; onCopied?: () => void }) {
-  const codeRef = React.useRef<HTMLElement | null>(null);
-  const [copyStatus, setCopyStatus] = React.useState<"idle" | "copied" | "selected">("idle");
-
-  function selectCommand() {
-    const element = codeRef.current;
-    if (!element) return;
-    const range = document.createRange();
-    range.selectNodeContents(element);
-    const selection = window.getSelection();
-    selection?.removeAllRanges();
-    selection?.addRange(range);
-  }
+  const [copyStatus, setCopyStatus] = React.useState<"idle" | "copied" | "failed">("idle");
 
   return (
     <div className="flex flex-col gap-2">
       <div className="flex min-w-0 items-center gap-2 rounded-lg border border-border bg-muted p-2">
-        <code ref={codeRef} className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap px-1 font-mono text-xs text-foreground">
+        <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap px-1 font-mono text-xs text-foreground">
           {command || "No native install command for this target yet."}
         </code>
         <Button
@@ -268,24 +237,23 @@ function CopyCommand({ command, onCopied }: { command: string; onCopied?: () => 
           disabled={!command}
           onClick={async () => {
             if (!command) return;
-            const copied = await copyText(command);
-            if (copied) {
+            try {
+              await copyText(command);
               onCopied?.();
               setCopyStatus("copied");
               window.setTimeout(() => setCopyStatus("idle"), 1500);
-              return;
+            } catch {
+              setCopyStatus("failed");
             }
-            selectCommand();
-            setCopyStatus("selected");
           }}
         >
           <Clipboard className="h-3.5 w-3.5" />
-          {copyStatus === "copied" ? "Copied" : copyStatus === "selected" ? "Selected" : "Copy"}
+          {copyStatus === "copied" ? "Copied" : "Copy"}
         </Button>
       </div>
-      {copyStatus === "selected" && (
-        <div className="text-xs text-muted-foreground">
-          Command selected. Press Ctrl+C to copy it.
+      {copyStatus === "failed" && (
+        <div className="text-xs text-danger">
+          Copy failed. Select the command manually.
         </div>
       )}
     </div>
