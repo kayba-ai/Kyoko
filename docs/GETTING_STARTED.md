@@ -52,10 +52,31 @@ kyoko serve --db .kyoko/kyoko.db
 
 ## Add Telemetry
 
-Use the Python SDK when you can instrument the workflow directly:
+### Easiest: let your coding agent wire it
+
+Install the bundled skill once, then run it inside Claude Code, Cursor, Codex,
+or another coding agent open in your repo:
+
+```bash
+kyoko install-skill   # writes .claude/skills/kyoko-instrument/SKILL.md
+```
+
+```text
+/kyoko-instrument
+```
+
+The skill discovers your agent's entry point, makes the smallest safe change to
+record one real run, and verifies it landed in Kyoko. For agents that do not
+read `.claude/skills`, `kyoko install-skill --print` emits the playbook to paste
+in directly.
+
+### By hand: the Python SDK
+
+Record a run and write it to a file. This needs **no running server** — ingest
+writes straight to the database:
 
 ```python
-from kyoko import KyokoClient, KyokoRecorder
+from kyoko import KyokoRecorder
 
 recorder = KyokoRecorder(
     profile_id="my-agent",
@@ -69,12 +90,19 @@ with recorder.run("research task") as run:
         span.finish(status="succeeded", output_ref="output://search-results")
     run.finish(status="succeeded", summary="Collected search results.")
 
-KyokoClient().ingest(recorder.to_source_events())
+recorder.write_json("kyoko-run.json")
 ```
 
-`KyokoClient` posts to a running server (default `http://127.0.0.1:8765`), so
-start `kyoko serve --db .kyoko/kyoko.db` first. Events land in whatever database
-that server was started with.
+```bash
+kyoko ingest --db .kyoko/kyoko.db kyoko-run.json --json
+```
+
+To push runs to a live dashboard instead, start `kyoko serve --db
+.kyoko/kyoko.db` and call `KyokoClient().ingest(recorder.to_source_events())`.
+The client is best-effort: if the server is not running it warns and drops the
+telemetry rather than raising into your agent (pass `strict=True` to raise).
+Either way, ingest and `kyoko serve` must use the **same `--db` path** for runs
+to appear.
 
 Other source paths are covered in [Integrations](INTEGRATIONS.md): TypeScript
 SDK, generated source adapters, OTLP/GenAI JSON, Hermes, and OpenClaw.
