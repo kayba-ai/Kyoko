@@ -1,6 +1,5 @@
 import * as React from "react";
 import {
-  ArrowRight,
   CheckCircle2,
   Clipboard,
   FileJson,
@@ -12,11 +11,10 @@ import {
   Upload,
   Wand2,
 } from "lucide-react";
-import { Link } from "react-router-dom";
 import { api, ApiError } from "@/lib/api";
 import { useApi } from "@/hooks/useApi";
 import { cn } from "@/lib/utils";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { Select } from "@/components/ui/select";
@@ -50,6 +48,15 @@ function errMessage(error: unknown): string {
   if (error instanceof ApiError) return error.message;
   if (error instanceof Error) return error.message;
   return String(error);
+}
+
+function operatorErrorMessage(error: unknown, target: AgentTarget): string {
+  const message = errMessage(error);
+  if (message.startsWith("operator_preset_command_not_found:")) {
+    const command = message.split(":")[1] || target;
+    return `Kyoko could not find \`${command}\` on the PATH used by this dashboard server. Install ${target === "codex" ? "Codex" : "Claude Code"}, or restart \`kyoko serve\` from a shell where \`${command}\` works.`;
+  }
+  return message;
 }
 
 function commandText(plan: Obj | null): string {
@@ -116,6 +123,41 @@ function StepButton({
   );
 }
 
+function StepSection({
+  step,
+  active,
+  done,
+  label,
+  detail,
+  icon,
+  onToggle,
+  children,
+}: {
+  step: number;
+  active: boolean;
+  done: boolean;
+  label: string;
+  detail: string;
+  icon: React.ReactNode;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="flex flex-col gap-3">
+      <StepButton
+        step={step}
+        active={active}
+        done={done}
+        label={label}
+        detail={detail}
+        icon={icon}
+        onClick={onToggle}
+      />
+      {active && <div className="pl-0 sm:pl-11">{children}</div>}
+    </section>
+  );
+}
+
 function ResultBox({ result }: { result: Obj | null }) {
   if (!result) return null;
   return (
@@ -125,10 +167,44 @@ function ResultBox({ result }: { result: Obj | null }) {
   );
 }
 
+function DetailsBox({ label, result }: { label: string; result: Obj | null }) {
+  const [open, setOpen] = React.useState(false);
+  if (!result) return null;
+  return (
+    <div className="flex flex-col gap-2">
+      <Button type="button" size="sm" variant="ghost" className="self-start" onClick={() => setOpen((value) => !value)}>
+        {open ? "Hide" : "Show"} {label}
+      </Button>
+      {open && <ResultBox result={result} />}
+    </div>
+  );
+}
+
 function InlineError({ message }: { message: string }) {
   return (
     <div className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2.5 text-sm text-danger">
       {message}
+    </div>
+  );
+}
+
+function BootstrapSummary({ result }: { result: Obj | null }) {
+  if (!result) return null;
+  const registered = listFrom(result, "registered");
+  const skipped = listFrom(result, "skipped");
+  if (registered.length === 0 && skipped.length === 0) return null;
+  return (
+    <div className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm">
+      {registered.length > 0 && (
+        <div className="text-ok">
+          Registered {registered.map((item) => String(item.adapter_id ?? item.name ?? "operator")).join(", ")}
+        </div>
+      )}
+      {skipped.length > 0 && (
+        <div className="text-muted-foreground">
+          Skipped {skipped.map((item) => `${String(item.adapter_id ?? "operator")} (${String(item.reason ?? "not available")})`).join(", ")}
+        </div>
+      )}
     </div>
   );
 }
@@ -346,7 +422,7 @@ function AgentSetup({
     try {
       setBootstrap(await api.bootstrapAdapters(target));
     } catch (err) {
-      setError(errMessage(err));
+      setError(operatorErrorMessage(err, target));
     } finally {
       setBusy(null);
     }
@@ -384,9 +460,15 @@ function AgentSetup({
             Register operator
           </Button>
         </div>
-        <CopyCommand command={command} />
+        <div className="flex flex-col gap-2">
+          <div className="text-sm text-muted-foreground">
+            Run this once so {target === "codex" ? "Codex" : "Claude"} can see Kyoko MCP tools.
+          </div>
+          <CopyCommand command={command} />
+        </div>
         {error && <InlineError message={error} />}
-        <ResultBox result={bootstrap ?? plan} />
+        <BootstrapSummary result={bootstrap} />
+        <DetailsBox label="technical details" result={bootstrap ?? plan} />
       </CardBody>
     </Card>
   );
@@ -482,7 +564,7 @@ function VerifySetup({ tracesReady }: { tracesReady: boolean }) {
 }
 
 export function SetupWizardPage() {
-  const [active, setActive] = React.useState<StepKey>("agents");
+  const [active, setActive] = React.useState<StepKey | null>("agents");
   const [agentTarget, setAgentTarget] = React.useState<AgentTarget>("codex");
   const metrics = useApi(() => api.dashboardMetrics(), []);
   const [importBump, setImportBump] = React.useState(0);
@@ -511,53 +593,40 @@ export function SetupWizardPage() {
         ) : metrics.error ? (
           <ErrorNote error={metrics.error} />
         ) : (
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[300px_minmax(0,1fr)]">
-            <aside className="flex flex-col gap-3">
-              <StepButton
-                step={1}
-                active={active === "agents"}
-                done={false}
-                label="Connect agent"
-                detail="Codex or Claude through MCP"
-                icon={<Terminal className="h-4 w-4" />}
-                onClick={() => setActive("agents")}
-              />
-              <StepButton
-                step={2}
-                active={active === "traces"}
-                done={tracesReady}
-                label="Add traces"
-                detail={tracesReady ? `${traceCount} runs available` : "Upload, scan, or ask the agent"}
-                icon={<Upload className="h-4 w-4" />}
-                onClick={() => setActive("traces")}
-              />
-              <StepButton
-                step={3}
-                active={active === "verify"}
-                done={false}
-                label="Verify"
-                detail="Readiness and next action"
-                icon={<ShieldCheck className="h-4 w-4" />}
-                onClick={() => setActive("verify")}
-              />
-              <Card className="mt-2">
-                <CardBody className="flex flex-col gap-3">
-                  <div className="text-sm font-medium text-foreground">First useful loop</div>
-                  <div className="text-sm text-muted-foreground">
-                    Once traces are in, run analysis and review the issues Kyoko finds.
-                  </div>
-                  <Link to="/analysis" className={buttonVariants({ variant: "outline" })}>
-                    Open analysis
-                    <ArrowRight className="h-4 w-4" />
-                  </Link>
-                </CardBody>
-              </Card>
-            </aside>
-            <main className="min-w-0">
-              {active === "agents" && <AgentSetup target={agentTarget} onTargetChange={setAgentTarget} />}
-              {active === "traces" && <TraceSetup agentTarget={agentTarget} onImported={() => setImportBump((n) => n + 1)} />}
-              {active === "verify" && <VerifySetup tracesReady={tracesReady} />}
-            </main>
+          <div className="mx-auto flex w-full max-w-4xl flex-col gap-4">
+            <StepSection
+              step={1}
+              active={active === "agents"}
+              done={false}
+              label="Connect agent"
+              detail="Codex or Claude through MCP"
+              icon={<Terminal className="h-4 w-4" />}
+              onToggle={() => setActive((current) => (current === "agents" ? null : "agents"))}
+            >
+              <AgentSetup target={agentTarget} onTargetChange={setAgentTarget} />
+            </StepSection>
+            <StepSection
+              step={2}
+              active={active === "traces"}
+              done={tracesReady}
+              label="Add traces"
+              detail={tracesReady ? `${traceCount} runs available` : "Upload, scan, or ask the agent"}
+              icon={<Upload className="h-4 w-4" />}
+              onToggle={() => setActive((current) => (current === "traces" ? null : "traces"))}
+            >
+              <TraceSetup agentTarget={agentTarget} onImported={() => setImportBump((n) => n + 1)} />
+            </StepSection>
+            <StepSection
+              step={3}
+              active={active === "verify"}
+              done={false}
+              label="Verify"
+              detail="Readiness and next action"
+              icon={<ShieldCheck className="h-4 w-4" />}
+              onToggle={() => setActive((current) => (current === "verify" ? null : "verify"))}
+            >
+              <VerifySetup tracesReady={tracesReady} />
+            </StepSection>
           </div>
         )}
       </div>
