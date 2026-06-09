@@ -6,6 +6,7 @@ Python 3.12 is the baseline. CI also runs Python 3.13.
 
 ```bash
 python3 -m pip install -e .
+python3 -m pip install setuptools wheel
 kyoko --version
 kyoko doctor --json
 ```
