@@ -355,7 +355,7 @@ export function OverviewPage() {
                     ) : (
                       <>
                         <div className="text-3xl font-semibold tracking-tight text-foreground">
-                          Not measured yet - start analysing your agents' behaviour
+                          Not measured yet
                         </div>
                         <div className="mt-1 max-w-md text-sm text-muted-foreground">
                           A trace isn't a pass or fail on its own — run evaluations to measure how often the agent
