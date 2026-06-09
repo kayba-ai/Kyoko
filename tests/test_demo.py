@@ -22,12 +22,14 @@ class DemoTests(unittest.TestCase):
             self.assertEqual(report.check_status, "passed")
             self.assertEqual(report.promoted_trust_level, "L2_regression")
             self.assertEqual(report.applied_skill_ids, ("skill_proposal_context_timeout_001_1",))
-            self.assertEqual(status.counts["learning_proposals"], 1)
-            self.assertEqual(status.counts["check_specs"], 1)
+            self.assertEqual(status.counts["learning_proposals"], 4)
+            self.assertEqual(status.counts["check_specs"], 3)
             self.assertEqual(status.counts["replay_adapters"], 1)
-            self.assertEqual(status.counts["replay_runs"], 1)
-            self.assertEqual(status.counts["check_runs"], 1)
-            self.assertEqual(status.counts["skills"], 1)
+            self.assertEqual(status.counts["replay_runs"], 3)
+            self.assertEqual(status.counts["check_runs"], 3)
+            self.assertEqual(status.counts["skills"], 5)
+            self.assertEqual(status.counts["runs"], 14)
+            self.assertEqual(status.counts["spans"], 40)
 
     def test_demo_setup_is_idempotent_for_seed_artifacts(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -46,10 +48,12 @@ class DemoTests(unittest.TestCase):
             self.assertTrue(first.proposal_created)
             self.assertFalse(second.proposal_created)
             self.assertEqual(second.check_spec_existing_ids, ("check_proposal_context_timeout_001_1",))
-            self.assertEqual(status.counts["learning_proposals"], 1)
-            self.assertEqual(status.counts["check_specs"], 1)
+            self.assertEqual(status.counts["learning_proposals"], 4)
+            self.assertEqual(status.counts["check_specs"], 3)
             self.assertEqual(status.counts["replay_adapters"], 1)
-            self.assertEqual(status.counts["skills"], 1)
+            self.assertEqual(status.counts["skills"], 5)
+            self.assertEqual(status.counts["runs"], 14)
+            self.assertEqual(status.counts["spans"], 40)
 
 
 if __name__ == "__main__":
