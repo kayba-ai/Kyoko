@@ -446,7 +446,7 @@ function AgentSetup({
         />
         <div className="flex flex-col gap-2">
           <div className="text-sm text-muted-foreground">
-            Run this once so {target === "codex" ? "Codex" : "Claude"} can see Kyoko MCP tools and help find traces.
+            Run this in your terminal so {target === "codex" ? "Codex" : "Claude"} can see Kyoko MCP tools.
           </div>
           <CopyCommand command={command} onCopied={onComplete} />
         </div>
