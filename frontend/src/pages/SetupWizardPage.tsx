@@ -160,8 +160,10 @@ function CopyCommand({ command }: { command: string }) {
 
 function TraceSetup({
   onImported,
+  agentTarget,
 }: {
   onImported: () => void;
+  agentTarget: AgentTarget;
 }) {
   const [mode, setMode] = React.useState<ImportMode>("auto");
   const [busy, setBusy] = React.useState(false);
@@ -214,6 +216,7 @@ function TraceSetup({
   }
 
   const candidates = listFrom(sources, "candidates");
+  const agentPrompt = `Use Kyoko to finish setup. First call kyoko_discover_sources to check for supported local stores. Then inspect this project and likely local log directories for trace JSON files, especially Kyoko source events, OTLP/GenAI exports, and agent run logs. For every credible JSON trace file you find, call kyoko_import_trace_file with format "auto". After importing, summarize how many runs/spans were added and any files that looked promising but were not importable.`;
 
   return (
     <Card>
@@ -253,6 +256,19 @@ function TraceSetup({
               Scan local sources
             </Button>
           </div>
+        </div>
+
+        <div className="rounded-lg border border-primary/25 bg-primary/10 p-3">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-medium text-foreground">Ask {agentTarget === "codex" ? "Codex" : "Claude"} to find traces</div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                After MCP is connected, paste this into your local agent so it can search and import files through Kyoko.
+              </div>
+            </div>
+            <Badge tone="primary">MCP</Badge>
+          </div>
+          <CopyCommand command={agentPrompt} />
         </div>
 
         {error && <InlineError message={error} />}
@@ -300,8 +316,13 @@ function TraceSetup({
   );
 }
 
-function AgentSetup() {
-  const [target, setTarget] = React.useState<AgentTarget>("codex");
+function AgentSetup({
+  target,
+  onTargetChange,
+}: {
+  target: AgentTarget;
+  onTargetChange: (target: AgentTarget) => void;
+}) {
   const [plan, setPlan] = React.useState<Obj | null>(null);
   const [bootstrap, setBootstrap] = React.useState<Obj | null>(null);
   const [busy, setBusy] = React.useState<"plan" | "bootstrap" | null>(null);
@@ -347,7 +368,7 @@ function AgentSetup() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <Select
             value={target}
-            onChange={(next) => setTarget(next as AgentTarget)}
+            onChange={(next) => onTargetChange(next as AgentTarget)}
             options={[
               { value: "codex", label: "Codex" },
               { value: "claude", label: "Claude" },
@@ -461,7 +482,8 @@ function VerifySetup({ tracesReady }: { tracesReady: boolean }) {
 }
 
 export function SetupWizardPage() {
-  const [active, setActive] = React.useState<StepKey>("traces");
+  const [active, setActive] = React.useState<StepKey>("agents");
+  const [agentTarget, setAgentTarget] = React.useState<AgentTarget>("codex");
   const metrics = useApi(() => api.dashboardMetrics(), []);
   const [importBump, setImportBump] = React.useState(0);
   const runs = countValue(metrics.data as Obj | null, "runs.total", "total");
@@ -493,21 +515,21 @@ export function SetupWizardPage() {
             <aside className="flex flex-col gap-3">
               <StepButton
                 step={1}
-                active={active === "traces"}
-                done={tracesReady}
-                label="Add traces"
-                detail={tracesReady ? `${traceCount} runs available` : "Upload or scan for local data"}
-                icon={<Upload className="h-4 w-4" />}
-                onClick={() => setActive("traces")}
-              />
-              <StepButton
-                step={2}
                 active={active === "agents"}
                 done={false}
                 label="Connect agent"
                 detail="Codex or Claude through MCP"
                 icon={<Terminal className="h-4 w-4" />}
                 onClick={() => setActive("agents")}
+              />
+              <StepButton
+                step={2}
+                active={active === "traces"}
+                done={tracesReady}
+                label="Add traces"
+                detail={tracesReady ? `${traceCount} runs available` : "Upload, scan, or ask the agent"}
+                icon={<Upload className="h-4 w-4" />}
+                onClick={() => setActive("traces")}
               />
               <StepButton
                 step={3}
@@ -532,8 +554,8 @@ export function SetupWizardPage() {
               </Card>
             </aside>
             <main className="min-w-0">
-              {active === "traces" && <TraceSetup onImported={() => setImportBump((n) => n + 1)} />}
-              {active === "agents" && <AgentSetup />}
+              {active === "agents" && <AgentSetup target={agentTarget} onTargetChange={setAgentTarget} />}
+              {active === "traces" && <TraceSetup agentTarget={agentTarget} onImported={() => setImportBump((n) => n + 1)} />}
               {active === "verify" && <VerifySetup tracesReady={tracesReady} />}
             </main>
           </div>

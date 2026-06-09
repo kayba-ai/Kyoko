@@ -71,6 +71,7 @@ class McpTests(unittest.TestCase):
             self.assertIn("kyoko_get_dashboard_metrics", tool_names)
             self.assertIn("kyoko_run_doctor", tool_names)
             self.assertIn("kyoko_discover_sources", tool_names)
+            self.assertIn("kyoko_import_trace_file", tool_names)
             self.assertIn("kyoko_get_storage_report", tool_names)
             self.assertIn("kyoko_list_payload_blobs", tool_names)
             self.assertIn("kyoko_prune_payload_blobs_dry_run", tool_names)
@@ -355,6 +356,24 @@ class McpTests(unittest.TestCase):
         self.assertEqual(doctor.call_args.kwargs["smoke_evidence_dir"], Path(".kyoko/smoke"))
         self.assertEqual(doctor.call_args.kwargs["host"], "127.0.0.1")
         self.assertEqual(doctor.call_args.kwargs["port"], 9876)
+
+    def test_mcp_import_trace_file_ingests_source_events(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "kyoko.db"
+            server = KyokoMcpServer(db_path=db_path, schema_path=SCHEMA)
+
+            result = _call_tool(
+                server,
+                "kyoko_import_trace_file",
+                {"path": str(FIXTURE), "format": "auto"},
+            )["structuredContent"]
+            status = _call_tool(server, "kyoko_status", {})["structuredContent"]
+
+            self.assertEqual(result["format"], "source_events")
+            self.assertEqual(result["profile_id"], "profile_news_research_001")
+            self.assertEqual(result["ingested_counts"]["runs"], 1)
+            self.assertEqual(status["counts"]["runs"], 1)
+            self.assertEqual(status["counts"]["spans"], 2)
 
     def test_tool_calls_return_structured_content(self) -> None:
         with TemporaryDirectory() as tmpdir:

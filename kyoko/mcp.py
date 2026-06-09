@@ -69,6 +69,7 @@ from .mcp_log import McpLogger, list_mcp_log, log_enabled_from_env
 from .improve import ImproveError, run_improvement_loop
 from .operator_adapters import list_operator_adapters
 from .operator_smoke import OperatorSmokeError, run_operator_smoke_matrix
+from .otlp import OtlpNormalizeError, ingest_otlp_payload
 from .profile_next import ProfileNextError, run_profile_next_step
 from .profiles import list_profiles
 from .proposals import (
@@ -79,7 +80,14 @@ from .replay_adapters import list_replay_adapters, run_registered_replay_adapter
 from .retention import prune_retained_data
 from .skillbook import export_skillbook, mark_skills_used, render_skillbook_prompt
 from .source_discovery import discover_local_sources
-from .storage import default_db_path, get_database_status, initialize_database, status_to_json
+from .storage import (
+    StorageError,
+    default_db_path,
+    get_database_status,
+    ingest_source_payload,
+    initialize_database,
+    status_to_json,
+)
 
 
 MCP_PROTOCOL_VERSION = "2025-11-25"
@@ -1278,6 +1286,41 @@ def _build_tools(server: KyokoMcpServer) -> dict[str, McpTool]:
             ).to_json(),
         ),
         McpTool(
+            name="kyoko_import_trace_file",
+            title="Kyoko Import Trace File",
+            description=(
+                "Import a local trace JSON file into Kyoko. Use this after finding "
+                "candidate trace files during setup. Supports canonical Kyoko source "
+                "events and OTLP/GenAI JSON; format='auto' detects common OTLP shapes."
+            ),
+            input_schema=_object_schema(
+                {
+                    "path": {"type": "string"},
+                    "format": {"type": "string", "enum": ["auto", "source_events", "otlp"]},
+                    "profile_id": {"type": "string"},
+                    "profile_name": {"type": "string"},
+                    "root_path": {"type": "string"},
+                    "source_kind": {
+                        "type": "string",
+                        "enum": [
+                            "otlp_http",
+                            "ai_sdk",
+                            "pydantic_ai",
+                            "openai_agents",
+                            "langgraph",
+                            "crewai",
+                            "unknown",
+                        ],
+                    },
+                    "source_name": {"type": "string"},
+                },
+                required=["path"],
+            ),
+            handler=lambda args: _import_trace_file(server, args),
+            read_only=False,
+            idempotent=True,
+        ),
+        McpTool(
             name="kyoko_get_storage_report",
             title="Kyoko Storage Report",
             description="Return database size, registered payload blobs, missing blob files, and orphan blob files.",
@@ -2193,6 +2236,85 @@ def _run_doctor(server: KyokoMcpServer, args: dict[str, Any]) -> dict[str, Any]:
     except DoctorError as exc:
         raise McpError(str(exc)) from exc
     return report.to_json()
+
+
+def _import_trace_file(server: KyokoMcpServer, args: dict[str, Any]) -> dict[str, Any]:
+    path = _optional_path(args, "path")
+    if path is None:
+        raise McpError("path_required")
+    if not path.exists() or not path.is_file():
+        raise McpError(f"trace_file_not_found:{path}")
+    raw_format = _optional_string(args, "format") or "auto"
+    if raw_format not in {"auto", "source_events", "otlp"}:
+        raise McpError(f"unsupported_trace_format:{raw_format}")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise McpError(f"trace_file_json_invalid:{exc}") from exc
+    except OSError as exc:
+        raise McpError(f"trace_file_read_failed:{exc}") from exc
+    if not isinstance(payload, dict):
+        raise McpError("trace_file_json_root_must_be_object")
+
+    resolved_format = _resolve_trace_file_format(payload, raw_format)
+    if resolved_format == "otlp":
+        otlp_payload = payload.get("otlp") if isinstance(payload.get("otlp"), dict) else payload
+        try:
+            report = ingest_otlp_payload(
+                db_path=server.db_path,
+                payload=otlp_payload,
+                profile_id=_optional_string(args, "profile_id"),
+                profile_name=_optional_string(args, "profile_name"),
+                root_path=_optional_string(args, "root_path"),
+                source_kind=_optional_string(args, "source_kind") or "otlp_http",
+                source_name=_optional_string(args, "source_name") or "OpenTelemetry",
+                source_label=f"MCP import {path}",
+            )
+        except (OtlpNormalizeError, StorageError) as exc:
+            raise McpError(str(exc)) from exc
+        result = report.to_json()
+    else:
+        fixture = payload.get("source_events") if isinstance(payload.get("source_events"), dict) else payload
+        if not isinstance(fixture, dict):
+            raise McpError("source_events_object_required")
+        try:
+            report = ingest_source_payload(
+                db_path=server.db_path,
+                fixture=fixture,
+                source_label=f"MCP import {path}",
+            )
+        except StorageError as exc:
+            raise McpError(str(exc)) from exc
+        result = {
+            "profile_id": report.profile_id,
+            "ingested_counts": report.inserted_counts,
+        }
+
+    return {
+        "path": str(path),
+        "format": resolved_format,
+        **result,
+    }
+
+
+def _resolve_trace_file_format(payload: dict[str, Any], requested: str) -> str:
+    if requested != "auto":
+        return "otlp" if requested == "otlp" else "source_events"
+    if (
+        payload.get("fixture_version") == "kyoko.source_events.v1"
+        or isinstance(payload.get("source_events"), dict)
+        or isinstance(payload.get("profile"), dict)
+    ):
+        return "source_events"
+    if (
+        isinstance(payload.get("resourceSpans"), list)
+        or isinstance(payload.get("scopeSpans"), list)
+        or isinstance(payload.get("spans"), list)
+    ):
+        return "otlp"
+    if isinstance(payload.get("otlp"), dict):
+        return "otlp"
+    return "source_events"
 
 
 def _run_profile_next_step(server: KyokoMcpServer, args: dict[str, Any]) -> dict[str, Any]:
