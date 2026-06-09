@@ -228,7 +228,7 @@ export function OverviewPage() {
       icon: <ScanSearch />,
       label: "Analyse",
       value: totalRuns.toLocaleString(),
-      detail: totalRuns > 0 ? "traces to analyse" : "no traces yet",
+      detail: totalRuns > 0 ? "traces available" : "no traces yet",
     },
     {
       step: 2,
@@ -253,7 +253,7 @@ export function OverviewPage() {
       to: "/detectors",
       icon: <FlaskConical />,
       label: "Evals",
-      value: hasEvals ? evaluatedRuns.toLocaleString() : measureRuns > 0 ? measureRuns.toLocaleString() : "—",
+      value: (hasEvals ? evaluatedRuns : measureRuns).toLocaleString(),
       detail: hasEvals ? "runs scored" : `${evalDefinitions} configured · none run`,
       tone: hasEvals ? (failedRuns > 0 ? "warn" : "ok") : "neutral",
     },
@@ -286,7 +286,12 @@ export function OverviewPage() {
             {/* The optimisation pipeline: Analyse → Issues → Proposals → Evals.
                 Each stage links onward and shows its live count. */}
             <div>
-              <div className="mb-3 text-xs font-medium text-muted-foreground">Optimisation pipeline</div>
+              <div className="mb-3 flex flex-col gap-1">
+                <div className="text-xs font-medium text-muted-foreground">Optimisation pipeline</div>
+                <div className="text-xs text-muted-foreground">
+                  Overview fills in as Kyoko analyses traces, surfaces issues, proposes fixes, and runs evals.
+                </div>
+              </div>
               <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch">
                 {stages.map((s, i) => (
                   <Fragment key={s.label}>
@@ -349,7 +354,9 @@ export function OverviewPage() {
                       </>
                     ) : (
                       <>
-                        <div className="text-3xl font-semibold tracking-tight text-foreground">Not measured yet</div>
+                        <div className="text-3xl font-semibold tracking-tight text-foreground">
+                          Not measured yet - start analysing your agents' behaviour
+                        </div>
                         <div className="mt-1 max-w-md text-sm text-muted-foreground">
                           A trace isn't a pass or fail on its own — run evaluations to measure how often the agent
                           fails.{" "}
@@ -387,7 +394,12 @@ export function OverviewPage() {
                     )}
                   </div>
                   {buckets.length === 0 ? (
-                    <div className="py-6 text-center text-sm text-muted-foreground">No open issues to categorize.</div>
+                    <div className="py-6 text-center text-sm text-muted-foreground">
+                      No open issues to categorize.{" "}
+                      <Link to="/analysis" className="font-medium text-primary hover:underline">
+                        Start analysis.
+                      </Link>
+                    </div>
                   ) : (
                     <div className="flex flex-col gap-3.5">
                       {buckets.slice(0, 6).map((b) => (
@@ -427,7 +439,10 @@ export function OverviewPage() {
                 </div>
                 {topIssues.length === 0 ? (
                   <div className="px-5 py-8 text-center text-sm text-muted-foreground">
-                    No open issues — nothing is failing right now.
+                    No open issues yet.{" "}
+                    <Link to="/analysis" className="font-medium text-primary hover:underline">
+                      Start analysis to surface recurring failures.
+                    </Link>
                   </div>
                 ) : (
                   <ul className="divide-y divide-border/60">
