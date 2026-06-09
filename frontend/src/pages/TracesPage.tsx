@@ -11,6 +11,7 @@ import { Select } from "@/components/ui/select";
 import { PageHeader } from "@/components/ui/page-header";
 import { Badge, statusTone } from "@/components/ui/badge";
 import { Spinner, ErrorNote, Empty } from "@/components/ui/misc";
+import { InstrumentCTA } from "@/components/InstrumentCTA";
 import { Table, THead, TBody, TR, TD, SortableTH, type SortDir } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 
@@ -111,7 +112,11 @@ export function TracesPage() {
         ) : error ? (
           <ErrorNote error={error} />
         ) : rows.length === 0 ? (
-          <Empty title="No traces" hint="Ingest traces via POST /v1/traces or run `kyoko demo`." />
+          (runs ?? []).length === 0 ? (
+            <InstrumentCTA />
+          ) : (
+            <Empty title="No matching traces" hint="No runs match the current search or status filter." />
+          )
         ) : (
           <Table>
             <THead>

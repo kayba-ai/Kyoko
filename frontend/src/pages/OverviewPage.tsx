@@ -18,7 +18,8 @@ import { ago, fmtPercent, humanize } from "@/lib/format";
 import { Card, CardBody } from "@/components/ui/card";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { PageHeader } from "@/components/ui/page-header";
-import { Spinner, ErrorNote, Empty } from "@/components/ui/misc";
+import { Spinner, ErrorNote } from "@/components/ui/misc";
+import { InstrumentCTA } from "@/components/InstrumentCTA";
 import { cn } from "@/lib/utils";
 
 // The Overview is an OUTCOME dashboard, not a trace browser: it leads with how
@@ -276,11 +277,7 @@ export function OverviewPage() {
         ) : error ? (
           <ErrorNote error={error} />
         ) : nothingYet ? (
-          <Empty
-            title="No telemetry yet"
-            hint="Ingest agent runs to see your failure rate, top failure categories, and open issues."
-            icon={<LayoutDashboard className="h-6 w-6" />}
-          />
+          <InstrumentCTA />
         ) : (
           <div className="flex flex-col gap-6">
             {/* The optimisation pipeline: Analyse → Issues → Proposals → Evals.
