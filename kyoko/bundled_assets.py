@@ -54,6 +54,22 @@ def read_bundled_asset_text(relative_path: str) -> str:
     return (resources.files("kyoko.assets") / selected).read_text(encoding="utf-8")
 
 
+def read_bundled_text(relative_path: str) -> str:
+    """Read any bundled text asset by relative path.
+
+    Unlike ``read_bundled_asset_text`` this does not require the asset to be a
+    discoverable ``.json`` file, so it can serve packaged Markdown such as the
+    bundled skills. Path traversal is still rejected.
+    """
+    path = PurePosixPath(relative_path)
+    if path.is_absolute() or ".." in path.parts or not path.parts:
+        raise AssetError(f"bundled_asset_invalid_path:{relative_path}")
+    try:
+        return (resources.files("kyoko.assets") / path.as_posix()).read_text(encoding="utf-8")
+    except FileNotFoundError as exc:
+        raise AssetError(f"bundled_asset_not_found:{relative_path}") from exc
+
+
 def export_bundled_asset(*, relative_path: str, output_path: Path) -> Path:
     selected = _require_known_asset(relative_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
