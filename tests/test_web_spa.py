@@ -43,6 +43,11 @@ class _Server:
         with urlopen(Request(f"{self.base_url}{path}"), timeout=5) as response:
             return response.status, dict(response.headers), response.read()
 
+    def head(self, path: str):
+        request = Request(f"{self.base_url}{path}", method="HEAD")
+        with urlopen(request, timeout=5) as response:
+            return response.status, dict(response.headers), response.read()
+
 
 def _write_bundle(root: Path) -> None:
     (root / "assets").mkdir(parents=True, exist_ok=True)
@@ -72,6 +77,13 @@ class SpaServingTests(unittest.TestCase):
                     self.assertEqual(status, 200)
                     self.assertIn("text/html", headers["Content-Type"])
                     self.assertIn(b'<div id="root">', body)
+
+                    # HEAD is useful for external smoke checks and returns the same
+                    # shell headers without a response body.
+                    status, headers, body = server.head("/")
+                    self.assertEqual(status, 200)
+                    self.assertIn("text/html", headers["Content-Type"])
+                    self.assertEqual(body, b"")
 
                     # Hashed JS asset: correct content-type + immutable caching.
                     status, headers, body = server.get("/assets/app-abc123.js")
