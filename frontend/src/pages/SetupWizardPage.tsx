@@ -175,13 +175,13 @@ function ResultBox({ result }: { result: Obj | null }) {
   );
 }
 
-function DetailsBox({ label, result }: { label: string; result: Obj | null }) {
+function DetailsBox({ result }: { result: Obj | null }) {
   const [open, setOpen] = React.useState(false);
   if (!result) return null;
   return (
     <div className="flex flex-col gap-2">
       <Button type="button" size="sm" variant="ghost" className="self-start" onClick={() => setOpen((value) => !value)}>
-        {open ? "Hide" : "Show"} {label}
+        {open ? "Hide details" : "Having trouble? Show details"}
       </Button>
       {open && <ResultBox result={result} />}
     </div>
@@ -217,28 +217,77 @@ function BootstrapSummary({ result }: { result: Obj | null }) {
   );
 }
 
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    // Fall back for embedded browsers or permission states where navigator.clipboard is unavailable.
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  textarea.style.top = "0";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  try {
+    return document.execCommand("copy");
+  } finally {
+    document.body.removeChild(textarea);
+  }
+}
+
 function CopyCommand({ command, onCopied }: { command: string; onCopied?: () => void }) {
-  const [copied, setCopied] = React.useState(false);
+  const codeRef = React.useRef<HTMLElement | null>(null);
+  const [copyStatus, setCopyStatus] = React.useState<"idle" | "copied" | "selected">("idle");
+
+  function selectCommand() {
+    const element = codeRef.current;
+    if (!element) return;
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  }
+
   return (
-    <div className="flex min-w-0 items-center gap-2 rounded-lg border border-border bg-muted p-2">
-      <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap px-1 font-mono text-xs text-foreground">
-        {command || "No native install command for this target yet."}
-      </code>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={!command}
-        onClick={async () => {
-          await navigator.clipboard.writeText(command);
-          onCopied?.();
-          setCopied(true);
-          window.setTimeout(() => setCopied(false), 1500);
-        }}
-      >
-        <Clipboard className="h-3.5 w-3.5" />
-        {copied ? "Copied" : "Copy"}
-      </Button>
+    <div className="flex flex-col gap-2">
+      <div className="flex min-w-0 items-center gap-2 rounded-lg border border-border bg-muted p-2">
+        <code ref={codeRef} className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap px-1 font-mono text-xs text-foreground">
+          {command || "No native install command for this target yet."}
+        </code>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={!command}
+          onClick={async () => {
+            if (!command) return;
+            const copied = await copyText(command);
+            if (copied) {
+              onCopied?.();
+              setCopyStatus("copied");
+              window.setTimeout(() => setCopyStatus("idle"), 1500);
+              return;
+            }
+            selectCommand();
+            setCopyStatus("selected");
+          }}
+        >
+          <Clipboard className="h-3.5 w-3.5" />
+          {copyStatus === "copied" ? "Copied" : copyStatus === "selected" ? "Selected" : "Copy"}
+        </Button>
+      </div>
+      {copyStatus === "selected" && (
+        <div className="text-xs text-muted-foreground">
+          Command selected. Press Ctrl+C to copy it.
+        </div>
+      )}
     </div>
   );
 }
@@ -451,7 +500,7 @@ function AgentSetup({
           <CopyCommand command={command} onCopied={onComplete} />
         </div>
         {error && <InlineError message={error} />}
-        <DetailsBox label="technical details" result={plan} />
+        <DetailsBox result={plan} />
       </CardBody>
     </Card>
   );
@@ -491,7 +540,7 @@ function ProposalWriterSetup({ target }: { target: AgentTarget }) {
       <div className="mt-3 flex flex-col gap-3">
         {error && <InlineError message={error} />}
         <BootstrapSummary result={bootstrap} />
-        <DetailsBox label="technical details" result={bootstrap} />
+        <DetailsBox result={bootstrap} />
       </div>
     </div>
   );
