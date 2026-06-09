@@ -9,38 +9,33 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-green.svg)](LICENSE)
 
-**Kyoko is the all-in-one, fully local tool for debugging and improving your AI
-agents.**
+**Kyoko turns agent runs into measured, gated fixes.**
 
-Point it at **any agent you're building** (instrument it with OpenTelemetry or
-the SDKs), or plug straight into CLI agents you already run like Codex, Claude
-Code, OpenClaw, and Hermes. Kyoko captures what your agent actually does and
-runs a closed repair loop over it: it **analyses** real runs into a living state
-reflection of the system, files recurring and generalised failures as
-**issues**, drafts concrete **fixes**, and proves them with replay and **evals**
-before anything ships. Everything runs on your machine (traces, database, and
-dashboard), and any model or external call is opt-in.
+Kyoko captures what your agent actually did, finds recurring failures, turns
+them into evidence-backed issues, drafts fixes, and tests them by rerunning the
+failing trace, running deterministic checks, and comparing eval results before
+applying them.
 
-Most agent tooling stops at showing you traces; you still have to read them,
-guess what went wrong, write the fix, and hope it didn't break something else.
-Kyoko closes that gap end to end, in one place.
+It is built for the way developers already debug agents: inspect the run,
+understand the failure, decide what to fix, test the change, then ship it. You
+can review every step manually, or automate the parts that pass the gate.
 
-That state reflection is cumulative: Kyoko keeps learning from traces, issues,
-fixes, replays, and evals, so it can surface the problems humans would not
-think to measure by hand while still respecting the detectors and judges you
-explicitly choose.
+Everything stays local by default: traces, issues, proposals, evals, database,
+and dashboard. For analysis and fix drafting, Kyoko can use the coding-agent CLI
+you already have, like Codex or Claude Code, so there is no separate Kyoko model
+API key or hosted service.
 
 <img src="docs/assets/kyoko-dashboard-overview.png" alt="Kyoko dashboard overview" width="90%" />
 
 ## Why Kyoko
 
-- **OpenTelemetry-native.** Ingests OTLP/GenAI spans; SDKs and importers for the rest.
-- **Runs on your coding agent.** Codex, Claude Code, OpenClaw, Hermes do the analysis *and* author fixes through their own CLI login, so no API keys and no extra spend.
-- **Fully local.** SQLite + loopback UI. Nothing leaves your machine; external calls opt-in.
-- **Cumulative analysis.** Builds a state reflection from traces, issues, evals, and fixes, so repeated behavior becomes more accurate fixes over time.
-- **Measured, not guessed.** Failure rate from real evals, not status flags.
-- **Safe by default.** No change ships without passing the gate. No shortcuts, anywhere.
-- **Zero-fuss.** One `kyoko` CLI, near-zero deps, `--json` everywhere. No server, no cloud.
+- **Finds the failures that repeat across runs.** Kyoko looks across runs, groups recurring problems into evidence-backed issues, and shows where each one happened.
+- **Turns issues into fixes.** Accepted issues become proposed changes to your agent context, skills, or harness.
+- **Measures whether fixes worked.** Kyoko reruns failing traces, runs deterministic checks, and compares eval results before applying a fix.
+- **Keeps the developer in control.** Review every issue, proposal, and apply decision manually, or automate only the parts that pass the gate.
+- **Uses the tools you already have.** Codex, Claude Code, OpenClaw, Hermes, or a generic command can analyze evidence and draft fixes through existing CLI auth.
+- **Runs locally by default.** SQLite, loopback dashboard, local traces, local proposals, and explicit external calls.
+- **Connects to real agent stacks.** OTLP/GenAI, Python and TypeScript SDKs, importers, JSON CLI, dashboard, and MCP.
 
 ## The loop
 
