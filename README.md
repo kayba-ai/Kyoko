@@ -116,7 +116,7 @@ To let your coding agent finish telemetry setup, connect Kyoko through MCP:
 kyoko mcp install-plan --db .kyoko/kyoko.db --target codex --json
 ```
 
-Run the printed `shell_command`, then paste this into the agent:
+Run the printed `shell_command`, then paste this into your coding agent:
 
 ```text
 Use Kyoko to finish setup. Read .kyoko/NEXT_STEPS.md, wire the smallest
