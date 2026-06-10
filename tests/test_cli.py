@@ -3192,7 +3192,7 @@ class CliTests(unittest.TestCase):
             self.assertEqual(payload["promoted_trust_level"], "L2_regression")
             self.assertEqual(payload["applied_skill_ids"], ["skill_proposal_context_timeout_001_1"])
             self.assertEqual(payload["status"]["counts"]["replay_adapters"], 1)
-            self.assertEqual(payload["status"]["counts"]["skills"], 1)
+            self.assertEqual(payload["status"]["counts"]["skills"], 5)
 
     def test_evidence_and_analyze_mock_flow(self) -> None:
         with TemporaryDirectory() as tmpdir:
