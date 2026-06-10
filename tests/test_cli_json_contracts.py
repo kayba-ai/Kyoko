@@ -6784,6 +6784,7 @@ def _project_bootstrap_contract(payload: dict, project_dir: Path) -> dict:
             "contains_machine_readable_commands": "Machine-readable commands" in next_steps,
             "contains_no_live_notice": "No live operator model" in next_steps,
             "contains_native_ace_prepare": "native ACE prepare" in next_steps,
+            "contains_otlp_upload": "Upload OTLP/GenAI trace exports" in next_steps,
             "contains_replay_smoke": "integration-smoke replay-server" in next_steps,
             "contains_safe_smokes": "--safe-smokes" in next_steps,
         },

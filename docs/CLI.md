@@ -31,8 +31,7 @@ kyoko project-bootstrap \
 
 ```bash
 kyoko discover-sources --db .kyoko/kyoko.db --root-path . --json
-kyoko ingest --db .kyoko/kyoko.db source-events.json --json
-kyoko ingest-otlp --db .kyoko/kyoko.db otlp.json --json
+kyoko ingest-otlp --db .kyoko/kyoko.db otlp.json --profile-id my-agent --json
 kyoko runs --db .kyoko/kyoko.db --json
 kyoko current-run --db .kyoko/kyoko.db --json
 kyoko run-detail --db .kyoko/kyoko.db <run-id> --json
@@ -40,6 +39,17 @@ kyoko run-outline --db .kyoko/kyoko.db <run-id> --json
 kyoko search-run --db .kyoko/kyoko.db <run-id> "timeout" --json
 kyoko span-context --db .kyoko/kyoko.db <span-id> --json
 kyoko span-payload --db .kyoko/kyoko.db <span-id> --target output --json
+```
+
+Use `ingest-otlp` for user-facing trace uploads. Kyoko normalizes OTLP/GenAI
+exports into its canonical source-event envelope before storing them.
+
+`kyoko ingest` is the adapter/SDK boundary for already-normalized Kyoko
+source-event JSON produced by Kyoko SDKs, generated source adapters, and
+offline importers:
+
+```bash
+kyoko ingest --db .kyoko/kyoko.db source-events.json --json
 ```
 
 ## Issues And Proposals

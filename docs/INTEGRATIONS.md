@@ -19,6 +19,17 @@ Example hooks live in [../examples](../examples).
 
 ## Source Telemetry
 
+For trace files supplied by a user or external observability tool, prefer OTLP or
+GenAI trace exports:
+
+```bash
+kyoko ingest-otlp --db .kyoko/kyoko.db otlp.json --profile-id my-agent --json
+```
+
+Kyoko normalizes those uploads into its canonical source-event envelope before
+storing them. Source-event JSON is an adapter/SDK output format, not the format
+end users are expected to already have.
+
 ### Python SDK
 
 ```python
@@ -68,7 +79,6 @@ but no collector hook has been wired in yet.
 ### OTLP, Hermes, And OpenClaw
 
 ```bash
-kyoko ingest-otlp --db .kyoko/kyoko.db otlp.json --json
 kyoko discover-sources --db .kyoko/kyoko.db --root-path . --json
 kyoko import-hermes-kanban --db .kyoko/kyoko.db ~/.hermes/kanban.db --board default --json
 kyoko import-openclaw-sessions --db .kyoko/kyoko.db ~/.openclaw/agents/main/sessions --agent-id main --json

@@ -1138,6 +1138,9 @@ def make_handler(
                     )
                     self._send_json(report.to_json())
                     return
+                # Canonical source-events ingest is the adapter/SDK boundary.
+                # User-facing trace uploads should use /api/ingest-otlp or
+                # /v1/traces so Kyoko can normalize OTLP/GenAI input first.
                 if path == "/api/ingest":
                     payload = self._read_json()
                     source_events = payload.get("source_events")

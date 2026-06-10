@@ -765,13 +765,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     ingest = subcommands.add_parser(
         "ingest",
-        help="Ingest canonical Kyoko source-event JSON from a framework or adapter.",
+        help="Adapter/internal: ingest canonical Kyoko source-event JSON.",
     )
     _add_db_argument(ingest)
     ingest.add_argument(
         "payload",
         type=Path,
-        help="Path to a canonical source-event JSON payload.",
+        help="Path to a canonical source-event JSON payload emitted by a Kyoko SDK, generated adapter, or importer.",
     )
     ingest.add_argument(
         "--json",
@@ -818,7 +818,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     ingest_otlp = subcommands.add_parser(
         "ingest-otlp",
-        help="Normalize and ingest OTLP/GenAI JSON into canonical Kyoko source events.",
+        help="Upload OTLP/GenAI traces and normalize them into Kyoko.",
     )
     _add_db_argument(ingest_otlp)
     ingest_otlp.add_argument(

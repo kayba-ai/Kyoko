@@ -168,6 +168,12 @@ def _bootstrap_commands(
         ),
         "profile_next": f"kyoko profile-next --db {_quote(db_path)} --json",
         "source": _source_command_for_path(source_path),
+        "ingest_otlp": (
+            f"kyoko ingest-otlp --db {_quote(db_path)} otlp.json "
+            f"--profile-id {shlex.quote(profile_id)} "
+            f"--profile-name {shlex.quote(profile_name)} "
+            f"--root-path {_quote(project_dir)} --json"
+        ),
         "ingest": f"kyoko ingest --db {_quote(db_path)} /tmp/kyoko-source-events.json --json",
         "discover_sources": (
             f"kyoko discover-sources --db {_quote(db_path)} "
@@ -237,9 +243,10 @@ def _next_steps(*, commands: dict[str, str]) -> str:
             "kyoko install-skill   # then run /kyoko-instrument in your coding agent",
             "```",
             "",
-            "Or do it by hand with the generated adapter, discover local sources, or import local Hermes/OpenClaw state directly:",
+            "Or do it by hand. Upload OTLP/GenAI trace exports, discover local sources, or import local Hermes/OpenClaw state directly. The generated adapter emits Kyoko source-events as an internal handoff into `kyoko ingest`:",
             "",
             "```bash",
+            commands["ingest_otlp"],
             commands["discover_sources"],
             commands["source"],
             commands["ingest"],

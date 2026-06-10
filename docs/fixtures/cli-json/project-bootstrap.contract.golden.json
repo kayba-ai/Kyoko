@@ -13,6 +13,7 @@
     "import_hermes_kanban": "kyoko import-hermes-kanban --db <PROJECT_DIR>/.kyoko/kyoko.db ~/.hermes/kanban.db --board default --profile-id profile_news_research --profile-name news-research --root-path <PROJECT_DIR> --json",
     "import_openclaw_sessions": "kyoko import-openclaw-sessions --db <PROJECT_DIR>/.kyoko/kyoko.db ~/.openclaw/agents/main/sessions --agent-id main --profile-id profile_news_research --profile-name news-research --root-path <PROJECT_DIR> --json",
     "ingest": "kyoko ingest --db <PROJECT_DIR>/.kyoko/kyoko.db /tmp/kyoko-source-events.json --json",
+    "ingest_otlp": "kyoko ingest-otlp --db <PROJECT_DIR>/.kyoko/kyoko.db otlp.json --profile-id profile_news_research --profile-name news-research --root-path <PROJECT_DIR> --json",
     "mcp": "Use MCP config: <PROJECT_DIR>/.kyoko/config/mcp.json",
     "profile_next": "kyoko profile-next --db <PROJECT_DIR>/.kyoko/kyoko.db --json",
     "replay": "KYOKO_REPLAY_HOOK=/absolute/path/to/replay_hook.py:replay python3 <PROJECT_DIR>/.kyoko/scripts/kyoko_replay_server.py --port 61200",
@@ -47,6 +48,7 @@
     "contains_machine_readable_commands": true,
     "contains_native_ace_prepare": true,
     "contains_no_live_notice": true,
+    "contains_otlp_upload": true,
     "contains_replay_smoke": true,
     "contains_safe_smokes": true
   },
