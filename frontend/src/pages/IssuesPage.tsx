@@ -47,9 +47,10 @@ import { cn } from "@/lib/utils";
 // record — it never changes agent behavior, mutates a skillbook/harness/repo, or
 // bypasses the check/replay gate.
 
-type StatusFilter = "open" | "accepted" | "resolved" | "dismissed" | "all";
+type StatusFilter = "active" | "open" | "accepted" | "resolved" | "dismissed" | "all";
 
 const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
+  { value: "active", label: "Open" },
   { value: "open", label: "Pending" },
   { value: "accepted", label: "Accepted" },
   { value: "resolved", label: "Resolved" },
@@ -848,7 +849,7 @@ export function IssuesPage() {
   const { data, error, loading, reload } = useApi<Issue[]>(() => api.issues(), []);
   const skillsState = useApi<Skill[]>(() => api.skills(), []);
   const [selected, setSelected] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("open");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("active");
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   // Bumped after a successful review so the open detail re-fetches and the list/
@@ -869,8 +870,12 @@ export function IssuesPage() {
   }, [skillsState.data]);
 
   const counts = useMemo(() => {
-    const c = { open: 0, accepted: 0, resolved: 0, dismissed: 0, all: issues.length };
-    for (const i of issues) c[issueBucket(i.status)] += 1;
+    const c = { active: 0, open: 0, accepted: 0, resolved: 0, dismissed: 0, all: issues.length };
+    for (const i of issues) {
+      const bucket = issueBucket(i.status);
+      c[bucket] += 1;
+      if (bucket !== "resolved" && bucket !== "dismissed") c.active += 1;
+    }
     return c;
   }, [issues]);
 
@@ -878,7 +883,14 @@ export function IssuesPage() {
   // Status + text filtered, but BEFORE the category facet — this is the set the
   // category chips are derived from, so every available category stays selectable.
   const statusScoped = useMemo(
-    () => issues.filter((i) => (statusFilter === "all" || issueBucket(i.status) === statusFilter) && matchesQuery(i, q)),
+    () =>
+      issues.filter((i) => {
+        const bucket = issueBucket(i.status);
+        const matchesStatus =
+          statusFilter === "all" ||
+          (statusFilter === "active" ? bucket !== "resolved" && bucket !== "dismissed" : bucket === statusFilter);
+        return matchesStatus && matchesQuery(i, q);
+      }),
     [issues, statusFilter, q],
   );
   // Distinct free-text categories present in the current view, with counts, sorted.

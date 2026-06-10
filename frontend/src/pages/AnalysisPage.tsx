@@ -5,6 +5,8 @@ import {
   Ban,
   CalendarClock,
   Check,
+  ChevronDown,
+  ChevronRight,
   Circle,
   Clock,
   Loader2,
@@ -76,6 +78,64 @@ function errMessage(e: unknown): string {
   if (e instanceof ApiError) return e.message;
   if (e instanceof Error) return e.message;
   return String(e);
+}
+
+function num(v: unknown): number {
+  return typeof v === "number" && Number.isFinite(v) ? v : 0;
+}
+
+function TraceCorpusCard({
+  metrics,
+  loading,
+  error,
+}: {
+  metrics: Record<string, unknown> | null;
+  loading: boolean;
+  error: Error | null;
+}) {
+  const runs = (metrics?.runs ?? {}) as Record<string, unknown>;
+  const evals = (metrics?.evals ?? {}) as Record<string, unknown>;
+  const totalRuns = num(runs.total);
+  const failedSpans = num(runs.failed_spans);
+  const evaluatedRuns = num(evals.evaluated_runs);
+  const failedRuns = num(evals.failed_runs);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Trace corpus</CardTitle>
+        <Link to="/traces" className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+          View traces <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
+      </CardHeader>
+      <CardBody>
+        {loading ? (
+          <Spinner />
+        ) : error ? (
+          <ErrorNote error={error} />
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-4">
+            <div>
+              <div className="text-2xl font-semibold tabular-nums text-foreground">{totalRuns}</div>
+              <div className="text-xs text-muted-foreground">traces available</div>
+            </div>
+            <div>
+              <div className="text-2xl font-semibold tabular-nums text-warn">{failedSpans}</div>
+              <div className="text-xs text-muted-foreground">failed spans</div>
+            </div>
+            <div>
+              <div className="text-2xl font-semibold tabular-nums text-foreground">{evaluatedRuns}</div>
+              <div className="text-xs text-muted-foreground">runs scored</div>
+            </div>
+            <div>
+              <div className="text-2xl font-semibold tabular-nums text-danger">{failedRuns}</div>
+              <div className="text-xs text-muted-foreground">failed by evals</div>
+            </div>
+          </div>
+        )}
+      </CardBody>
+    </Card>
+  );
 }
 
 // ---- Run analysis now -------------------------------------------------------
@@ -699,32 +759,58 @@ function SchedulesCard({
   error: Error | null;
   onChanged: () => void;
 }) {
+  const [expanded, setExpanded] = React.useState(false);
+  const scheduleCountLabel = loading
+    ? "Loading"
+    : `${schedules.length.toLocaleString()} configured`;
+
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Schedules</CardTitle>
-        <Badge tone="neutral">OpenClaw · Hermes</Badge>
+      <CardHeader className="border-b-0 p-0">
+        <button
+          type="button"
+          className={cn(
+            "flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-accent/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+            expanded ? "rounded-t-lg" : "rounded-lg",
+          )}
+          aria-expanded={expanded}
+          onClick={() => setExpanded((v) => !v)}
+        >
+          <span className="flex min-w-0 flex-wrap items-center gap-2">
+            {expanded ? (
+              <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+            )}
+            <CardTitle>Schedules</CardTitle>
+            <Badge tone="neutral">{scheduleCountLabel}</Badge>
+          </span>
+        </button>
       </CardHeader>
-      <CardBody className="p-0">
-        {loading ? (
-          <div className="flex items-center justify-center p-6">
-            <Spinner />
+      {expanded && (
+        <>
+          <CardBody className="p-0">
+            {loading ? (
+              <div className="flex items-center justify-center p-6">
+                <Spinner />
+              </div>
+            ) : error ? (
+              <ErrorNote error={error} />
+            ) : schedules.length === 0 ? (
+              <div className="px-4 py-5 text-sm text-muted-foreground/70">
+                No schedules yet. Add one below to analyze a source on a recurring cadence.
+              </div>
+            ) : (
+              schedules.map((s) => <ScheduleRow key={s.id} schedule={s} onChanged={onChanged} />)
+            )}
+            <NewScheduleForm onCreated={onChanged} />
+          </CardBody>
+          <div className="border-t border-border/70 px-4 py-2.5 text-xs text-muted-foreground/70">
+            <CalendarClock className="mr-1.5 inline h-3.5 w-3.5 align-text-bottom" />
+            Schedules only fire while the dashboard server (<span className="font-mono">kyoko serve</span>) is running.
           </div>
-        ) : error ? (
-          <ErrorNote error={error} />
-        ) : schedules.length === 0 ? (
-          <div className="px-4 py-5 text-sm text-muted-foreground/70">
-            No schedules yet. Add one below to analyze a source on a recurring cadence.
-          </div>
-        ) : (
-          schedules.map((s) => <ScheduleRow key={s.id} schedule={s} onChanged={onChanged} />)
-        )}
-        <NewScheduleForm onCreated={onChanged} />
-      </CardBody>
-      <div className="border-t border-border/70 px-4 py-2.5 text-xs text-muted-foreground/70">
-        <CalendarClock className="mr-1.5 inline h-3.5 w-3.5 align-text-bottom" />
-        Schedules only fire while the dashboard server (<span className="font-mono">kyoko serve</span>) is running.
-      </div>
+        </>
+      )}
     </Card>
   );
 }
@@ -797,6 +883,7 @@ export function AnalysisPage() {
   const analyzersState = useApi(() => api.listAnalyzers(), []);
   const runsState = useApi<AnalysisRun[]>(() => api.listAnalysisRuns(), []);
   const schedulesState = useApi<AnalysisSchedule[]>(() => api.listSchedules(), []);
+  const metricsState = useApi<Record<string, unknown>>(() => api.dashboardMetrics(), []);
 
   // When any analysis reaches a terminal phase, refresh runs (and schedules, in
   // case a scheduled job just updated its last_run/next_run).
@@ -817,6 +904,12 @@ export function AnalysisPage() {
         icon={<Sparkles className="h-5 w-5" />}
       />
       <div className="flex-1 space-y-6 overflow-y-auto p-6">
+        <TraceCorpusCard
+          metrics={metricsState.data ?? null}
+          loading={metricsState.loading}
+          error={metricsState.error}
+        />
+
         {analyzersState.loading ? (
           <div className="flex items-center justify-center py-10">
             <Spinner />
@@ -831,17 +924,17 @@ export function AnalysisPage() {
           />
         )}
 
+        <RunsCard
+          runs={runsState.data ?? []}
+          loading={runsState.loading}
+          error={runsState.error}
+        />
+
         <SchedulesCard
           schedules={schedulesState.data ?? []}
           loading={schedulesState.loading}
           error={schedulesState.error}
           onChanged={() => schedulesState.reload()}
-        />
-
-        <RunsCard
-          runs={runsState.data ?? []}
-          loading={runsState.loading}
-          error={runsState.error}
         />
       </div>
     </div>

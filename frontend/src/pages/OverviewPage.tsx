@@ -251,11 +251,11 @@ export function OverviewPage() {
     },
     {
       step: 4,
-      to: "/detectors",
+      to: "/judges",
       icon: <FlaskConical />,
       label: "Evals",
       value: (hasEvals ? evaluatedRuns : measureRuns).toLocaleString(),
-      detail: hasEvals ? "runs scored" : `${evalDefinitions} configured · none run`,
+      detail: hasEvals ? "runs scored by judges" : `${evalDefinitions} configured · none run`,
       tone: hasEvals ? (failedRuns > 0 ? "warn" : "ok") : "neutral",
     },
   ];

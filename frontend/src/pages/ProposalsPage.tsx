@@ -228,6 +228,8 @@ export function ProposalsPage() {
     if (linkedId) setSearchParams({}, { replace: true });
   }
 
+  const pendingCount = (data ?? []).filter((p) => p.state === "pending").length;
+
   return (
     <div className="flex h-full flex-col">
       <PageHeader
@@ -236,7 +238,9 @@ export function ProposalsPage() {
         icon={<GitPullRequestArrow className="h-5 w-5" />}
         actions={
           data ? (
-            <span className="text-sm text-muted-foreground tabular-nums">{data.length} total</span>
+            <span className="text-sm text-muted-foreground tabular-nums">
+              {pendingCount} pending approval · {data.length} total
+            </span>
           ) : undefined
         }
       />
