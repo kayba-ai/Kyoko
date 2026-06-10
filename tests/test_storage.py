@@ -9,6 +9,8 @@ from kyoko.storage import (
     StorageError,
     checkpoint_database,
     connect,
+    default_db_path,
+    discover_db_path,
     get_database_status,
     ingest_source_payload,
     ingest_source_json,
@@ -48,6 +50,25 @@ class StorageTests(unittest.TestCase):
             self.assertEqual(status.counts["context_delivery_rules"], 0)
             self.assertEqual(status.counts["skill_revisions"], 0)
             self.assertEqual(status.counts["context_delivery_rule_revisions"], 0)
+
+    def test_discover_db_path_finds_project_database_from_subdirectory(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            project_root = Path(tmpdir) / "project"
+            db_path = project_root / ".kyoko" / "kyoko.db"
+            db_path.parent.mkdir(parents=True)
+            db_path.touch()
+            nested = project_root / "src" / "agent"
+            nested.mkdir(parents=True)
+
+            self.assertEqual(discover_db_path(nested), db_path.resolve())
+            self.assertEqual(discover_db_path(project_root), db_path.resolve())
+
+    def test_discover_db_path_falls_back_to_home_default(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            outside = Path(tmpdir) / "elsewhere"
+            outside.mkdir()
+
+            self.assertEqual(discover_db_path(outside), default_db_path())
 
     def test_ingest_source_fixture_populates_core_tables(self) -> None:
         with TemporaryDirectory() as tmpdir:

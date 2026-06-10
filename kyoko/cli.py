@@ -244,8 +244,8 @@ from .storage import (
     StorageError,
     checkpoint_database,
     create_analysis_schedule,
-    default_db_path,
     delete_analysis_schedule,
+    discover_db_path,
     get_database_status,
     ingest_source_json,
     ingest_source_fixture,
@@ -8101,8 +8101,12 @@ def _add_db_argument(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--db",
         type=Path,
-        default=default_db_path(),
-        help="Path to the Kyoko SQLite database.",
+        default=discover_db_path(),
+        help=(
+            "Path to the Kyoko SQLite database. Defaults to the nearest "
+            ".kyoko/kyoko.db above the current directory, then "
+            "~/.kyoko/kyoko.db."
+        ),
     )
 
 

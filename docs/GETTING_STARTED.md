@@ -26,12 +26,7 @@ It does not require a live model, framework adapter, or replay server.
 Run this from the root of an agent project:
 
 ```bash
-kyoko project-bootstrap \
-  --project-dir . \
-  --profile-name my-agent \
-  --source-framework generic-python \
-  --replay-framework generic-python \
-  --mcp-target codex
+kyoko project-bootstrap
 ```
 
 Bootstrap creates:
@@ -43,21 +38,39 @@ Bootstrap creates:
 .kyoko/NEXT_STEPS.md
 ```
 
-Then run:
+Every `kyoko` command run inside the project finds `.kyoko/kyoko.db`
+automatically, so the commands below need no `--db` flag. Bootstrap defaults
+can be tuned with `--profile-name`, `--source-framework`, `--replay-framework`,
+and `--mcp-target` (see `kyoko project-bootstrap --help`).
+
+Then start the dashboard:
 
 ```bash
-kyoko doctor --db .kyoko/kyoko.db --safe-smokes --json
-kyoko serve --db .kyoko/kyoko.db
+kyoko serve
 ```
+
+`kyoko doctor --safe-smokes --json` checks environment readiness against a
+temporary database; pass `--db .kyoko/kyoko.db` to check the project one.
 
 ## Add Telemetry
 
 ### Easiest: delegate the setup to your coding agent
 
-Connect Kyoko as an MCP server for your coding agent:
+Install the bundled instrumentation skill:
 
 ```bash
-kyoko mcp install-plan --db .kyoko/kyoko.db --target codex --json
+kyoko install-skill   # then run /kyoko-instrument in your coding agent
+```
+
+The skill lands in `.claude/skills/`, where Claude Code picks it up
+automatically; `kyoko install-skill --print` prints the same playbook to paste
+into Codex, Cursor, or other agents. It finds your agent's entry point,
+records one real run, and verifies it shows up in Kyoko.
+
+Alternatively, connect Kyoko as an MCP server for your coding agent:
+
+```bash
+kyoko mcp install-plan --target codex --json
 ```
 
 Use `--target claude` for Claude Code. Run the printed `shell_command`, then
@@ -66,8 +79,8 @@ paste this task into the agent:
 ```text
 Use Kyoko to finish setup. Read .kyoko/NEXT_STEPS.md, wire the smallest
 telemetry hook or import existing traces, record one run, and verify it with
-`kyoko runs --db .kyoko/kyoko.db --json`. Do not add secrets or run live
-operator/model actions unless I ask.
+`kyoko runs --json`. Do not add secrets or run live operator/model actions
+unless I ask.
 ```
 
 The agent can use Kyoko MCP tools when available, and can always fall back to
@@ -75,7 +88,7 @@ the generated `.kyoko/NEXT_STEPS.md` commands. For other MCP clients, write a
 generic config and point the client at it:
 
 ```bash
-kyoko mcp install --db .kyoko/kyoko.db --target generic --output .kyoko/config/mcp.json --json
+kyoko mcp install --target generic --output .kyoko/config/mcp.json --json
 ```
 
 ### By hand: the Python SDK
@@ -102,15 +115,15 @@ recorder.write_json("kyoko-run.json")
 ```
 
 ```bash
-kyoko ingest --db .kyoko/kyoko.db kyoko-run.json --json
+kyoko ingest kyoko-run.json --json
 ```
 
-To push runs to a live dashboard instead, start `kyoko serve --db
-.kyoko/kyoko.db` and call `KyokoClient().ingest(recorder.to_source_events())`.
-The client is best-effort: if the server is not running it warns and drops the
-telemetry rather than raising into your agent (pass `strict=True` to raise).
-Either way, ingest and `kyoko serve` must use the **same `--db` path** for runs
-to appear.
+To push runs to a live dashboard instead, start `kyoko serve` and call
+`KyokoClient().ingest(recorder.to_source_events())`. The client is
+best-effort: if the server is not running it warns and drops the telemetry
+rather than raising into your agent (pass `strict=True` to raise). Either way,
+ingest and `kyoko serve` must use the **same database**; inside a bootstrapped
+project both default to `.kyoko/kyoko.db`.
 
 Other source paths are covered in [Integrations](INTEGRATIONS.md): TypeScript
 SDK, generated source adapters, OTLP/GenAI JSON, Hermes, and OpenClaw.
@@ -118,11 +131,11 @@ SDK, generated source adapters, OTLP/GenAI JSON, Hermes, and OpenClaw.
 ## Inspect A Run
 
 ```bash
-kyoko runs --db .kyoko/kyoko.db --json
-kyoko current-run --db .kyoko/kyoko.db --json
-kyoko run-outline --db .kyoko/kyoko.db <run-id> --json
-kyoko search-run --db .kyoko/kyoko.db <run-id> "timeout" --json
-kyoko span-payload --db .kyoko/kyoko.db <span-id> --target output --json
+kyoko runs --json
+kyoko current-run --json
+kyoko run-outline <run-id> --json
+kyoko search-run <run-id> "timeout" --json
+kyoko span-payload <span-id> --target output --json
 ```
 
 ## Move From Issue To Repair
@@ -130,9 +143,9 @@ kyoko span-payload --db .kyoko/kyoko.db <span-id> --target output --json
 Issues are evidence records; creating one does not change agent behavior:
 
 ```bash
-kyoko issues --db .kyoko/kyoko.db --json
-kyoko issue-detail --db .kyoko/kyoko.db <issue-id> --json
-kyoko issue-create --db .kyoko/kyoko.db "Search timeout" \
+kyoko issues --json
+kyoko issue-detail <issue-id> --json
+kyoko issue-create "Search timeout" \
   --body "Search span timed out; inspect span:<span-id>." \
   --json
 ```
@@ -140,17 +153,17 @@ kyoko issue-create --db .kyoko/kyoko.db "Search timeout" \
 Proposals are candidate behavior changes:
 
 ```bash
-kyoko accept-issue --db .kyoko/kyoko.db <issue-id> --operator mock --json
-kyoko proposals --db .kyoko/kyoko.db --json
-kyoko proposal-detail --db .kyoko/kyoko.db <proposal-id> --json
+kyoko accept-issue <issue-id> --operator mock --json
+kyoko proposals --json
+kyoko proposal-detail <proposal-id> --json
 ```
 
 Checks and replay provide evidence before apply:
 
 ```bash
-kyoko generate-checks --db .kyoko/kyoko.db <proposal-id> --json
-kyoko replay --db .kyoko/kyoko.db <check-spec-id> --json
-kyoko run-autonomy --db .kyoko/kyoko.db --json
+kyoko generate-checks <proposal-id> --json
+kyoko replay <check-spec-id> --json
+kyoko run-autonomy --json
 ```
 
 `run-autonomy` evaluates the proposal, check/replay results, policy, and human
@@ -162,7 +175,6 @@ After registering an operator and replay adapter:
 
 ```bash
 kyoko improve \
-  --db .kyoko/kyoko.db \
   --operator codex \
   --replay-adapter my-agent_replay \
   --json
@@ -176,13 +188,13 @@ generates checks, runs replay, evaluates policy, and honors human locks.
 Generate an MCP install plan:
 
 ```bash
-kyoko mcp install-plan --db .kyoko/kyoko.db --target codex --json
+kyoko mcp install-plan --target codex --json
 ```
 
 Run the local MCP server:
 
 ```bash
-kyoko mcp serve --db .kyoko/kyoko.db
+kyoko mcp serve
 ```
 
 MCP tools expose inspection, proposal, check/replay, and improve workflows.
