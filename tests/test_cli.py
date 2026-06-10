@@ -739,7 +739,7 @@ class CliTests(unittest.TestCase):
         self.assertTrue(payload["temporary"])
         self.assertTrue(payload["passed"])
         self.assertEqual(payload["artifacts"][0]["artifact_type"], "wheel")
-        self.assertEqual(payload["artifacts"][0]["installed_version"], "0.1.1")
+        self.assertEqual(payload["artifacts"][0]["installed_version"], "0.1.2")
         self.assertTrue(payload["artifacts"][0]["doctor_ok"])
 
     def test_runs_and_run_detail_flow(self) -> None:
