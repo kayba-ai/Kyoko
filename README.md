@@ -27,8 +27,6 @@ stay on your machine.
 or Claude Code CLI you already have, so there is no separate Kyoko model API key
 or hosted service.
 
-<img src="docs/assets/kyoko-dashboard-overview.png" alt="Kyoko dashboard overview" width="90%" />
-
 ## Why Kyoko
 
 - **Finds the failures that repeat across runs.** Kyoko looks across runs, groups recurring problems into evidence-backed issues, and shows where each one happened.
@@ -38,6 +36,8 @@ or hosted service.
 - **Uses the tools you already have.** Codex, Claude Code, OpenClaw, Hermes, or a generic command can analyze evidence and draft fixes through existing CLI auth.
 - **Runs locally by default.** SQLite, loopback dashboard, local traces, local proposals, and explicit external calls.
 - **Connects to real agent stacks.** OTLP/GenAI, Python and TypeScript SDKs, importers, JSON CLI, dashboard, and MCP.
+
+<img src="docs/assets/kyoko-dashboard-overview.png" alt="Kyoko dashboard overview" width="90%" />
 
 ## The loop
 
