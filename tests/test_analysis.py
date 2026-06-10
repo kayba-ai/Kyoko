@@ -96,9 +96,13 @@ class ExecuteAnalysisJobTests(unittest.TestCase):
             )
             self.assertEqual(result["status"], "succeeded")
             self.assertTrue(result["proposal_ids"][0].startswith("proposal_mock_"))
+            # The sweep also records failed mock asks (clean traces) and a failed
+            # duplicate-propose run, all of which can tie on second-resolution
+            # started_at — assert on the proposal-bearing run rather than ordering.
             with connect(db_path) as connection:
                 row = connection.execute(
-                    "SELECT status, analyzed_since FROM operator_runs ORDER BY started_at DESC LIMIT 1"
+                    "SELECT status, analyzed_since FROM operator_runs WHERE proposal_id = ?",
+                    (result["proposal_ids"][0],),
                 ).fetchone()
             self.assertEqual(row["status"], "succeeded")
             self.assertIsNone(row["analyzed_since"])
