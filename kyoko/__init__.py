@@ -1,6 +1,6 @@
 """Kyoko package."""
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 from .sdk import KyokoClient, KyokoRecorder, KyokoSdkError
 

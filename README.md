@@ -139,9 +139,17 @@ kyoko doctor --db .kyoko/kyoko.db --safe-smokes --json
 kyoko serve --db .kyoko/kyoko.db
 ```
 
-Point telemetry at Kyoko with the Python or TypeScript SDK, a generated
-adapter, or an importer. See [Getting Started](docs/GETTING_STARTED.md) for the
-full walkthrough.
+Then bring your agent's telemetry into Kyoko. The easiest way is to let your
+coding agent wire it for you:
+
+```bash
+kyoko install-skill   # then run /kyoko-instrument in Claude Code, Cursor, or Codex
+```
+
+The `/kyoko-instrument` skill finds your agent's entry point, records one real
+run, and verifies it shows up in Kyoko. You can also point telemetry at Kyoko by
+hand with the Python or TypeScript SDK, a generated adapter, or an importer. See
+[Getting Started](docs/GETTING_STARTED.md) for the full walkthrough.
 
 ## What you get
 

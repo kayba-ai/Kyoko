@@ -42,6 +42,42 @@ JUDGE_COMMAND = ROOT / "tests/fixtures/judge_command.py"
 
 
 class CliTests(unittest.TestCase):
+    def test_install_skill_writes_claude_skill(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            project_dir = Path(tmpdir)
+            out = io.StringIO()
+            with redirect_stdout(out):
+                code = main(["install-skill", "--dir", str(project_dir), "--json"])
+            self.assertEqual(code, 0)
+            payload = json.loads(out.getvalue())
+            written = Path(payload["output_path"])
+            self.assertEqual(payload["invoke"], "/kyoko-instrument")
+            self.assertTrue(written.is_file())
+            self.assertEqual(
+                written,
+                project_dir / ".claude" / "skills" / "kyoko-instrument" / "SKILL.md",
+            )
+            self.assertIn("name: kyoko-instrument", written.read_text(encoding="utf-8"))
+
+            # Re-installing without --force is refused.
+            err = io.StringIO()
+            with redirect_stderr(err):
+                refuse_code = main(["install-skill", "--dir", str(project_dir)])
+            self.assertEqual(refuse_code, 1)
+            self.assertIn("--force", err.getvalue())
+
+            # --force overwrites.
+            with redirect_stdout(io.StringIO()):
+                force_code = main(["install-skill", "--dir", str(project_dir), "--force"])
+            self.assertEqual(force_code, 0)
+
+    def test_install_skill_print_emits_playbook(self) -> None:
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = main(["install-skill", "--print"])
+        self.assertEqual(code, 0)
+        self.assertIn("name: kyoko-instrument", out.getvalue())
+
     def test_bundled_assets_list_export_and_ingest_flow(self) -> None:
         list_out = io.StringIO()
         with redirect_stdout(list_out):
@@ -703,7 +739,7 @@ class CliTests(unittest.TestCase):
         self.assertTrue(payload["temporary"])
         self.assertTrue(payload["passed"])
         self.assertEqual(payload["artifacts"][0]["artifact_type"], "wheel")
-        self.assertEqual(payload["artifacts"][0]["installed_version"], "0.1.0")
+        self.assertEqual(payload["artifacts"][0]["installed_version"], "0.1.1")
         self.assertTrue(payload["artifacts"][0]["doctor_ok"])
 
     def test_runs_and_run_detail_flow(self) -> None:

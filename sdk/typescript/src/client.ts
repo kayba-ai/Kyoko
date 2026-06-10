@@ -63,9 +63,33 @@ export class KyokoClient {
     this.fetchImpl = resolved;
   }
 
-  /** Persist a `kyoko.source_events.v1` fixture via `POST /api/ingest`. */
-  async ingest(sourceEvents: SourceEvents): Promise<IngestResponse> {
-    return this.post<IngestResponse>("/api/ingest", sourceEvents);
+  /**
+   * Persist a `kyoko.source_events.v1` fixture via `POST /api/ingest`.
+   *
+   * Best-effort by default: if no server is running (the common first-run
+   * case), it does not throw into the calling agent -- it warns once and
+   * resolves to `{ delivered: false, unreachable: true }`. Pass
+   * `{ strict: true }` to throw on an unreachable server instead. A reachable
+   * server that rejects the payload always throws regardless of `strict`.
+   */
+  async ingest(
+    sourceEvents: SourceEvents,
+    options: { strict?: boolean } = {},
+  ): Promise<IngestResponse> {
+    try {
+      const result = await this.post<IngestResponse>("/api/ingest", sourceEvents);
+      return { delivered: true, ...result };
+    } catch (err) {
+      const unreachable =
+        err instanceof KyokoSdkError && err.message.startsWith("kyoko_ingest_unreachable:");
+      if (options.strict || !unreachable) throw err;
+      const detail = err instanceof Error ? err.message : String(err);
+      console.warn(
+        `kyoko: telemetry not delivered -- no server reachable at ${this.baseUrl}. ` +
+          "Start `kyoko serve` to view live, or write events to a file and run `kyoko ingest` offline.",
+      );
+      return { delivered: false, unreachable: true, detail };
+    }
   }
 
   /**

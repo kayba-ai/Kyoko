@@ -117,8 +117,39 @@ class SdkTests(unittest.TestCase):
                 status = server.get_json("/api/status")
 
             self.assertEqual(response["profile_id"], "profile_sdk_http_001")
+            self.assertTrue(response["delivered"])
             self.assertEqual(status["counts"]["runs"], 1)
             self.assertEqual(status["counts"]["spans"], 1)
+
+    def test_client_ingest_is_best_effort_when_server_down(self) -> None:
+        recorder = KyokoRecorder(
+            profile_id="profile_sdk_offline_001",
+            profile_name="SDK Offline Workflow",
+            root_path=".",
+        )
+        with recorder.run("offline run"):
+            pass
+
+        # Port 9 (discard) is reliably not listening for HTTP.
+        response = KyokoClient("http://127.0.0.1:9").ingest(recorder.to_source_events())
+        self.assertFalse(response["delivered"])
+        self.assertTrue(response["unreachable"])
+
+    def test_client_ingest_strict_raises_when_server_down(self) -> None:
+        from kyoko.sdk import KyokoSdkError
+
+        recorder = KyokoRecorder(
+            profile_id="profile_sdk_strict_001",
+            profile_name="SDK Strict Workflow",
+            root_path=".",
+        )
+        with recorder.run("strict run"):
+            pass
+
+        with self.assertRaises(KyokoSdkError):
+            KyokoClient("http://127.0.0.1:9").ingest(
+                recorder.to_source_events(), strict=True
+            )
 
 
 if __name__ == "__main__":

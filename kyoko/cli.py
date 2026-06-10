@@ -202,6 +202,12 @@ from .operator_smoke import (
 from .openclaw_import import OpenClawImportError, ingest_openclaw_sessions
 from .profile_next import ProfileNextError, run_profile_next_step
 from .project_bootstrap import ProjectBootstrapError, bootstrap_project
+from .skill_install import (
+    SKILL_NAME,
+    SkillInstallError,
+    install_skill,
+    load_skill_text,
+)
 from .proposals import ProposalError, list_learning_proposals, submit_learning_proposal
 from .release_smoke import (
     DEFAULT_RELEASE_PYTHON_TARGETS,
@@ -768,6 +774,43 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to a canonical source-event JSON payload.",
     )
     ingest.add_argument(
+        "--json",
+        action="store_true",
+        help="Print machine-readable JSON.",
+    )
+
+    install_skill_parser = subcommands.add_parser(
+        "install-skill",
+        help=(
+            "Install the /kyoko-instrument coding-agent skill that wires a "
+            "repo's telemetry into Kyoko."
+        ),
+    )
+    install_skill_parser.add_argument(
+        "--dir",
+        dest="project_dir",
+        type=Path,
+        default=Path("."),
+        help="Project directory to install the skill into (default: current directory).",
+    )
+    install_skill_parser.add_argument(
+        "--global",
+        dest="global_install",
+        action="store_true",
+        help="Install for all projects under ~/.claude/skills instead of this project.",
+    )
+    install_skill_parser.add_argument(
+        "--print",
+        dest="print_skill",
+        action="store_true",
+        help="Print the skill playbook to stdout instead of writing a file (for non-Claude agents).",
+    )
+    install_skill_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite an existing skill file.",
+    )
+    install_skill_parser.add_argument(
         "--json",
         action="store_true",
         help="Print machine-readable JSON.",
@@ -4437,6 +4480,42 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             print(f"ingested source events for profile {report.profile_id}: {args.payload}")
             for table, count in report.inserted_counts.items():
                 print(f"{table}: {count}")
+        return 0
+
+    if args.command == "install-skill":
+        if args.print_skill:
+            try:
+                text = load_skill_text()
+            except SkillInstallError as exc:
+                print(f"install-skill failed: {exc}", file=sys.stderr)
+                return 1
+            if args.json:
+                print(json.dumps({"skill_name": SKILL_NAME, "skill_text": text}, sort_keys=True))
+            else:
+                print(text)
+            return 0
+        try:
+            report = install_skill(
+                project_dir=args.project_dir,
+                global_install=args.global_install,
+                force=args.force,
+            )
+        except SkillInstallError as exc:
+            message = str(exc)
+            if message.startswith("skill_exists:"):
+                existing = message.split(":", 1)[1]
+                print(
+                    f"install-skill: skill already at {existing} (use --force to overwrite)",
+                    file=sys.stderr,
+                )
+            else:
+                print(f"install-skill failed: {message}", file=sys.stderr)
+            return 1
+        if args.json:
+            print(json.dumps(report.to_json(), sort_keys=True))
+        else:
+            print(f"installed /{report.skill_name} skill: {report.output_path}")
+            print(f"Run /{report.skill_name} in your coding agent to wire telemetry into Kyoko.")
         return 0
 
     if args.command == "ingest-otlp":

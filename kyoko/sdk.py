@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 import traceback
 import urllib.error
 import urllib.request
@@ -410,7 +411,26 @@ class KyokoClient:
     def __init__(self, base_url: str = "http://127.0.0.1:8765") -> None:
         self.base_url = base_url.rstrip("/")
 
-    def ingest(self, source_events: dict[str, Any], *, timeout_seconds: int = 10) -> dict[str, Any]:
+    def ingest(
+        self,
+        source_events: dict[str, Any],
+        *,
+        timeout_seconds: int = 10,
+        strict: bool = False,
+    ) -> dict[str, Any]:
+        """POST a source-events fixture to a running local Kyoko server.
+
+        By default this is best-effort: if the server is not running (the most
+        common first-run case), it does not raise into the calling agent. It
+        prints a one-line hint to stderr and returns
+        ``{"delivered": False, "unreachable": True, ...}`` so telemetry never
+        crashes the workflow it is observing. Pass ``strict=True`` to raise on an
+        unreachable server instead.
+
+        A reachable server that rejects the payload (an HTTP error) always
+        raises, regardless of ``strict`` -- that is a real data problem worth
+        surfacing, not a missing viewer.
+        """
         body = json.dumps(source_events).encode("utf-8")
         request = urllib.request.Request(
             f"{self.base_url}/api/ingest",
@@ -420,12 +440,22 @@ class KyokoClient:
         )
         try:
             with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
-                return json.loads(response.read().decode("utf-8"))
+                result = json.loads(response.read().decode("utf-8"))
+                result.setdefault("delivered", True)
+                return result
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8")
             raise KyokoSdkError(f"kyoko_ingest_failed:{exc.code}:{detail}") from exc
         except urllib.error.URLError as exc:
-            raise KyokoSdkError(f"kyoko_ingest_unreachable:{exc.reason}") from exc
+            if strict:
+                raise KyokoSdkError(f"kyoko_ingest_unreachable:{exc.reason}") from exc
+            print(
+                f"kyoko: telemetry not delivered -- no server reachable at {self.base_url} "
+                f"({exc.reason}). Start `kyoko serve` to view live, or write events to a "
+                f"file and run `kyoko ingest` offline.",
+                file=sys.stderr,
+            )
+            return {"delivered": False, "unreachable": True, "detail": str(exc.reason)}
 
 
 def _slug(value: str) -> str:
