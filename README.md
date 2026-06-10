@@ -16,15 +16,16 @@ Add telemetry, run your agent, and Kyoko shows where performance breaks across
 runs. It groups recurring failures into evidence-backed issues, lets Codex or
 Claude Code draft fixes, and only applies changes after checks and evals pass.
 
-It is built around the manual workflow developers already use: inspect traces,
-understand the failure, patch the prompt, context, or harness, rerun evals, and
-decide what ships. Kyoko makes that workflow repeatable while keeping you in
-control.
+**Built around the manual dev workflow.** Inspect traces, understand the
+failure, patch the prompt, context, or harness, rerun evals, and decide what
+ships. Kyoko makes that workflow repeatable while keeping you in control.
 
-Everything stays local by default: traces, issues, proposals, evals, database,
-and dashboard. For analysis and fix drafting, Kyoko can use the coding-agent CLI
-you already have, like Codex or Claude Code, so there is no separate Kyoko model
-API key or hosted service.
+**Local by default.** Traces, issues, proposals, evals, database, and dashboard
+stay on your machine.
+
+**Works with your existing coding-agent subscription.** Kyoko can use the Codex
+or Claude Code CLI you already have, so there is no separate Kyoko model API key
+or hosted service.
 
 <img src="docs/assets/kyoko-dashboard-overview.png" alt="Kyoko dashboard overview" width="90%" />
 
