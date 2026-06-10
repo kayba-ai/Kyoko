@@ -2,7 +2,10 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
+from kyoko.apply import apply_proposal
 from kyoko.demo import run_demo_setup
+from kyoko.issues import get_issue
+from kyoko.proposals import list_learning_proposals
 from kyoko.storage import get_database_status
 
 
@@ -54,6 +57,32 @@ class DemoTests(unittest.TestCase):
             self.assertEqual(status.counts["skills"], 5)
             self.assertEqual(status.counts["runs"], 14)
             self.assertEqual(status.counts["spans"], 40)
+
+    def test_demo_harness_proposal_apply_is_deterministic_noop(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "kyoko.db"
+            output_dir = Path(tmpdir) / "demo-output"
+
+            run_demo_setup(db_path=db_path, output_dir=output_dir)
+
+            result = apply_proposal(
+                db_path=db_path,
+                proposal_id="proposal_handoff_schema_001",
+            )
+            proposals = {
+                proposal["id"]: proposal
+                for proposal in list_learning_proposals(db_path)
+            }
+            issue = get_issue(db_path=db_path, issue_id="issue_handoff_schema_001")
+
+            self.assertTrue(result["demo"])
+            self.assertEqual(result["section"], "harness")
+            self.assertEqual(result["state"], "applied")
+            self.assertEqual(result["patch_transaction_ids"], [])
+            self.assertEqual(proposals["proposal_handoff_schema_001"]["state"], "applied")
+            self.assertEqual(issue["status"], "guarded")
+            self.assertIsNotNone(issue["applied_at"])
+            self.assertEqual(issue["recurrence_count_at_apply"], issue["recurrence_count"])
 
 
 if __name__ == "__main__":

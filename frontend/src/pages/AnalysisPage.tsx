@@ -60,6 +60,12 @@ const SCOPE_OPTIONS = [
   { value: "new", label: "New since last" },
 ];
 
+const DEMO_ANALYZERS: Analyzer[] = [
+  { analyzer: "codex", installed: true, command: "codex", adapter_registered: true, schedulable: false },
+  { analyzer: "claude", installed: true, command: "claude", adapter_registered: true, schedulable: false },
+  { analyzer: "ace", installed: true, command: "ace", adapter_registered: true, schedulable: false },
+];
+
 const PHASE_TONE: Record<string, NonNullable<BadgeProps["tone"]>> = {
   running: "warn",
   importing: "warn",
@@ -349,10 +355,12 @@ function RunProgress({
 
 function RunAnalysisCard({
   analyzers,
+  demoMode = false,
   onBootstrapped,
   onLaunched,
 }: {
   analyzers: Analyzer[];
+  demoMode?: boolean;
   onBootstrapped: () => void;
   onLaunched: () => void;
 }) {
@@ -369,6 +377,7 @@ function RunAnalysisCard({
   const [seen, setSeen] = React.useState<Set<AnalysisRunPhase>>(() => new Set());
   const [nowMs, setNowMs] = React.useState(() => Date.now());
   const [cancelling, setCancelling] = React.useState(false);
+  const demoTimers = React.useRef<number[]>([]);
 
   // A launched job is "running" until it emits a terminal phase. (Until the very
   // first event arrives, an active run with no terminal phase is still running.)
@@ -378,12 +387,34 @@ function RunAnalysisCard({
 
   // Live progress for the job we just launched (handler ref is kept current).
   useLiveEvent("analysis_run", (ev: AnalysisRunEvent) => {
+    if (demoMode) return;
     if (activeRun && ev.job_id === activeRun.jobId) {
       setPhase(ev);
       setSeen((prev) => (prev.has(ev.status) ? prev : new Set(prev).add(ev.status)));
       if (TERMINAL_RUN_PHASES.has(ev.status)) setCancelling(false);
     }
   });
+
+  React.useEffect(() => {
+    return () => {
+      demoTimers.current.forEach((id) => window.clearTimeout(id));
+      demoTimers.current = [];
+    };
+  }, []);
+
+  function setDemoPhase(jobId: string, status: AnalysisRunPhase, proposalIds: string[] = []) {
+    const ev: AnalysisRunEvent = {
+      job_id: jobId,
+      schedule_id: null,
+      analyzer,
+      scope,
+      status,
+      proposal_ids: proposalIds,
+      at: new Date().toISOString(),
+    };
+    setPhase(ev);
+    setSeen((prev) => (prev.has(status) ? prev : new Set(prev).add(status)));
+  }
 
   async function cancel() {
     if (!activeRun) return;
@@ -443,6 +474,26 @@ function RunAnalysisCard({
     setActiveRun(null);
     setCancelling(false);
     try {
+      if (demoMode) {
+        const jobId = `demo-analysis-${Date.now()}`;
+        demoTimers.current.forEach((id) => window.clearTimeout(id));
+        demoTimers.current = [];
+        setActiveRun({ jobId, analyzer, scope, startedAtMs: Date.now() });
+        setDemoPhase(jobId, "running");
+        demoTimers.current = [
+          window.setTimeout(() => setDemoPhase(jobId, "analyzing"), 350),
+          window.setTimeout(
+            () =>
+              setDemoPhase(jobId, "succeeded", [
+                "proposal_citation_grounding_001",
+                "proposal_handoff_schema_001",
+              ]),
+            900,
+          ),
+        ];
+        onLaunched();
+        return;
+      }
       const body = {
         analyzer,
         scope,
@@ -571,102 +622,6 @@ function RunAnalysisCard({
               <Play className="h-3.5 w-3.5" />
             )}
             {running ? "Running…" : activeRun ? "Run again" : "Run analysis"}
-          </Button>
-        </div>
-      </CardBody>
-    </Card>
-  );
-}
-
-function DemoRunAnalysisCard({ metrics }: { metrics: Record<string, unknown> | null }) {
-  const [state, setState] = React.useState<"idle" | "running" | "done">("idle");
-  const runs = (metrics?.runs ?? {}) as Record<string, unknown>;
-  const evals = (metrics?.evals ?? {}) as Record<string, unknown>;
-  const issues = (metrics?.issues ?? {}) as Record<string, unknown>;
-  const totalRuns = num(runs.total);
-  const failedSpans = num(runs.failed_spans);
-  const failedRuns = num(evals.failed_runs);
-  const evaluatedRuns = num(evals.evaluated_runs);
-  const activeIssues = num(issues.active);
-
-  React.useEffect(() => {
-    if (state !== "running") return;
-    const id = window.setTimeout(() => setState("done"), 550);
-    return () => window.clearTimeout(id);
-  }, [state]);
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Run analysis now</CardTitle>
-      </CardHeader>
-      <CardBody className="space-y-4">
-        <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
-          <div className="flex items-start gap-3">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              {state === "running" ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : state === "done" ? (
-                <Check className="h-4 w-4" />
-              ) : (
-                <Sparkles className="h-4 w-4" />
-              )}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium text-foreground">
-                {state === "done" ? "Demo analysis complete" : "Deterministic demo analysis"}
-              </div>
-              <p className="mt-1 text-sm text-muted-foreground">
-                This quick demo uses seeded traces and precomputed findings, so no adapter registration,
-                CLI setup, or live agent run is required.
-              </p>
-              <div className="mt-3 grid gap-3 sm:grid-cols-4">
-                <div>
-                  <div className="text-xl font-semibold tabular-nums text-foreground">{totalRuns}</div>
-                  <div className="text-xs text-muted-foreground">demo traces</div>
-                </div>
-                <div>
-                  <div className="text-xl font-semibold tabular-nums text-warn">{failedSpans}</div>
-                  <div className="text-xs text-muted-foreground">failed spans</div>
-                </div>
-                <div>
-                  <div className="text-xl font-semibold tabular-nums text-danger">{failedRuns}</div>
-                  <div className="text-xs text-muted-foreground">failed eval runs</div>
-                </div>
-                <div>
-                  <div className="text-xl font-semibold tabular-nums text-foreground">{activeIssues}</div>
-                  <div className="text-xs text-muted-foreground">open issues</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {state === "done" && (
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-border bg-muted/40 px-3 py-2.5 text-sm">
-            <span className="text-foreground">
-              Scored {evaluatedRuns.toLocaleString()} runs and surfaced the seeded issues/proposals.
-            </span>
-            <Link to="/issues" className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
-              Review issues <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
-            <Link to="/proposals" className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
-              Review proposals <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
-          </div>
-        )}
-
-        <div className="flex items-center justify-between gap-3 pt-1">
-          <p className="text-xs text-muted-foreground/70">
-            Demo results are fixed so every first-run tour tells the same story.
-          </p>
-          <Button onClick={() => setState("running")} disabled={state === "running"}>
-            {state === "running" ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Play className="h-3.5 w-3.5" />
-            )}
-            {state === "running" ? "Running…" : state === "done" ? "Run again" : "Run analysis"}
           </Button>
         </div>
       </CardBody>
@@ -997,6 +952,7 @@ export function AnalysisPage() {
 
   const analyzers = analyzersState.data?.analyzers ?? [];
   const demoMode = isDemoMetrics(metricsState.data);
+  const analysisAnalyzers = demoMode ? DEMO_ANALYZERS : analyzers;
 
   return (
     <div className="flex h-full flex-col">
@@ -1012,17 +968,16 @@ export function AnalysisPage() {
           error={metricsState.error}
         />
 
-        {demoMode ? (
-          <DemoRunAnalysisCard metrics={metricsState.data ?? null} />
-        ) : analyzersState.loading ? (
+        {!demoMode && analyzersState.loading ? (
           <div className="flex items-center justify-center py-10">
             <Spinner />
           </div>
-        ) : analyzersState.error ? (
+        ) : !demoMode && analyzersState.error ? (
           <ErrorNote error={analyzersState.error} />
         ) : (
           <RunAnalysisCard
-            analyzers={analyzers}
+            analyzers={analysisAnalyzers}
+            demoMode={demoMode}
             onBootstrapped={() => analyzersState.reload()}
             onLaunched={() => runsState.reload()}
           />

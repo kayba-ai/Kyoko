@@ -226,6 +226,15 @@ def apply_proposal(
             prepare_harness_proposal,
         )
 
+        with connect(db_path) as connection:
+            if _is_quick_demo_profile(connection, profile_id):
+                return _apply_demo_proposal(
+                    connection=connection,
+                    proposal_id=proposal_id,
+                    profile_id=profile_id,
+                    section="harness",
+                )
+
         root = harness_workspace_root or _profile_root_path(db_path, profile_id)
         if root is None:
             raise ApplyError("harness_workspace_root_required")
@@ -358,6 +367,81 @@ def _profile_root_path(db_path: Path, profile_id: str) -> Optional[Path]:
     if not isinstance(root_path, str) or not root_path:
         return None
     return Path(root_path).expanduser()
+
+
+def _is_quick_demo_profile(connection: sqlite3.Connection, profile_id: str) -> bool:
+    source = connection.execute(
+        """
+        SELECT id
+        FROM sources
+        WHERE profile_id = ?
+          AND id = 'source_hermes_001'
+        LIMIT 1
+        """,
+        (profile_id,),
+    ).fetchone()
+    runs = connection.execute(
+        "SELECT COUNT(*) AS count FROM runs WHERE profile_id = ?",
+        (profile_id,),
+    ).fetchone()
+    run_count = int(runs["count"]) if runs is not None else 0
+    return bool(profile_id == "profile_news_research_001" and source is not None and run_count >= 10)
+
+
+def _apply_demo_proposal(
+    *,
+    connection: sqlite3.Connection,
+    proposal_id: str,
+    profile_id: str,
+    section: str,
+) -> dict[str, Any]:
+    now = utc_now()
+    proposal = _get_proposal(connection, proposal_id)
+    issue_id = proposal["issue_id"]
+    _ensure_kyoko_source(connection, profile_id)
+    connection.execute(
+        "UPDATE learning_proposals SET state = 'applied', updated_at = ? WHERE id = ?",
+        (now, proposal_id),
+    )
+    if isinstance(issue_id, str) and issue_id:
+        issue = connection.execute(
+            "SELECT recurrence_count FROM skills WHERE id = ?",
+            (issue_id,),
+        ).fetchone()
+        if issue is not None:
+            baseline = int(issue["recurrence_count"] or 1)
+            connection.execute(
+                """
+                UPDATE skills
+                SET status = 'guarded',
+                    applied_at = ?,
+                    recurrence_count_at_apply = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (now, baseline, now, issue_id),
+            )
+    _insert_timeline_event(
+        connection,
+        event_id=f"event_{proposal_id}_demo_apply_{uuid.uuid4().hex[:8]}",
+        profile_id=profile_id,
+        entity_type="proposal",
+        entity_id=proposal_id,
+        kind="proposal_applied",
+        at=now,
+        agent_identity_id=None,
+        metadata={"demo": True, "section": section, "reason": "demo_noop_apply"},
+    )
+    return {
+        "proposal_id": proposal_id,
+        "profile_id": profile_id,
+        "section": section,
+        "state": "applied",
+        "applied_skill_ids": [],
+        "applied_context_rule_ids": [],
+        "patch_transaction_ids": [],
+        "demo": True,
+    }
 
 
 def list_skills(db_path: Path, *, profile_id: Optional[str] = None) -> list[dict[str, Any]]:
