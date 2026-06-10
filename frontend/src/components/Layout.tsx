@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { useTheme } from "@/hooks/useTheme";
 import { useApi } from "@/hooks/useApi";
 import { api } from "@/lib/api";
+import { Badge } from "@/components/ui/badge";
 import { StatusBar } from "./StatusBar";
 
 interface NavItem {
@@ -138,7 +139,14 @@ export function Layout() {
             className="h-7 w-7 rounded-lg shadow-xs"
           />
           <div className="flex flex-col leading-none">
-            <span className="text-md font-bold tracking-tight">Kyoko</span>
+            <span className="flex items-center gap-2">
+              <span className="text-md font-bold tracking-tight">Kyoko</span>
+              {demoMode && (
+                <Badge tone="primary" className="px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide">
+                  Demo
+                </Badge>
+              )}
+            </span>
             <span className="mt-0.5 text-xs font-medium text-muted-foreground">
               Optimization loop
             </span>

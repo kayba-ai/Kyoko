@@ -599,7 +599,6 @@ function DemoRunAnalysisCard({ metrics }: { metrics: Record<string, unknown> | n
     <Card>
       <CardHeader>
         <CardTitle>Run analysis now</CardTitle>
-        <Badge tone="primary">Demo mode</Badge>
       </CardHeader>
       <CardBody className="space-y-4">
         <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
@@ -667,7 +666,7 @@ function DemoRunAnalysisCard({ metrics }: { metrics: Record<string, unknown> | n
             ) : (
               <Play className="h-3.5 w-3.5" />
             )}
-            {state === "running" ? "Running…" : state === "done" ? "Run again" : "Run demo analysis"}
+            {state === "running" ? "Running…" : state === "done" ? "Run again" : "Run analysis"}
           </Button>
         </div>
       </CardBody>
@@ -1005,7 +1004,6 @@ export function AnalysisPage() {
         title="Analysis"
         description="Run an analyzer over your traces to surface diagnosed issues; proposal authoring is gated separately."
         icon={<Sparkles className="h-5 w-5" />}
-        actions={demoMode ? <Badge tone="primary">Demo</Badge> : undefined}
       />
       <div className="flex-1 space-y-6 overflow-y-auto p-6">
         <TraceCorpusCard
