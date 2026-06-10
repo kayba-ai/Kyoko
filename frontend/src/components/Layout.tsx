@@ -1,4 +1,5 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { useEffect } from "react";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   CircleDot,
   GitPullRequestArrow,
@@ -15,6 +16,8 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/hooks/useTheme";
+import { useApi } from "@/hooks/useApi";
+import { api } from "@/lib/api";
 import { StatusBar } from "./StatusBar";
 
 interface NavItem {
@@ -108,7 +111,23 @@ function ThemeToggle() {
   );
 }
 
+function isDemoMetrics(metrics: Record<string, unknown> | null | undefined): boolean {
+  const demo = metrics?.demo as Record<string, unknown> | undefined;
+  return demo?.active === true;
+}
+
 export function Layout() {
+  const metricsState = useApi<Record<string, unknown>>(() => api.dashboardMetrics(), []);
+  const demoMode = isDemoMetrics(metricsState.data);
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (demoMode && (location.pathname === "/" || location.pathname === "/setup")) {
+      navigate("/overview", { replace: true });
+    }
+  }, [demoMode, location.pathname, navigate]);
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground">
       <aside className="flex w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
@@ -126,18 +145,24 @@ export function Layout() {
           </div>
         </div>
         <nav className="flex flex-1 flex-col gap-2.5 overflow-y-auto px-3 py-3">
-          {SECTIONS.map((section) => (
-            <div key={section.heading ?? section.items[0]?.to} className="flex flex-col gap-1">
-              {section.heading && (
-                <div className="px-2.5 pb-1 text-xs font-medium text-muted-foreground">
-                  {section.heading}
-                </div>
-              )}
-              {section.items.map((item) => (
-                <NavRow key={item.to} {...item} />
-              ))}
-            </div>
-          ))}
+          {SECTIONS.map((section) => {
+            const items = demoMode
+              ? section.items.filter((item) => item.to !== "/setup")
+              : section.items;
+            if (items.length === 0) return null;
+            return (
+              <div key={section.heading ?? items[0]?.to} className="flex flex-col gap-1">
+                {section.heading && (
+                  <div className="px-2.5 pb-1 text-xs font-medium text-muted-foreground">
+                    {section.heading}
+                  </div>
+                )}
+                {items.map((item) => (
+                  <NavRow key={item.to} {...item} />
+                ))}
+              </div>
+            );
+          })}
           <div className="mt-auto flex flex-col gap-1 border-t border-sidebar-border pt-3">
             <NavRow to="/settings" label="Settings" icon={SettingsIcon} />
             <ThemeToggle />
