@@ -12,7 +12,7 @@
 **Kyoko is a fully local system for measuring, debugging, and improving AI
 agents.**
 
-Add telemetry, run your agent, and Kyoko shows where performance breaks across
+**Add telemetry, run your agent.** Kyoko shows where performance breaks across
 runs. It groups recurring failures into evidence-backed issues, lets Codex or
 Claude Code draft fixes, and only applies changes after checks and evals pass.
 
