@@ -541,7 +541,7 @@ def _seed_showcase_artifacts(*, db_path: Path, applied_skill_ids: tuple[str, ...
     seed_bundled_llm_evals(db_path=db_path, profile_id="profile_news_research_001")
     with connect(db_path) as connection:
         _seed_showcase_issues(connection, applied_skill_ids=applied_skill_ids)
-        _seed_showcase_proposals(connection)
+        _seed_showcase_proposals(connection, applied_skill_ids=applied_skill_ids)
         _seed_showcase_checks(connection)
         _seed_showcase_measurements(connection)
         _seed_showcase_activity(connection)
@@ -694,7 +694,7 @@ def _seed_showcase_issues(connection: Any, *, applied_skill_ids: tuple[str, ...]
         )
 
 
-def _seed_showcase_proposals(connection: Any) -> None:
+def _seed_showcase_proposals(connection: Any, *, applied_skill_ids: tuple[str, ...]) -> None:
     for proposal in _showcase_proposals():
         connection.execute(
             """
@@ -733,10 +733,13 @@ def _seed_showcase_proposals(connection: Any) -> None:
                 proposal["updated_at"],
             ),
         )
-    connection.execute(
-        "UPDATE learning_proposals SET issue_id = ? WHERE id = ? AND issue_id IS NULL",
-        ("skill_proposal_context_timeout_001_1", "proposal_context_timeout_001"),
-    )
+    # The demo-loop proposal can only link to its skill once apply_context has
+    # created it; without the loop the skill row does not exist and the FK fails.
+    if applied_skill_ids:
+        connection.execute(
+            "UPDATE learning_proposals SET issue_id = ? WHERE id = ? AND issue_id IS NULL",
+            (applied_skill_ids[0], "proposal_context_timeout_001"),
+        )
 
 
 def _showcase_proposals() -> list[dict[str, Any]]:

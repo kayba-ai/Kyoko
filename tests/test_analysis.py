@@ -384,7 +384,10 @@ class AnalysisApiTests(unittest.TestCase):
                 self.assertEqual(body["status"], "queued")
                 runs = server.get("/api/analysis/runs")["runs"]
             self.assertTrue(runs)
-            self.assertTrue(all(r["status"] == "succeeded" for r in runs))
+            # The per-trace sweep records a failed mock ask for traces with no
+            # diagnosable failure; the job still finishes every ask it starts.
+            self.assertTrue(all(r["status"] in {"succeeded", "failed"} for r in runs))
+            self.assertTrue(any(r["status"] == "succeeded" for r in runs))
             # Decoupled flow records two operator runs (diagnosis + propose); only the
             # propose run carries a proposal id, and their started_at can tie — assert on
             # the proposal-bearing run rather than ordering.

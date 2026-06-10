@@ -139,16 +139,22 @@ class RetentionTests(unittest.TestCase):
             )
             after = get_database_status(db_path)
 
-            self.assertEqual(before.counts["replay_runs"], 1)
-            self.assertEqual(before.counts["check_runs"], 1)
+            # The demo seeds two showcase replay/check runs next to the real
+            # demo-loop one; all three are runtime rows and prune together.
+            self.assertEqual(before.counts["replay_runs"], 3)
+            self.assertEqual(before.counts["check_runs"], 3)
             self.assertEqual(before.counts["operator_runs"], 1)
-            self.assertEqual(report.pruned_rows["replay_runs"], ["replay_check_proposal_context_timeout_001_1_001"])
-            self.assertEqual(len(report.pruned_rows["check_runs"]), 1)
+            self.assertIn(
+                "replay_check_proposal_context_timeout_001_1_001",
+                report.pruned_rows["replay_runs"],
+            )
+            self.assertEqual(len(report.pruned_rows["replay_runs"]), 3)
+            self.assertEqual(len(report.pruned_rows["check_runs"]), 3)
             self.assertEqual(len(report.pruned_rows["operator_runs"]), 1)
             self.assertEqual(after.counts["replay_runs"], 0)
             self.assertEqual(after.counts["check_runs"], 0)
             self.assertEqual(after.counts["operator_runs"], 0)
-            self.assertEqual(after.counts["check_specs"], 1)
+            self.assertEqual(after.counts["check_specs"], 3)
             self.assertGreaterEqual(after.counts["learning_proposals"], 1)
 
 def _insert_replay_task_attempt_reference(db_path: Path) -> None:

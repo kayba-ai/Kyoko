@@ -508,7 +508,9 @@ def _run_analysis(
                     profile_id=resolved_profile_id,
                     run_id=trace_run_id,
                     schema_path=schema_path,
-                    since=None,
+                    # run_id wins over since when scoping the bundle, so the sweep
+                    # cutoff only lands in bundle metadata and analyzed_since.
+                    since=since,
                     schedule_id=schedule_id,
                 )
             )

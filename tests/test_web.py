@@ -435,12 +435,25 @@ class WebTests(unittest.TestCase):
             self.assertEqual(demo["promoted_trust_level"], "L2_regression")
             self.assertEqual(demo["applied_skill_ids"], ["skill_proposal_context_timeout_001_1"])
             self.assertEqual(status["counts"]["profiles"], 1)
-            self.assertEqual(status["counts"]["learning_proposals"], 1)
-            self.assertEqual(status["counts"]["skills"], 1)
-            self.assertEqual(status["counts"]["check_runs"], 1)
-            self.assertEqual(proposals["proposals"][0]["id"], "proposal_context_timeout_001")
-            self.assertEqual(skills["skills"][0]["id"], "skill_proposal_context_timeout_001_1")
-            self.assertEqual(checks["check_runs"][0]["status"], "passed")
+            # 1 demo-loop proposal/skill/check run plus the seeded showcase ones
+            # (3 proposals, 4 issue skills, 2 check runs).
+            self.assertEqual(status["counts"]["learning_proposals"], 4)
+            self.assertEqual(status["counts"]["skills"], 5)
+            self.assertEqual(status["counts"]["check_runs"], 3)
+            self.assertIn(
+                "proposal_context_timeout_001",
+                {p["id"] for p in proposals["proposals"]},
+            )
+            self.assertIn(
+                "skill_proposal_context_timeout_001_1",
+                {s["id"] for s in skills["skills"]},
+            )
+            demo_check_run = next(
+                r
+                for r in checks["check_runs"]
+                if r["id"] == "checkrun_check_proposal_context_timeout_001_1_001"
+            )
+            self.assertEqual(demo_check_run["status"], "passed")
 
     def test_profile_next_endpoint_plans_and_runs_check_generation(self) -> None:
         with TemporaryDirectory() as tmpdir:
