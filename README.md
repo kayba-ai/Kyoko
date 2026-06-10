@@ -9,17 +9,17 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-green.svg)](LICENSE)
 
-**Kyoko is a fully local system for debugging and improving agents with measured,
-gated fixes.**
+**Kyoko is a fully local system for measuring, debugging, and improving AI
+agents.**
 
-Kyoko captures what your agent actually did, finds recurring failures, turns
-them into evidence-backed issues, drafts fixes, and tests them by rerunning the
-failing trace, running deterministic checks, and comparing eval results before
-applying them.
+Add telemetry, run your agent, and Kyoko shows where performance breaks across
+runs. It groups recurring failures into evidence-backed issues, lets Codex or
+Claude Code draft fixes, and only applies changes after checks and evals pass.
 
-It is built for the way developers already debug agents: inspect the run,
-understand the failure, decide what to fix, test the change, then ship it. You
-can review every step manually, or automate the parts that pass the gate.
+It is built around the manual workflow developers already use: inspect traces,
+understand the failure, patch the prompt, context, or harness, rerun evals, and
+decide what ships. Kyoko makes that workflow repeatable while keeping you in
+control.
 
 Everything stays local by default: traces, issues, proposals, evals, database,
 and dashboard. For analysis and fix drafting, Kyoko can use the coding-agent CLI
