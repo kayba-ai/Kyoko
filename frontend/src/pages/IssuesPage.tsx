@@ -236,7 +236,7 @@ function AutonomySummary({ issue }: { issue: Issue }) {
         Autonomy: <Badge tone={tone}>{mode === "autonomous" ? "Autonomous" : "HITL"}</Badge>
       </span>
       <span className="text-muted-foreground/80">{hint}</span>
-      <Link to="/autonomy" className="ml-auto inline-flex items-center gap-1 text-primary hover:underline">
+      <Link to="/settings/autonomy" className="ml-auto inline-flex items-center gap-1 text-primary hover:underline">
         Change <ArrowRight className="h-3 w-3" />
       </Link>
     </div>

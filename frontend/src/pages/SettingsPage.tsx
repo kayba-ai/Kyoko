@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Settings, ShieldCheck } from "lucide-react";
 import { api } from "@/lib/api";
 import { useApi } from "@/hooks/useApi";
@@ -6,8 +7,11 @@ import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Spinner, ErrorNote, Separator } from "@/components/ui/misc";
+import { Tabs } from "@/components/ui/tabs";
 import { JsonView } from "@/components/JsonView";
 import { fmtBytes } from "@/lib/format";
+import { AutonomySettingsPanel } from "./AutonomyPage";
+import { AgentKyokoSettingsPanel } from "./McpLogPage";
 
 type Obj = Record<string, unknown>;
 
@@ -174,35 +178,87 @@ function StorageCard({ data }: { data: Obj | null }) {
   );
 }
 
-export function SettingsPage() {
+type SettingsTab = "general" | "autonomy" | "agent-kyoko";
+
+const SETTINGS_TABS: { value: SettingsTab; label: string; path: string; description: string }[] = [
+  {
+    value: "general",
+    label: "General",
+    path: "/settings",
+    description: "Redaction and retention posture for this machine's single workflow profile.",
+  },
+  {
+    value: "autonomy",
+    label: "Autonomy",
+    path: "/settings/autonomy",
+    description: "Choose human-in-the-loop or autonomous behavior and review recent activity.",
+  },
+  {
+    value: "agent-kyoko",
+    label: "Agent ↔ Kyoko",
+    path: "/settings/agent-kyoko",
+    description: "Live JSON-RPC traffic between a coding agent and Kyoko's MCP server.",
+  },
+];
+
+function tabFromPath(pathname: string): SettingsTab {
+  if (pathname === "/settings/autonomy") return "autonomy";
+  if (pathname === "/settings/agent-kyoko") return "agent-kyoko";
+  return "general";
+}
+
+function GeneralSettingsPanel() {
   const storage = useApi(() => api.storageReport(), []);
+
+  return (
+    <div className="flex-1 overflow-y-auto p-6">
+      {storage.loading && !storage.data ? (
+        <div className="flex h-full items-center justify-center">
+          <Spinner />
+        </div>
+      ) : storage.error ? (
+        <ErrorNote error={storage.error} />
+      ) : (
+        <div className="flex max-w-3xl flex-col gap-6">
+          <div className="flex items-center gap-2 rounded-lg border border-primary/25 bg-primary/10 px-3 py-2 text-sm text-primary">
+            <ShieldCheck className="h-4 w-4 shrink-0" />
+            <span>Loopback by default; non-loopback binds require a Kyoko auth token.</span>
+          </div>
+          <RedactionCard />
+          <RetentionCard />
+          <StorageCard data={storage.data} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function SettingsPage() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const tab = tabFromPath(location.pathname);
+  const active = SETTINGS_TABS.find((t) => t.value === tab) ?? SETTINGS_TABS[0];
 
   return (
     <div className="flex h-full flex-col">
       <PageHeader
         title="Settings"
-        description="Redaction and retention posture for this machine's single workflow profile."
+        description={active.description}
         icon={<Settings className="h-5 w-5" />}
-      />
-      <div className="flex-1 overflow-y-auto p-6">
-        {storage.loading && !storage.data ? (
-          <div className="flex h-full items-center justify-center">
-            <Spinner />
-          </div>
-        ) : storage.error ? (
-          <ErrorNote error={storage.error} />
-        ) : (
-          <div className="flex max-w-3xl flex-col gap-6">
-            <div className="flex items-center gap-2 rounded-lg border border-primary/25 bg-primary/10 px-3 py-2 text-sm text-primary">
-              <ShieldCheck className="h-4 w-4 shrink-0" />
-              <span>Loopback by default; non-loopback binds require a Kyoko auth token.</span>
-            </div>
-            <RedactionCard />
-            <RetentionCard />
-            <StorageCard data={storage.data} />
-          </div>
-        )}
-      </div>
+      >
+        <Tabs
+          tabs={SETTINGS_TABS.map(({ value, label }) => ({ value, label }))}
+          value={tab}
+          onChange={(next) => {
+            const target = SETTINGS_TABS.find((t) => t.value === next);
+            if (target) navigate(target.path);
+          }}
+          variant="segment"
+        />
+      </PageHeader>
+      {tab === "general" && <GeneralSettingsPanel />}
+      {tab === "autonomy" && <AutonomySettingsPanel />}
+      {tab === "agent-kyoko" && <AgentKyokoSettingsPanel />}
     </div>
   );
 }

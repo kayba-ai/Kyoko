@@ -454,7 +454,7 @@ function GuardMonitorButton({ onRan }: { onRan: () => void }) {
   );
 }
 
-export function AutonomyPage() {
+export function AutonomySettingsPanel() {
   const policyState = useApi<AutonomyPolicy>(() => api.policy(), []);
   const eventsState = useApi<TimelineEvent[]>(() => api.autonomyEvents(50), []);
 
@@ -462,45 +462,51 @@ export function AutonomyPage() {
   const error = policyState.error ?? eventsState.error;
 
   return (
+    <div className="flex-1 overflow-y-auto p-6 space-y-6">
+      {loading ? (
+        <div className="flex h-full items-center justify-center">
+          <Spinner />
+        </div>
+      ) : error ? (
+        <ErrorNote error={error} />
+      ) : (
+        <>
+          <div className="rounded-lg border border-border bg-muted/50 p-3 text-sm text-muted-foreground">
+            In <strong>HITL</strong> you accept each issue and approve each fix. In <strong>autonomous</strong> mode
+            Kyoko authors+applies a fix once a failure recurs past the recurrence threshold, then the guard monitor
+            watches for regressions. Changes here take effect immediately for your single local workflow.
+          </div>
+          {policyState.data && (
+            <PolicyEditor policy={policyState.data} onSaved={() => policyState.reload()} />
+          )}
+          <Card>
+            <CardHeader>
+              <CardTitle>Guard monitor</CardTitle>
+            </CardHeader>
+            <CardBody className="space-y-2">
+              <p className="text-sm text-muted-foreground">
+                Checks applied fixes for post-apply regressions. In autonomous mode (with auto-rollback) it reverts a
+                regressed fix and, after max auto-fix attempts, escalates the issue back to HITL.
+              </p>
+              <GuardMonitorButton onRan={() => eventsState.reload()} />
+            </CardBody>
+          </Card>
+          <ActivityCard events={eventsState.data ?? []} />
+        </>
+      )}
+    </div>
+  );
+}
+
+export function AutonomyPage() {
+  return (
     <div className="flex h-full flex-col">
       <PageHeader
         title="Autonomy"
         description="Choose human-in-the-loop or autonomous, set thresholds, and review recent activity"
         icon={<ShieldCheck className="h-5 w-5" />}
       />
-      <div className="flex-1 overflow-y-auto p-6 space-y-6">
-        {loading ? (
-          <div className="flex h-full items-center justify-center">
-            <Spinner />
-          </div>
-        ) : error ? (
-          <ErrorNote error={error} />
-        ) : (
-          <>
-            <div className="rounded-lg border border-border bg-muted/50 p-3 text-sm text-muted-foreground">
-              In <strong>HITL</strong> you accept each issue and approve each fix. In <strong>autonomous</strong> mode
-              Kyoko authors+applies a fix once a failure recurs past the recurrence threshold, then the guard monitor
-              watches for regressions. Changes here take effect immediately for your single local workflow.
-            </div>
-            {policyState.data && (
-              <PolicyEditor policy={policyState.data} onSaved={() => policyState.reload()} />
-            )}
-            <Card>
-              <CardHeader>
-                <CardTitle>Guard monitor</CardTitle>
-              </CardHeader>
-              <CardBody className="space-y-2">
-                <p className="text-sm text-muted-foreground">
-                  Checks applied fixes for post-apply regressions. In autonomous mode (with auto-rollback) it reverts a
-                  regressed fix and, after max auto-fix attempts, escalates the issue back to HITL.
-                </p>
-                <GuardMonitorButton onRan={() => eventsState.reload()} />
-              </CardBody>
-            </Card>
-            <ActivityCard events={eventsState.data ?? []} />
-          </>
-        )}
-      </div>
+      <AutonomySettingsPanel />
     </div>
   );
 }

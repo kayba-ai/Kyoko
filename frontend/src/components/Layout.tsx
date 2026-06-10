@@ -4,8 +4,6 @@ import {
   GitPullRequestArrow,
   LayoutDashboard,
   ListTree,
-  Radio,
-  ShieldCheck,
   FlaskConical,
   ScanSearch,
   Scale,
@@ -31,13 +29,16 @@ interface NavSection {
 }
 
 // Grouped to read as the issue-centric loop / 8-step job map (spec 0016):
-// Overview leads, then Diagnose (the Issue spine) → Fix (proposal + both gates)
-// → Evaluate (standing detectors/judges that watch future traces and re-raise
-// issues) → Observe (the raw telemetry you drill into).
+// Overview leads, then raw trace evidence, Diagnose (the Issue spine) → Fix
+// (proposal + replay gate) → Evaluate (standing detectors/judges that watch
+// future traces and re-raise issues).
 const SECTIONS: NavSection[] = [
   {
-    // Lead tab, no heading — the outcome dashboard.
-    items: [{ to: "/overview", label: "Overview", icon: LayoutDashboard }],
+    // Lead tabs, no heading — outcome dashboard and underlying evidence.
+    items: [
+      { to: "/overview", label: "Overview", icon: LayoutDashboard },
+      { to: "/traces", label: "Traces", icon: ListTree },
+    ],
   },
   {
     // Steps 02/04 — surface, prioritize, diagnose. Issues are the spine;
@@ -49,13 +50,12 @@ const SECTIONS: NavSection[] = [
     ],
   },
   {
-    // Steps 05–07 — determine the fix (gate #1 → Proposal), validate
-    // (Checks & Replay), implement (Autonomy / gate #2).
+    // Steps 05–07 — determine the fix (gate #1 → Proposal) and validate
+    // (Checks & Replay).
     heading: "Fix",
     items: [
       { to: "/proposals", label: "Proposals", icon: GitPullRequestArrow },
       { to: "/checks", label: "Checks & Replay", icon: FlaskConical },
-      { to: "/autonomy", label: "Autonomy", icon: ShieldCheck },
     ],
   },
   {
@@ -65,14 +65,6 @@ const SECTIONS: NavSection[] = [
     items: [
       { to: "/detectors", label: "Detectors", icon: ScanSearch },
       { to: "/judges", label: "Judges", icon: Scale },
-    ],
-  },
-  {
-    // Steps 01/03 — the raw telemetry you capture & drill into.
-    heading: "Observe",
-    items: [
-      { to: "/traces", label: "Traces", icon: ListTree },
-      { to: "/mcp-log", label: "Agent ↔ Kyoko", icon: Radio },
     ],
   },
 ];

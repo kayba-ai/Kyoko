@@ -78,7 +78,7 @@ function LogRow({ entry }: { entry: McpLogEntry }) {
   );
 }
 
-export function McpLogPage() {
+export function AgentKyokoSettingsPanel() {
   const initial = useApi(() => api.mcpLog({ limit: 200 }), []);
   const connection = useLiveConnection();
   const [entries, setEntries] = useState<McpLogEntry[]>([]);
@@ -104,12 +104,9 @@ export function McpLogPage() {
   const live = connection === "open";
 
   return (
-    <div className="flex h-full flex-col">
-      <PageHeader
-        title="Agent ↔ Kyoko"
-        description="Live JSON-RPC traffic between a coding agent and Kyoko's MCP server."
-        icon={<MessagesSquare className="h-5 w-5" />}
-        actions={
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="shrink-0 border-b border-border bg-background/60 px-6 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
             <span
               className={cn(
@@ -119,18 +116,17 @@ export function McpLogPage() {
             />
             {live ? "Live" : "Offline"}
           </span>
-        }
-      >
-        <div className="flex items-center gap-3">
-          <Input
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            placeholder="Filter by tool or method…"
-            className="h-8 w-64"
-          />
-          <span className="text-sm text-muted-foreground tabular-nums">{filtered.length} shown</span>
+          <div className="flex items-center gap-3">
+            <Input
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder="Filter by tool or method…"
+              className="h-8 w-64"
+            />
+            <span className="text-sm text-muted-foreground tabular-nums">{filtered.length} shown</span>
+          </div>
         </div>
-      </PageHeader>
+      </div>
       <div className="flex-1 overflow-y-auto p-4">
         {initial.loading && !initial.data ? (
           <div className="flex h-full items-center justify-center">
@@ -156,6 +152,19 @@ export function McpLogPage() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+export function McpLogPage() {
+  return (
+    <div className="flex h-full flex-col">
+      <PageHeader
+        title="Agent ↔ Kyoko"
+        description="Live JSON-RPC traffic between a coding agent and Kyoko's MCP server."
+        icon={<MessagesSquare className="h-5 w-5" />}
+      />
+      <AgentKyokoSettingsPanel />
     </div>
   );
 }
