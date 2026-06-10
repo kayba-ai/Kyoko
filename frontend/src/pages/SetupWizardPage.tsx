@@ -327,6 +327,19 @@ function TraceSetup({
         <Badge tone="primary">Interactive</Badge>
       </CardHeader>
       <CardBody className="flex flex-col gap-5">
+        <div className="rounded-lg border border-primary/25 bg-primary/10 p-3">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-medium text-foreground">Ask {agentTarget === "codex" ? "Codex" : "Claude"} to find traces</div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                After MCP is connected, paste this into your local agent so it can search and import files through Kyoko.
+              </div>
+            </div>
+            <Badge tone="primary">MCP</Badge>
+          </div>
+          <CopyCommand command={agentPrompt} />
+        </div>
+
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_220px]">
           <label className="flex min-h-32 cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-muted/30 px-4 py-6 text-center transition-colors hover:bg-muted/60">
             <Upload className="h-6 w-6 text-primary" />
@@ -358,19 +371,6 @@ function TraceSetup({
               Scan local sources
             </Button>
           </div>
-        </div>
-
-        <div className="rounded-lg border border-primary/25 bg-primary/10 p-3">
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-medium text-foreground">Ask {agentTarget === "codex" ? "Codex" : "Claude"} to find traces</div>
-              <div className="mt-1 text-xs text-muted-foreground">
-                After MCP is connected, paste this into your local agent so it can search and import files through Kyoko.
-              </div>
-            </div>
-            <Badge tone="primary">MCP</Badge>
-          </div>
-          <CopyCommand command={agentPrompt} />
         </div>
 
         {error && <InlineError message={error} />}
@@ -659,7 +659,7 @@ export function SetupWizardPage() {
               active={active === "traces"}
               done={tracesReady}
               label="Add traces"
-              detail={tracesReady ? `${traceCount} runs available` : "Upload, scan, or ask the agent"}
+              detail={tracesReady ? `${traceCount} runs available` : `Ask ${agentTarget === "codex" ? "Codex" : "Claude"} to find traces`}
               icon={<Upload className="h-4 w-4" />}
               onToggle={() => setActive((current) => (current === "traces" ? null : "traces"))}
             >
