@@ -65,6 +65,10 @@ const DEMO_ANALYZERS: Analyzer[] = [
   { analyzer: "claude", installed: true, command: "claude", adapter_registered: true, schedulable: false },
   { analyzer: "ace", installed: true, command: "ace", adapter_registered: true, schedulable: false },
 ];
+const DEMO_ANALYSIS_ANALYZE_DELAY_MS = 700;
+const DEMO_ANALYSIS_COMPLETE_DELAY_MS = 1700;
+const DEMO_PROPOSAL_IDS = ["proposal_citation_grounding_001", "proposal_handoff_schema_001"];
+const DEMO_ISSUE_COUNT = 2;
 
 const PHASE_TONE: Record<string, NonNullable<BadgeProps["tone"]>> = {
   running: "warn",
@@ -156,6 +160,26 @@ type ActiveRun = {
 };
 
 type StepState = "pending" | "active" | "done" | "failed" | "skipped";
+
+type CachedDemoAnalysisRun = {
+  jobId: string;
+  analyzer: AnalyzerKind;
+  scope: AnalysisRunScope;
+  startedAtMs: number;
+  status: AnalysisRunPhase;
+  proposalIds: string[];
+  updatedAtMs: number;
+};
+
+let cachedDemoAnalysisRun: CachedDemoAnalysisRun | null = null;
+
+function readCachedDemoAnalysisRun(): CachedDemoAnalysisRun | null {
+  return cachedDemoAnalysisRun;
+}
+
+function writeCachedDemoAnalysisRun(run: CachedDemoAnalysisRun) {
+  cachedDemoAnalysisRun = run;
+}
 
 function fmtElapsed(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -251,6 +275,7 @@ function RunProgress({
   nowMs,
   onCancel,
   cancelling,
+  issueCount = 0,
 }: {
   run: ActiveRun;
   phase: AnalysisRunEvent | null;
@@ -259,6 +284,7 @@ function RunProgress({
   nowMs: number;
   onCancel: () => void;
   cancelling: boolean;
+  issueCount?: number;
 }) {
   const status: AnalysisRunPhase = phase?.status ?? "running";
   const steps = computeSteps(status, seen);
@@ -326,13 +352,21 @@ function RunProgress({
             {proposals.length > 0 ? (
               <>
                 <span className="text-foreground">
-                  Surfaced {proposals.length} proposal{proposals.length === 1 ? "" : "s"}.
+                  {issueCount > 0
+                    ? `Surfaced ${issueCount} issue${issueCount === 1 ? "" : "s"} and ${proposals.length} proposal${proposals.length === 1 ? "" : "s"}.`
+                    : `Surfaced ${proposals.length} proposal${proposals.length === 1 ? "" : "s"} from diagnosed issues.`}
                 </span>
+                <Link
+                  to="/issues"
+                  className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+                >
+                  Review issues <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
                 <Link
                   to="/proposals"
                   className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
                 >
-                  Review {proposals.length === 1 ? "it" : "them"} <ArrowRight className="h-3.5 w-3.5" />
+                  Review proposals <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
               </>
             ) : (
@@ -402,19 +436,138 @@ function RunAnalysisCard({
     };
   }, []);
 
-  function setDemoPhase(jobId: string, status: AnalysisRunPhase, proposalIds: string[] = []) {
+  function clearDemoTimers() {
+    demoTimers.current.forEach((id) => window.clearTimeout(id));
+    demoTimers.current = [];
+  }
+
+  function setDemoPhase({
+    jobId,
+    status,
+    startedAtMs,
+    analyzerValue,
+    scopeValue,
+    proposalIds = [],
+  }: {
+    jobId: string;
+    status: AnalysisRunPhase;
+    startedAtMs: number;
+    analyzerValue: AnalyzerKind;
+    scopeValue: AnalysisRunScope;
+    proposalIds?: string[];
+  }) {
     const ev: AnalysisRunEvent = {
       job_id: jobId,
       schedule_id: null,
-      analyzer,
-      scope,
+      analyzer: analyzerValue,
+      scope: scopeValue,
       status,
       proposal_ids: proposalIds,
       at: new Date().toISOString(),
     };
     setPhase(ev);
     setSeen((prev) => (prev.has(status) ? prev : new Set(prev).add(status)));
+    writeCachedDemoAnalysisRun({
+      jobId,
+      analyzer: analyzerValue,
+      scope: scopeValue,
+      startedAtMs,
+      status,
+      proposalIds,
+      updatedAtMs: Date.now(),
+    });
   }
+
+  function scheduleDemoPhases({
+    jobId,
+    startedAtMs,
+    analyzerValue,
+    scopeValue,
+  }: {
+    jobId: string;
+    startedAtMs: number;
+    analyzerValue: AnalyzerKind;
+    scopeValue: AnalysisRunScope;
+  }) {
+    clearDemoTimers();
+    const elapsed = Date.now() - startedAtMs;
+    const complete = () =>
+      setDemoPhase({
+        jobId,
+        status: "succeeded",
+        startedAtMs,
+        analyzerValue,
+        scopeValue,
+        proposalIds: DEMO_PROPOSAL_IDS,
+      });
+    if (elapsed >= DEMO_ANALYSIS_COMPLETE_DELAY_MS) {
+      complete();
+      return;
+    }
+    if (elapsed < DEMO_ANALYSIS_ANALYZE_DELAY_MS) {
+      demoTimers.current.push(
+        window.setTimeout(
+          () =>
+            setDemoPhase({
+              jobId,
+              status: "analyzing",
+              startedAtMs,
+              analyzerValue,
+              scopeValue,
+            }),
+          DEMO_ANALYSIS_ANALYZE_DELAY_MS - elapsed,
+        ),
+      );
+    }
+    demoTimers.current.push(window.setTimeout(complete, DEMO_ANALYSIS_COMPLETE_DELAY_MS - elapsed));
+  }
+
+  React.useEffect(() => {
+    if (!demoMode || activeRun !== null) return;
+    const cached = readCachedDemoAnalysisRun();
+    if (!cached) return;
+    const elapsed = Date.now() - cached.startedAtMs;
+    const status =
+      cached.status === "succeeded" || elapsed >= DEMO_ANALYSIS_COMPLETE_DELAY_MS
+        ? "succeeded"
+        : elapsed >= DEMO_ANALYSIS_ANALYZE_DELAY_MS
+          ? "analyzing"
+          : cached.status;
+    setAnalyzer(cached.analyzer);
+    setScope(cached.scope);
+    setNowMs(Date.now());
+    setActiveRun({
+      jobId: cached.jobId,
+      analyzer: cached.analyzer,
+      scope: cached.scope,
+      startedAtMs: cached.startedAtMs,
+    });
+    setSeen(
+      new Set<AnalysisRunPhase>(
+        status === "succeeded"
+          ? ["running", "analyzing", "succeeded"]
+          : status === "analyzing"
+            ? ["running", "analyzing"]
+            : [status],
+      ),
+    );
+    setDemoPhase({
+      jobId: cached.jobId,
+      status,
+      startedAtMs: cached.startedAtMs,
+      analyzerValue: cached.analyzer,
+      scopeValue: cached.scope,
+      proposalIds: status === "succeeded" ? DEMO_PROPOSAL_IDS : [],
+    });
+    if (status !== "succeeded") {
+      scheduleDemoPhases({
+        jobId: cached.jobId,
+        startedAtMs: cached.startedAtMs,
+        analyzerValue: cached.analyzer,
+        scopeValue: cached.scope,
+      });
+    }
+  }, [activeRun, demoMode]);
 
   async function cancel() {
     if (!activeRun) return;
@@ -476,21 +629,22 @@ function RunAnalysisCard({
     try {
       if (demoMode) {
         const jobId = `demo-analysis-${Date.now()}`;
-        demoTimers.current.forEach((id) => window.clearTimeout(id));
-        demoTimers.current = [];
-        setActiveRun({ jobId, analyzer, scope, startedAtMs: Date.now() });
-        setDemoPhase(jobId, "running");
-        demoTimers.current = [
-          window.setTimeout(() => setDemoPhase(jobId, "analyzing"), 350),
-          window.setTimeout(
-            () =>
-              setDemoPhase(jobId, "succeeded", [
-                "proposal_citation_grounding_001",
-                "proposal_handoff_schema_001",
-              ]),
-            900,
-          ),
-        ];
+        const startedAtMs = Date.now();
+        clearDemoTimers();
+        setActiveRun({ jobId, analyzer, scope, startedAtMs });
+        setDemoPhase({
+          jobId,
+          status: "running",
+          startedAtMs,
+          analyzerValue: analyzer,
+          scopeValue: scope,
+        });
+        scheduleDemoPhases({
+          jobId,
+          startedAtMs,
+          analyzerValue: analyzer,
+          scopeValue: scope,
+        });
         onLaunched();
         return;
       }
@@ -608,6 +762,7 @@ function RunAnalysisCard({
             nowMs={nowMs}
             onCancel={cancel}
             cancelling={cancelling}
+            issueCount={demoMode ? DEMO_ISSUE_COUNT : 0}
           />
         )}
 
