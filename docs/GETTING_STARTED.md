@@ -94,14 +94,16 @@ kyoko mcp install --target generic --output .kyoko/config/mcp.json --json
 ### By hand: the Python SDK
 
 Record a run and write it to a file. This needs **no running server** — ingest
-writes straight to the database:
+writes straight to the database. Reuse the profile bootstrap created (default
+`profile_kyoko_agent`; see `.kyoko/NEXT_STEPS.md`) so the run shows up in
+`kyoko runs` and the dashboard without extra flags:
 
 ```python
 from kyoko import KyokoRecorder
 
 recorder = KyokoRecorder(
-    profile_id="my-agent",
-    profile_name="My Agent",
+    profile_id="profile_kyoko_agent",
+    profile_name="kyoko-agent",
     root_path=".",
     agent_name="researcher",
 )
