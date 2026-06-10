@@ -46,6 +46,7 @@ def get_dashboard_metrics(*, db_path: Path, profile_id: Optional[str] = None) ->
                 replay["latest_passed"] and replay["latest_passed"].get("output_ref")
             ),
         }
+        demo = _demo_metrics(connection, selected_profile_id, runs["total"])
 
     cards = [
         {
@@ -98,6 +99,7 @@ def get_dashboard_metrics(*, db_path: Path, profile_id: Optional[str] = None) ->
         "evals": evals,
         "autonomy": autonomy,
         "before_after": before_after,
+        "demo": demo,
     }
 
 
@@ -133,6 +135,7 @@ def _empty_metrics() -> dict[str, Any]:
             "latest_replay_output_run_id": None,
             "verified_replay_improvement": False,
         },
+        "demo": {"active": False, "label": None},
     }
 
 
@@ -155,6 +158,31 @@ def _count(connection: Any, table: str, profile_id: str) -> int:
         (profile_id,),
     ).fetchone()
     return int(row["count"])
+
+
+def _demo_metrics(connection: Any, profile_id: str, run_count: int) -> dict[str, Any]:
+    """Detect the bundled quick-demo corpus without marking the small fixture demo.
+
+    The docs fixture and the quick demo share the same profile/source ids. The
+    quick demo is the enriched showcase corpus, so it has the seeded showcase
+    source plus many deterministic runs.
+    """
+
+    source = connection.execute(
+        """
+        SELECT id
+        FROM sources
+        WHERE profile_id = ?
+          AND id = 'source_hermes_001'
+        LIMIT 1
+        """,
+        (profile_id,),
+    ).fetchone()
+    active = bool(profile_id == "profile_news_research_001" and source is not None and run_count >= 10)
+    return {
+        "active": active,
+        "label": "Demo mode" if active else None,
+    }
 
 
 def _count_where(connection: Any, table: str, profile_id: str, where_sql: str) -> int:

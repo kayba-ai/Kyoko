@@ -56,6 +56,10 @@
     "runs": 0,
     "specs": 0
   },
+  "demo": {
+    "active": false,
+    "label": null
+  },
   "issues": {
     "active": 1,
     "by_section": {

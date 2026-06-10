@@ -3618,6 +3618,7 @@ def _dashboard_metrics_contract(payload: dict) -> dict:
         "before_after": payload["before_after"],
         "cards": payload["cards"],
         "checks": payload["checks"],
+        "demo": payload["demo"],
         "issues": payload["issues"],
         "profile_id": payload["profile_id"],
         "profile_name": payload["profile_name"],

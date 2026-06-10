@@ -525,6 +525,10 @@ export interface DashboardMetrics {
   autonomy?: Record<string, unknown>;
   issues?: unknown;
   before_after?: unknown;
+  demo?: {
+    active: boolean;
+    label: string | null;
+  };
   [k: string]: unknown;
 }
 

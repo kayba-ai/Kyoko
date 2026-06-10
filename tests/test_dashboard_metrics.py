@@ -6,6 +6,7 @@ from kyoko.autonomy import update_autonomy_policy
 from kyoko.autonomy_runner import run_autonomy
 from kyoko.dashboard_metrics import DashboardMetricsError, get_dashboard_metrics
 from kyoko.checks import complete_replay_from_fixture, create_replay_run, generate_checks_for_proposal, run_check
+from kyoko.demo import run_demo_setup
 from kyoko.proposals import submit_learning_proposal
 from kyoko.storage import ingest_source_fixture
 
@@ -35,6 +36,7 @@ class DashboardMetricsTests(unittest.TestCase):
             self.assertEqual(metrics["issues"]["total"], 1)
             self.assertEqual(metrics["issues"]["active"], 1)
             self.assertEqual(metrics["issues"]["by_section"]["context"], 1)
+            self.assertFalse(metrics["demo"]["active"])
             self.assertEqual(metrics["checks"]["latest_status"], "none")
             self.assertEqual(metrics["replay"]["latest_status"], "none")
             self.assertFalse(metrics["before_after"]["verified_replay_improvement"])
@@ -84,6 +86,18 @@ class DashboardMetricsTests(unittest.TestCase):
                 metrics["before_after"]["latest_passed_replay_run_id"],
                 replay.replay_run_id,
             )
+
+    def test_dashboard_metrics_mark_rich_quick_demo(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "kyoko.db"
+            output_dir = Path(tmpdir) / "demo-output"
+            run_demo_setup(db_path=db_path, output_dir=output_dir)
+
+            metrics = get_dashboard_metrics(db_path=db_path)
+
+            self.assertTrue(metrics["demo"]["active"])
+            self.assertEqual(metrics["demo"]["label"], "Demo mode")
+            self.assertGreaterEqual(metrics["runs"]["total"], 10)
 
     def test_dashboard_metrics_reject_missing_profile(self) -> None:
         with TemporaryDirectory() as tmpdir:

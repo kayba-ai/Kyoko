@@ -578,6 +578,103 @@ function RunAnalysisCard({
   );
 }
 
+function DemoRunAnalysisCard({ metrics }: { metrics: Record<string, unknown> | null }) {
+  const [state, setState] = React.useState<"idle" | "running" | "done">("idle");
+  const runs = (metrics?.runs ?? {}) as Record<string, unknown>;
+  const evals = (metrics?.evals ?? {}) as Record<string, unknown>;
+  const issues = (metrics?.issues ?? {}) as Record<string, unknown>;
+  const totalRuns = num(runs.total);
+  const failedSpans = num(runs.failed_spans);
+  const failedRuns = num(evals.failed_runs);
+  const evaluatedRuns = num(evals.evaluated_runs);
+  const activeIssues = num(issues.active);
+
+  React.useEffect(() => {
+    if (state !== "running") return;
+    const id = window.setTimeout(() => setState("done"), 550);
+    return () => window.clearTimeout(id);
+  }, [state]);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Run analysis now</CardTitle>
+        <Badge tone="primary">Demo mode</Badge>
+      </CardHeader>
+      <CardBody className="space-y-4">
+        <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
+          <div className="flex items-start gap-3">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              {state === "running" ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : state === "done" ? (
+                <Check className="h-4 w-4" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium text-foreground">
+                {state === "done" ? "Demo analysis complete" : "Deterministic demo analysis"}
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                This quick demo uses seeded traces and precomputed findings, so no adapter registration,
+                CLI setup, or live agent run is required.
+              </p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-4">
+                <div>
+                  <div className="text-xl font-semibold tabular-nums text-foreground">{totalRuns}</div>
+                  <div className="text-xs text-muted-foreground">demo traces</div>
+                </div>
+                <div>
+                  <div className="text-xl font-semibold tabular-nums text-warn">{failedSpans}</div>
+                  <div className="text-xs text-muted-foreground">failed spans</div>
+                </div>
+                <div>
+                  <div className="text-xl font-semibold tabular-nums text-danger">{failedRuns}</div>
+                  <div className="text-xs text-muted-foreground">failed eval runs</div>
+                </div>
+                <div>
+                  <div className="text-xl font-semibold tabular-nums text-foreground">{activeIssues}</div>
+                  <div className="text-xs text-muted-foreground">open issues</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {state === "done" && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-border bg-muted/40 px-3 py-2.5 text-sm">
+            <span className="text-foreground">
+              Scored {evaluatedRuns.toLocaleString()} runs and surfaced the seeded issues/proposals.
+            </span>
+            <Link to="/issues" className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
+              Review issues <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+            <Link to="/proposals" className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
+              Review proposals <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+        )}
+
+        <div className="flex items-center justify-between gap-3 pt-1">
+          <p className="text-xs text-muted-foreground/70">
+            Demo results are fixed so every first-run tour tells the same story.
+          </p>
+          <Button onClick={() => setState("running")} disabled={state === "running"}>
+            {state === "running" ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Play className="h-3.5 w-3.5" />
+            )}
+            {state === "running" ? "Running…" : state === "done" ? "Run again" : "Run demo analysis"}
+          </Button>
+        </div>
+      </CardBody>
+    </Card>
+  );
+}
+
 // ---- Schedules --------------------------------------------------------------
 
 function ScheduleRow({
@@ -879,6 +976,11 @@ function RunsCard({
 
 const TERMINAL_PHASES = new Set(["succeeded", "failed", "skipped"]);
 
+function isDemoMetrics(metrics: Record<string, unknown> | null | undefined): boolean {
+  const demo = metrics?.demo as Record<string, unknown> | undefined;
+  return demo?.active === true;
+}
+
 export function AnalysisPage() {
   const analyzersState = useApi(() => api.listAnalyzers(), []);
   const runsState = useApi<AnalysisRun[]>(() => api.listAnalysisRuns(), []);
@@ -895,6 +997,7 @@ export function AnalysisPage() {
   });
 
   const analyzers = analyzersState.data?.analyzers ?? [];
+  const demoMode = isDemoMetrics(metricsState.data);
 
   return (
     <div className="flex h-full flex-col">
@@ -902,6 +1005,7 @@ export function AnalysisPage() {
         title="Analysis"
         description="Run an analyzer over your traces to surface diagnosed issues; proposal authoring is gated separately."
         icon={<Sparkles className="h-5 w-5" />}
+        actions={demoMode ? <Badge tone="primary">Demo</Badge> : undefined}
       />
       <div className="flex-1 space-y-6 overflow-y-auto p-6">
         <TraceCorpusCard
@@ -910,7 +1014,9 @@ export function AnalysisPage() {
           error={metricsState.error}
         />
 
-        {analyzersState.loading ? (
+        {demoMode ? (
+          <DemoRunAnalysisCard metrics={metricsState.data ?? null} />
+        ) : analyzersState.loading ? (
           <div className="flex items-center justify-center py-10">
             <Spinner />
           </div>
@@ -924,18 +1030,22 @@ export function AnalysisPage() {
           />
         )}
 
-        <RunsCard
-          runs={runsState.data ?? []}
-          loading={runsState.loading}
-          error={runsState.error}
-        />
+        {!demoMode && (
+          <RunsCard
+            runs={runsState.data ?? []}
+            loading={runsState.loading}
+            error={runsState.error}
+          />
+        )}
 
-        <SchedulesCard
-          schedules={schedulesState.data ?? []}
-          loading={schedulesState.loading}
-          error={schedulesState.error}
-          onChanged={() => schedulesState.reload()}
-        />
+        {!demoMode && (
+          <SchedulesCard
+            schedules={schedulesState.data ?? []}
+            loading={schedulesState.loading}
+            error={schedulesState.error}
+            onChanged={() => schedulesState.reload()}
+          />
+        )}
       </div>
     </div>
   );
