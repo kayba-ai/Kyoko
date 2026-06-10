@@ -797,13 +797,19 @@ def build_parser() -> argparse.ArgumentParser:
         "--global",
         dest="global_install",
         action="store_true",
-        help="Install for all projects under ~/.claude/skills instead of this project.",
+        help=(
+            "Install for all projects under ~/.claude/skills and ~/.codex/skills "
+            "instead of this project."
+        ),
     )
     install_skill_parser.add_argument(
         "--print",
         dest="print_skill",
         action="store_true",
-        help="Print the skill playbook to stdout instead of writing a file (for non-Claude agents).",
+        help=(
+            "Print the skill playbook to stdout instead of writing files "
+            "(for agents without a skills directory)."
+        ),
     )
     install_skill_parser.add_argument(
         "--force",
@@ -4514,7 +4520,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         if args.json:
             print(json.dumps(report.to_json(), sort_keys=True))
         else:
-            print(f"installed /{report.skill_name} skill: {report.output_path}")
+            for output_path in report.output_paths:
+                print(f"installed /{report.skill_name} skill: {output_path}")
             print(f"Run /{report.skill_name} in your coding agent to wire telemetry into Kyoko.")
         return 0
 

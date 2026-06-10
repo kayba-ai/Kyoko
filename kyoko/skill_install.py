@@ -5,10 +5,12 @@ The skill is a Markdown playbook a coding agent (Claude Code, Cursor, Codex,
 so a `pipx install kyoko` user can drop it into their agent without cloning the
 repo.
 
-Claude Code discovers skills under `.claude/skills/<name>/SKILL.md` (project) or
-`~/.claude/skills/<name>/SKILL.md` (global), so that is what we write by
-default. For other agents, `--print` emits the playbook to stdout so it can be
-pasted in directly.
+Each agent discovers skills under its own root, so we write one copy per root:
+Claude Code reads `.claude/skills/<name>/SKILL.md` (project) or
+`~/.claude/skills/<name>/SKILL.md` (global); Codex reads `.agents/skills/`
+(project) or `~/.codex/skills/` (global). For agents without a skills
+directory, `--print` emits the playbook to stdout so it can be pasted in
+directly.
 """
 
 from __future__ import annotations
@@ -29,13 +31,14 @@ class SkillInstallError(Exception):
 @dataclass
 class SkillInstallReport:
     skill_name: str
-    output_path: Path
+    output_paths: list[Path]
     written: bool
 
     def to_json(self) -> dict[str, object]:
         return {
             "skill_name": self.skill_name,
-            "output_path": str(self.output_path),
+            "output_path": str(self.output_paths[0]),
+            "output_paths": [str(path) for path in self.output_paths],
             "written": self.written,
             "invoke": f"/{self.skill_name}",
         }
@@ -48,9 +51,11 @@ def load_skill_text() -> str:
         raise SkillInstallError(str(exc)) from exc
 
 
-def skill_destination(*, project_dir: Path, global_install: bool) -> Path:
-    base = Path.home() if global_install else project_dir
-    return base / ".claude" / "skills" / SKILL_NAME / "SKILL.md"
+def skill_destinations(*, project_dir: Path, global_install: bool) -> list[Path]:
+    relative = Path("skills") / SKILL_NAME / "SKILL.md"
+    if global_install:
+        return [Path.home() / ".claude" / relative, Path.home() / ".codex" / relative]
+    return [project_dir / ".claude" / relative, project_dir / ".agents" / relative]
 
 
 def install_skill(
@@ -60,12 +65,15 @@ def install_skill(
     force: bool = False,
 ) -> SkillInstallReport:
     text = load_skill_text()
-    output_path = skill_destination(project_dir=project_dir, global_install=global_install)
-    if output_path.exists() and not force:
-        raise SkillInstallError(f"skill_exists:{output_path}")
+    output_paths = skill_destinations(project_dir=project_dir, global_install=global_install)
+    if not force:
+        for output_path in output_paths:
+            if output_path.exists():
+                raise SkillInstallError(f"skill_exists:{output_path}")
     try:
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(text, encoding="utf-8")
+        for output_path in output_paths:
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(text, encoding="utf-8")
     except OSError as exc:
         raise SkillInstallError(str(exc)) from exc
-    return SkillInstallReport(skill_name=SKILL_NAME, output_path=output_path, written=True)
+    return SkillInstallReport(skill_name=SKILL_NAME, output_paths=output_paths, written=True)

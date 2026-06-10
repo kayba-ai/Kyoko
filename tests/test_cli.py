@@ -42,7 +42,7 @@ JUDGE_COMMAND = ROOT / "tests/fixtures/judge_command.py"
 
 
 class CliTests(unittest.TestCase):
-    def test_install_skill_writes_claude_skill(self) -> None:
+    def test_install_skill_writes_agent_skills(self) -> None:
         with TemporaryDirectory() as tmpdir:
             project_dir = Path(tmpdir)
             out = io.StringIO()
@@ -50,14 +50,19 @@ class CliTests(unittest.TestCase):
                 code = main(["install-skill", "--dir", str(project_dir), "--json"])
             self.assertEqual(code, 0)
             payload = json.loads(out.getvalue())
-            written = Path(payload["output_path"])
             self.assertEqual(payload["invoke"], "/kyoko-instrument")
-            self.assertTrue(written.is_file())
+            written = [Path(path) for path in payload["output_paths"]]
             self.assertEqual(
                 written,
-                project_dir / ".claude" / "skills" / "kyoko-instrument" / "SKILL.md",
+                [
+                    project_dir / ".claude" / "skills" / "kyoko-instrument" / "SKILL.md",
+                    project_dir / ".agents" / "skills" / "kyoko-instrument" / "SKILL.md",
+                ],
             )
-            self.assertIn("name: kyoko-instrument", written.read_text(encoding="utf-8"))
+            self.assertEqual(payload["output_path"], str(written[0]))
+            for path in written:
+                self.assertTrue(path.is_file())
+                self.assertIn("name: kyoko-instrument", path.read_text(encoding="utf-8"))
 
             # Re-installing without --force is refused.
             err = io.StringIO()

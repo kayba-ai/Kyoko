@@ -62,10 +62,10 @@ Install the bundled instrumentation skill:
 kyoko install-skill   # then run /kyoko-instrument in your coding agent
 ```
 
-The skill lands in `.claude/skills/`, where Claude Code picks it up
-automatically; `kyoko install-skill --print` prints the same playbook to paste
-into Codex, Cursor, or other agents. It finds your agent's entry point,
-records one real run, and verifies it shows up in Kyoko.
+The skill lands in `.claude/skills/` and `.agents/skills/`, where Claude Code
+and Codex pick it up automatically; `kyoko install-skill --print` prints the
+same playbook to paste into Cursor or other agents. It finds your agent's
+entry point, records one real run, and verifies it shows up in Kyoko.
 
 Alternatively, connect Kyoko as an MCP server for your coding agent:
 

@@ -122,9 +122,10 @@ coding agent do the wiring:
 kyoko install-skill   # then run /kyoko-instrument in your coding agent
 ```
 
-This installs the bundled `/kyoko-instrument` skill into `.claude/skills/`,
-where Claude Code picks it up automatically; for Codex, Cursor, or other
-agents, `kyoko install-skill --print` prints the same playbook to paste in.
+This installs the bundled `/kyoko-instrument` skill into `.claude/skills/` and
+`.agents/skills/`, where Claude Code and Codex pick it up automatically; for
+Cursor or other agents, `kyoko install-skill --print` prints the same playbook
+to paste in.
 The skill finds your agent's entry point, records one real run, and verifies
 it shows up in Kyoko.
 
