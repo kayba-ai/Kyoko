@@ -6,7 +6,6 @@ import {
   FileJson,
   Loader2,
   Radio,
-  Search,
   ShieldCheck,
   Terminal,
   Upload,
@@ -267,7 +266,7 @@ function TraceSetup({
   onImported: () => void;
   agentTarget: AgentTarget;
 }) {
-  const [mode, setMode] = React.useState<ImportMode>("auto");
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [result, setResult] = React.useState<Obj | null>(null);
@@ -280,7 +279,7 @@ function TraceSetup({
     setResult(null);
     try {
       const payload = await readJsonFile(file);
-      const resolved = inferMode(payload, mode);
+      const resolved = inferMode(payload, "auto");
       const report = resolved === "otlp" ? await api.ingestOtlp(payload) : await api.ingestSourceEvents(payload);
       setResult({ mode: resolved, ...report });
       onImported();
@@ -340,37 +339,37 @@ function TraceSetup({
           <CopyCommand command={agentPrompt} />
         </div>
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_220px]">
-          <label className="flex min-h-32 cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-muted/30 px-4 py-6 text-center transition-colors hover:bg-muted/60">
-            <Upload className="h-6 w-6 text-primary" />
-            <div>
-              <div className="text-sm font-medium text-foreground">Choose trace JSON</div>
-              <div className="mt-1 text-xs text-muted-foreground">Kyoko source events or OTLP/GenAI JSON</div>
-            </div>
-            <input
-              type="file"
-              accept="application/json,.json"
-              className="hidden"
-              disabled={busy}
-              onChange={(event) => void importFile(event.currentTarget.files?.[0] ?? null)}
-            />
-          </label>
-          <div className="flex flex-col gap-3">
-            <Select
-              value={mode}
-              onChange={(next) => setMode(next as ImportMode)}
-              disabled={busy}
-              options={[
-                { value: "auto", label: "Auto-detect" },
-                { value: "source", label: "Kyoko events" },
-                { value: "otlp", label: "OTLP/GenAI" },
-              ]}
-            />
-            <Button type="button" variant="outline" onClick={() => void scan()} disabled={busy}>
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-              Scan local sources
-            </Button>
-          </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/json,.json"
+          className="hidden"
+          disabled={busy}
+          onChange={(event) => {
+            void importFile(event.currentTarget.files?.[0] ?? null);
+            event.currentTarget.value = "";
+          }}
+        />
+        <div className="text-sm text-muted-foreground">
+          Alternatively, manually{" "}
+          <button
+            type="button"
+            className="font-medium text-foreground underline underline-offset-4 hover:text-primary disabled:cursor-not-allowed disabled:text-muted-foreground"
+            disabled={busy}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            upload trace JSON
+          </button>{" "}
+          or{" "}
+          <button
+            type="button"
+            className="font-medium text-foreground underline underline-offset-4 hover:text-primary disabled:cursor-not-allowed disabled:text-muted-foreground"
+            disabled={busy}
+            onClick={() => void scan()}
+          >
+            scan known locations
+          </button>
+          .
         </div>
 
         {error && <InlineError message={error} />}
