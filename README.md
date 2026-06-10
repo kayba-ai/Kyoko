@@ -99,51 +99,58 @@ server is needed for the demo.
 
 ## Get started
 
-Three steps: install Kyoko, wire up telemetry, open the dashboard.
+The fastest path is: install Kyoko, bootstrap the project, connect your coding
+agent through MCP, then ask that agent to wire or import telemetry.
 
-**1. Install** (needs Python 3.12+):
+**1. Install and bootstrap** (needs Python 3.12+):
 
 ```bash
 pipx install kyoko
+kyoko project-bootstrap --project-dir . --profile-name my-agent --mcp-target generic
 ```
 
-`pip install kyoko` and `uv tool install kyoko` work too. See
-[docs/INSTALL.md](docs/INSTALL.md) for source installs, upgrades, and fixes.
+`pip install kyoko` and `uv tool install kyoko` work too. Bootstrap writes a
+local `.kyoko/` workspace with the database, generated source/replay scaffolds,
+MCP config, operator presets, and `.kyoko/NEXT_STEPS.md`.
 
-Then, from the root of your agent project:
+**2. Connect your agent to Kyoko.** Pick the MCP target for the agent you are
+using:
 
 ```bash
-kyoko project-bootstrap
+kyoko mcp install-plan --db .kyoko/kyoko.db --target codex --json
+kyoko mcp install-plan --db .kyoko/kyoko.db --target claude --json
 ```
 
-This writes a local `.kyoko/` workspace: database, scaffolds, MCP config, and
-operator presets.
-
-**2. Wire up telemetry.** This is the step that makes everything else work:
-Kyoko can only find and fix what it can see, so nothing happens until your
-agent's runs land in it. The easiest way is to let your coding agent do the
-wiring:
+Run the `shell_command` printed by the matching plan. For other MCP clients,
+write a generic config:
 
 ```bash
-kyoko install-skill   # then run /kyoko-instrument in your coding agent
+kyoko mcp install --db .kyoko/kyoko.db --target generic --output .kyoko/config/mcp.json --json
 ```
 
-This installs the bundled `/kyoko-instrument` skill into
-`.claude/skills/`, where Claude Code picks it up automatically; for Codex,
-Cursor, or other agents, `kyoko install-skill --print` prints the same playbook
-to paste in. The skill finds your agent's entry point, records one real run,
-and verifies it shows up in Kyoko. To wire telemetry by hand instead (Python or
-TypeScript SDK, OTLP, importers), see
-[Getting Started](docs/GETTING_STARTED.md).
+**3. Delegate telemetry wiring.** Paste this into your coding or recording
+agent after MCP is connected:
 
-**3. Open the dashboard:**
+```text
+Use Kyoko to finish setup for this project. Read .kyoko/NEXT_STEPS.md, inspect
+the agent entry point and framework, and keep changes scoped. First run
+`kyoko doctor --db .kyoko/kyoko.db --json`. Then discover or import existing
+trace data if available. If no useful traces exist, add the smallest telemetry
+hook using the Python SDK, TypeScript SDK, generated source adapter, OTLP export,
+or an existing framework callback. Record one real or smoke run, ingest it into
+.kyoko/kyoko.db, and verify it with `kyoko runs --db .kyoko/kyoko.db --json`.
+Do not add secrets or run live operator/model actions unless I ask.
+```
+
+**4. Open the dashboard:**
 
 ```bash
 kyoko serve --db .kyoko/kyoko.db
 ```
 
 Open [http://127.0.0.1:8765](http://127.0.0.1:8765) to see your runs, issues,
-and proposals.
+and proposals. For manual telemetry paths, see
+[Getting Started](docs/GETTING_STARTED.md).
 
 ## What you get
 

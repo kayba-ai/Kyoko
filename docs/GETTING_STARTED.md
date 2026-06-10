@@ -52,23 +52,39 @@ kyoko serve --db .kyoko/kyoko.db
 
 ## Add Telemetry
 
-### Easiest: let your coding agent wire it
+### Easiest: delegate the setup to your coding agent
 
-Install the bundled skill once, then run it inside Claude Code, Cursor, Codex,
-or another coding agent open in your repo:
+Connect Kyoko as an MCP server for the coding agent you are using:
 
 ```bash
-kyoko install-skill   # writes .claude/skills/kyoko-instrument/SKILL.md
+kyoko mcp install-plan --db .kyoko/kyoko.db --target codex --json
+kyoko mcp install-plan --db .kyoko/kyoko.db --target claude --json
 ```
+
+Run the `shell_command` printed by the matching plan. For another MCP client,
+write the generic config and point that client at it:
+
+```bash
+kyoko mcp install --db .kyoko/kyoko.db --target generic --output .kyoko/config/mcp.json --json
+```
+
+Then paste this task into the agent:
 
 ```text
-/kyoko-instrument
+Use Kyoko to finish setup for this project. Read .kyoko/NEXT_STEPS.md, inspect
+the agent entry point and framework, and keep changes scoped. First run
+`kyoko doctor --db .kyoko/kyoko.db --json`. Then discover or import existing
+trace data if available. If no useful traces exist, add the smallest telemetry
+hook using the Python SDK, TypeScript SDK, generated source adapter, OTLP export,
+or an existing framework callback. Record one real or smoke run, ingest it into
+.kyoko/kyoko.db, and verify it with `kyoko runs --db .kyoko/kyoko.db --json`.
+Do not add secrets or run live operator/model actions unless I ask.
 ```
 
-The skill discovers your agent's entry point, makes the smallest safe change to
-record one real run, and verifies it landed in Kyoko. For agents that do not
-read `.claude/skills`, `kyoko install-skill --print` emits the playbook to paste
-in directly.
+The agent can use Kyoko MCP tools when available, and can always fall back to
+the generated `.kyoko/NEXT_STEPS.md` commands. This makes the flow portable
+across Codex, Claude Code, Cursor, generic MCP clients, and agents that can only
+run shell commands.
 
 ### By hand: the Python SDK
 

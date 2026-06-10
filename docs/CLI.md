@@ -30,7 +30,7 @@ kyoko project-bootstrap \
 ## Ingest And Inspect Runs
 
 ```bash
-kyoko install-skill   # install /kyoko-instrument for your coding agent
+kyoko discover-sources --db .kyoko/kyoko.db --root-path . --json
 kyoko ingest --db .kyoko/kyoko.db source-events.json --json
 kyoko ingest-otlp --db .kyoko/kyoko.db otlp.json --json
 kyoko runs --db .kyoko/kyoko.db --json
