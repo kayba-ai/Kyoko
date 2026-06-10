@@ -100,7 +100,8 @@ server is needed for the demo.
 
 ## Get started
 
-From the root of your agent project (needs Python 3.12+):
+From the root of your agent project (e.g. the repo of your AI agent, Hermes or
+Openclaw), needs Python 3.12+:
 
 ```bash
 pipx install kyoko
