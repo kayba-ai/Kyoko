@@ -358,8 +358,9 @@ class KyokoRecorder:
             "timeline_events": self._timeline_events(),
         }
 
-    def write_json(self, output_path: Path) -> dict[str, Any]:
+    def write_json(self, output_path: Path | str) -> dict[str, Any]:
         payload = self.to_source_events()
+        output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
         return payload

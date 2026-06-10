@@ -1024,6 +1024,22 @@ def default_db_path() -> Path:
     return Path.home() / ".kyoko" / "kyoko.db"
 
 
+def discover_db_path(start: Optional[Path] = None) -> Path:
+    """Return the nearest project-local database, else the home default.
+
+    Walks from ``start`` (defaults to the current directory) up to the
+    filesystem root and returns the first ``.kyoko/kyoko.db`` that exists,
+    so commands run inside a bootstrapped project find its database without
+    an explicit ``--db`` flag.
+    """
+    current = (start or Path.cwd()).resolve()
+    for directory in (current, *current.parents):
+        candidate = directory / ".kyoko" / "kyoko.db"
+        if candidate.is_file():
+            return candidate
+    return default_db_path()
+
+
 def connect(db_path: Path) -> sqlite3.Connection:
     connection = sqlite3.connect(str(db_path))
     connection.row_factory = sqlite3.Row

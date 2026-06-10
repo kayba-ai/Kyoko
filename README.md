@@ -99,34 +99,38 @@ server is needed for the demo.
 
 ## Get started
 
-From the root of your agent project:
+From the root of your agent project (needs Python 3.12+):
 
 ```bash
 pipx install kyoko
-kyoko project-bootstrap --project-dir . --profile-name my-agent --mcp-target codex
-kyoko doctor --db .kyoko/kyoko.db --json
-kyoko serve --db .kyoko/kyoko.db
+kyoko project-bootstrap
+kyoko serve
 ```
 
-Open [http://127.0.0.1:8765](http://127.0.0.1:8765).
+Open [http://127.0.0.1:8765](http://127.0.0.1:8765). `pip install kyoko` and
+`uv tool install kyoko` work too; see [docs/INSTALL.md](docs/INSTALL.md).
 
-To let your coding agent finish telemetry setup, connect Kyoko through MCP:
+Bootstrap writes a local `.kyoko/` workspace: database, scaffolds, MCP config,
+and operator presets. Every later `kyoko` command finds that database
+automatically, so no `--db` flags are needed inside your project.
+
+**Then wire up telemetry.** This is the step that makes everything else work:
+Kyoko can only find and fix what it can see. The easiest way is to let your
+coding agent do the wiring:
 
 ```bash
-kyoko mcp install-plan --db .kyoko/kyoko.db --target codex --json
+kyoko install-skill   # then run /kyoko-instrument in your coding agent
 ```
 
-Run the printed `shell_command`, then paste this into your coding agent:
+This installs the bundled `/kyoko-instrument` skill into `.claude/skills/`,
+where Claude Code picks it up automatically; for Codex, Cursor, or other
+agents, `kyoko install-skill --print` prints the same playbook to paste in.
+The skill finds your agent's entry point, records one real run, and verifies
+it shows up in Kyoko.
 
-```text
-Use Kyoko to finish setup. Read .kyoko/NEXT_STEPS.md, wire the smallest
-telemetry hook or import existing traces, record one run, and verify it with
-`kyoko runs --db .kyoko/kyoko.db --json`. Do not add secrets or run live
-operator/model actions unless I ask.
-```
-
-Use `--target claude` for Claude Code. For other agents, manual telemetry paths,
-and replay setup, see [Getting Started](docs/GETTING_STARTED.md).
+To connect your agent over MCP instead, or to wire telemetry by hand (Python
+or TypeScript SDK, OTLP, importers), see
+[Getting Started](docs/GETTING_STARTED.md).
 
 ## What you get
 

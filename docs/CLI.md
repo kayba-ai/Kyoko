@@ -6,6 +6,11 @@ for automation, MCP-facing workflows, tests, and coding agents.
 Use `kyoko <command> --help` for full arguments. The groups below cover
 the commands most users reach for first.
 
+`--db` defaults to the nearest `.kyoko/kyoko.db` above the current directory
+(falling back to `~/.kyoko/kyoko.db`), so inside a bootstrapped project the
+flag can be omitted. The snippets below keep it explicit for copy-paste use
+from anywhere.
+
 ## First Run
 
 ```bash
@@ -15,16 +20,11 @@ kyoko doctor --json
 kyoko doctor --safe-smokes --json
 ```
 
-Bootstrap inside a project:
+Bootstrap inside a project (flags such as `--profile-name` and `--mcp-target`
+are optional; see `kyoko project-bootstrap --help` for defaults):
 
 ```bash
-kyoko project-bootstrap \
-  --project-dir . \
-  --profile-name my-agent \
-  --source-framework generic-python \
-  --replay-framework generic-python \
-  --mcp-target codex \
-  --json
+kyoko project-bootstrap
 ```
 
 ## Ingest And Inspect Runs
