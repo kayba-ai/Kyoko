@@ -43,7 +43,7 @@ or hosted service.
 
 ```text
         ┌─────────────────┐           ┌─────────────────┐
-        │  1. Analyse     │ ───────▶  │  2. Issues       │
+        │  1. Analyse     │ ───────▶  │  2. Issues      │
         │  traces in      │           │  recurring      │
         │                 │           │  failures       │
         └─────────────────┘           └─────────────────┘
