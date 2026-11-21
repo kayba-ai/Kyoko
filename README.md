@@ -9,6 +9,10 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-green.svg)](LICENSE)
 
+<!-- yarkr:badges:start -->
+[![Indexed on Yarkr](https://api.yarkr.com/functions/v1/api/api/v1/badges/repos/kayba-ai/Kyoko/version.svg)](https://yarkr.com/arks/kayba-ai/kyoko)
+<!-- yarkr:badges:end -->
+
 **Kyoko is a fully local system for measuring, debugging, and improving AI
 agents.**
 
@@ -201,6 +205,38 @@ Evidence exported to prompts, MCP, API, or bundles is redacted by default. See
 
 Specs, schemas, fixtures, and design decisions live under `docs/` as reference
 contracts.
+
+<!-- yarkr:install:start -->
+## Install with Yarkr
+
+This repo is indexed on [Yarkr](https://yarkr.com/arks/kayba-ai/kyoko) as the ark [kayba-ai/kyoko](https://yarkr.com/arks/kayba-ai/kyoko), so its skills install into Claude Code, Codex, Cursor and other agent harnesses with one command.
+
+### CLI
+
+Install the whole ark, which Yarkr keeps equal to this repo:
+
+```bash
+npx yarkr-cli sync kayba-ai/kyoko
+```
+
+Or add individual skills:
+
+```bash
+npx yarkr-cli add skill:kayba-ai/kyoko/kyoko-instrument
+```
+
+No Node.js? `curl -fsSL https://yarkr.com/install.sh | sh` (macOS, Linux) or `irm https://yarkr.com/install.ps1 | iex` (Windows PowerShell) installs `yarkr` as a standalone binary; then type `yarkr` in place of `npx yarkr-cli`.
+
+### MCP
+
+Connect your agent to the ark over MCP:
+
+```bash
+npx yarkr-cli mcp add kayba-ai/kyoko
+```
+
+Or point any MCP client at `https://api.yarkr.com/functions/v1/api/mcp/o/kayba-ai/kyoko`.
+<!-- yarkr:install:end -->
 
 ## Contributing
 
